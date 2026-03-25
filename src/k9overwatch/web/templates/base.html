@@ -1,41 +1,315 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="h-full">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}K9-Overwatch{% endblock %}</title>
-    <!-- Tailwind CSS (CDN for now) -->
+    <!-- Tailwind config must come BEFORE the CDN script -->
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: {
+                            50:  '#f0f4ff',
+                            100: '#e0eaff',
+                            200: '#c2d4fe',
+                            300: '#93b4fd',
+                            400: '#6089fa',
+                            500: '#3b60f5',
+                            600: '#2540eb',
+                            700: '#1d32d0',
+                            800: '#1e2ba9',
+                            900: '#1e2987',
+                        },
+                        accent: {
+                            50:  '#fff7ed',
+                            100: '#ffedd5',
+                            200: '#fed7aa',
+                            300: '#fdba74',
+                            400: '#fb923c',
+                            500: '#f97316',
+                            600: '#ea6c0a',
+                            700: '#c2570a',
+                        },
+                        status: {
+                            lost:         '#dc2626',
+                            lostBg:       '#fef2f2',
+                            lostText:     '#991b1b',
+                            found:        '#16a34a',
+                            foundBg:      '#f0fdf4',
+                            foundText:    '#14532d',
+                            sighting:     '#2563eb',
+                            sightingBg:   '#eff6ff',
+                            sightingText: '#1e3a8a',
+                            adoptable:    '#d97706',
+                            adoptableBg:  '#fffbeb',
+                            adoptableText:'#92400e',
+                        }
+                    },
+                    fontFamily: {
+                        sans: ['-apple-system', 'BlinkMacSystemFont', "'Segoe UI'", 'Roboto', "'Helvetica Neue'", 'Arial', 'sans-serif'],
+                    },
+                    boxShadow: {
+                        card:       '0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06)',
+                        'card-hover':'0 8px 24px -4px rgb(0 0 0 / 0.10), 0 2px 8px -2px rgb(0 0 0 / 0.06)',
+                        nav:        '0 1px 0 0 rgb(0 0 0 / 0.06)',
+                        'glow-brand':'0 0 0 3px rgb(59 96 245 / 0.15)',
+                    },
+                    backgroundImage: {
+                        'page-gradient': 'linear-gradient(160deg, #f8f9ff 0%, #f1f5f9 100%)',
+                    },
+                    animation: {
+                        'fade-in':   'fadeIn 0.18s ease',
+                        'slide-up':  'slideUp 0.22s ease',
+                        'pulse-dot': 'pulseDot 2s ease-in-out infinite',
+                    },
+                    keyframes: {
+                        fadeIn:   { '0%': { opacity: 0 },                         '100%': { opacity: 1 } },
+                        slideUp:  { '0%': { opacity: 0, transform: 'translateY(6px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
+                        pulseDot: { '0%, 100%': { opacity: 1, transform: 'scale(1)' }, '50%': { opacity: 0.6, transform: 'scale(0.85)' } },
+                    }
+                }
+            }
+        }
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    <style>
+        /* ─── Mobile nav slide-down ──────────────────────────────────── */
+        #mobile-menu {
+            display: grid;
+            grid-template-rows: 0fr;
+            transition: grid-template-rows 0.22s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        #mobile-menu.open { grid-template-rows: 1fr; }
+        #mobile-menu > div { overflow: hidden; }
+
+        /* ─── Active nav underline ───────────────────────────────────── */
+        .nav-active-indicator {
+            position: absolute;
+            bottom: -1px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 24px;
+            height: 2px;
+            background: #2540eb;
+            border-radius: 2px 2px 0 0;
+        }
+
+        /* ─── HTMX request indicator ─────────────────────────────────── */
+        .htmx-indicator { opacity: 0; transition: opacity 0.15s ease; }
+        .htmx-request .htmx-indicator,
+        .htmx-request.htmx-indicator { opacity: 1; }
+
+        /* ─── Smooth page-level transitions ──────────────────────────── */
+        main { animation: fadeIn 0.18s ease; }
+
+        /* ─── Scrollbar polish (webkit) ──────────────────────────────── */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+        /* ─── Focus ring override for brand color ────────────────────── */
+        :focus-visible {
+            outline: 2px solid #2540eb;
+            outline-offset: 2px;
+        }
+
+        /* ─── Better checkbox appearance ─────────────────────────────── */
+        input[type="checkbox"] { cursor: pointer; }
+
+        @keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes slideUp  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes pulseDot { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.6; transform: scale(0.85); } }
+    </style>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-gray-50 text-gray-900 flex flex-col min-h-screen">
-    <nav class="bg-indigo-600 text-white shadow-md">
+<body class="bg-slate-50 text-slate-900 flex flex-col min-h-screen font-sans antialiased"
+      style="background-image: linear-gradient(160deg, #f8f9ff 0%, #f1f5f9 100%); background-attachment: fixed;">
+
+    <!-- ── Navbar ──────────────────────────────────────────────────── -->
+    <nav class="bg-white/95 backdrop-blur-sm border-b border-slate-100 sticky top-0 z-50"
+         style="box-shadow: 0 1px 0 0 rgb(0 0 0 / 0.06);">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
+
+                <!-- Logo / Wordmark -->
                 <div class="flex items-center">
-                    <a href="/map" class="text-xl font-bold flex items-center gap-2">
-                        🐾 K9-Overwatch
+                    <a href="/map" class="flex items-center gap-2.5 group" aria-label="K9-Overwatch home">
+                        <span class="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-600 text-white shadow-sm
+                                     group-hover:bg-brand-700 group-hover:shadow transition-all duration-200">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-5 h-5" aria-hidden="true">
+                                <ellipse cx="8.5"  cy="7"  rx="1.5" ry="2"/>
+                                <ellipse cx="15.5" cy="7"  rx="1.5" ry="2"/>
+                                <ellipse cx="5.5"  cy="11" rx="1.5" ry="2"/>
+                                <ellipse cx="18.5" cy="11" rx="1.5" ry="2"/>
+                                <path d="M12 10c-2.5 0-5 2-5 4.5 0 1.5.5 2.5 1.5 3.5.8.8 1.5 1 3.5 1s2.7-.2 3.5-1c1-1 1.5-2 1.5-3.5C17 12 14.5 10 12 10z"/>
+                            </svg>
+                        </span>
+                        <span class="text-slate-900 font-bold text-lg tracking-tight group-hover:text-brand-700 transition-colors">
+                            K9<span class="text-brand-600">Overwatch</span>
+                        </span>
                     </a>
                 </div>
-                <div class="flex items-center space-x-4">
-                    <a href="/map" class="hover:text-indigo-200">Map</a>
-                    <a href="/pets" class="hover:text-indigo-200">Pets</a>
-                    <a href="/matches" class="hover:text-indigo-200">Matches</a>
-                    <a href="/admin" class="hover:text-indigo-200">Admin</a>
+
+                <!-- Desktop nav links -->
+                <div class="hidden sm:flex items-center gap-0.5" role="navigation" aria-label="Main navigation">
+                    {% set path = request.url.path %}
+
+                    <a href="/map"
+                       class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
+                              {% if path == '/map' %}text-brand-600{% else %}text-slate-600 hover:text-slate-900 hover:bg-slate-50{% endif %}"
+                       {% if path == '/map' %}aria-current="page"{% endif %}>
+                        Map
+                        {% if path == '/map' %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
+                    </a>
+                    <a href="/pets"
+                       class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
+                              {% if path.startswith('/pets') %}text-brand-600{% else %}text-slate-600 hover:text-slate-900 hover:bg-slate-50{% endif %}"
+                       {% if path.startswith('/pets') %}aria-current="page"{% endif %}>
+                        Pets
+                        {% if path.startswith('/pets') %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
+                    </a>
+                    <a href="/matches"
+                       class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
+                              {% if path.startswith('/matches') %}text-brand-600{% else %}text-slate-600 hover:text-slate-900 hover:bg-slate-50{% endif %}"
+                       {% if path.startswith('/matches') %}aria-current="page"{% endif %}>
+                        Matches
+                        {% if path.startswith('/matches') %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
+                    </a>
+                    <a href="/admin"
+                       class="ml-2 px-4 py-2 text-sm font-medium rounded-md border transition-colors
+                              {% if path.startswith('/admin') %}border-brand-200 text-brand-700 bg-brand-50{% else %}border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300{% endif %}"
+                       {% if path.startswith('/admin') %}aria-current="page"{% endif %}>
+                        Admin
+                    </a>
+                </div>
+
+                <!-- Mobile hamburger -->
+                <div class="flex items-center sm:hidden">
+                    <button id="nav-toggle" type="button"
+                            aria-label="Toggle navigation menu"
+                            aria-expanded="false"
+                            aria-controls="mobile-menu"
+                            class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-500
+                                   hover:text-slate-900 hover:bg-slate-100
+                                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1
+                                   transition-colors">
+                        <svg id="icon-hamburger" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                             stroke-width="2" stroke="currentColor" class="w-5 h-5" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"/>
+                        </svg>
+                        <svg id="icon-close" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                             stroke-width="2" stroke="currentColor" class="w-5 h-5 hidden" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile menu (animated slide-down) -->
+        <div id="mobile-menu" class="sm:hidden border-t border-slate-100 bg-white/95 backdrop-blur-sm"
+             role="navigation" aria-label="Mobile navigation">
+            <div>
+                {% set path = request.url.path %}
+                <div class="px-3 py-2.5 flex flex-col gap-0.5">
+                    <a href="/map"
+                       class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                              {% if path == '/map' %}bg-brand-50 text-brand-700{% else %}text-slate-700 hover:bg-slate-50 hover:text-slate-900{% endif %}"
+                       {% if path == '/map' %}aria-current="page"{% endif %}>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z"/>
+                        </svg>
+                        Map
+                    </a>
+                    <a href="/pets"
+                       class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                              {% if path.startswith('/pets') %}bg-brand-50 text-brand-700{% else %}text-slate-700 hover:bg-slate-50 hover:text-slate-900{% endif %}"
+                       {% if path.startswith('/pets') %}aria-current="page"{% endif %}>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
+                        </svg>
+                        Pets
+                    </a>
+                    <a href="/matches"
+                       class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                              {% if path.startswith('/matches') %}bg-brand-50 text-brand-700{% else %}text-slate-700 hover:bg-slate-50 hover:text-slate-900{% endif %}"
+                       {% if path.startswith('/matches') %}aria-current="page"{% endif %}>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
+                        </svg>
+                        Matches
+                    </a>
+                    <a href="/admin"
+                       class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                              {% if path.startswith('/admin') %}bg-brand-50 text-brand-700{% else %}text-slate-700 hover:bg-slate-50 hover:text-slate-900{% endif %}"
+                       {% if path.startswith('/admin') %}aria-current="page"{% endif %}>
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                        </svg>
+                        Admin
+                    </a>
                 </div>
             </div>
         </div>
     </nav>
 
-    <main class="flex-grow flex flex-col">
+    <main class="flex-grow flex flex-col" id="main-content">
         {% block content %}{% endblock %}
     </main>
 
-    <footer class="bg-gray-800 text-gray-300 py-6 text-center text-sm mt-auto">
-        <p>&copy; 2026 K9-Overwatch</p>
+    <!-- ── Footer ──────────────────────────────────────────────────── -->
+    <footer class="bg-white border-t border-slate-100 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
+                <div class="flex items-center gap-2">
+                    <span class="flex items-center justify-center w-6 h-6 rounded bg-brand-600 text-white flex-shrink-0">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+                            <ellipse cx="8.5"  cy="7"  rx="1.5" ry="2"/>
+                            <ellipse cx="15.5" cy="7"  rx="1.5" ry="2"/>
+                            <ellipse cx="5.5"  cy="11" rx="1.5" ry="2"/>
+                            <ellipse cx="18.5" cy="11" rx="1.5" ry="2"/>
+                            <path d="M12 10c-2.5 0-5 2-5 4.5 0 1.5.5 2.5 1.5 3.5.8.8 1.5 1 3.5 1s2.7-.2 3.5-1c1-1 1.5-2 1.5-3.5C17 12 14.5 10 12 10z"/>
+                        </svg>
+                    </span>
+                    <span class="font-bold text-slate-800 text-sm">K9Overwatch</span>
+                </div>
+                <p class="text-xs text-slate-500 text-center">Helping reunite lost pets with their families across Indianapolis.</p>
+                <p class="text-xs text-slate-400">&copy; 2026 K9-Overwatch. All rights reserved.</p>
+            </div>
+        </div>
     </footer>
+
+    <script>
+        (function () {
+            var btn    = document.getElementById('nav-toggle');
+            var menu   = document.getElementById('mobile-menu');
+            var iconHm = document.getElementById('icon-hamburger');
+            var iconCl = document.getElementById('icon-close');
+            if (!btn) return;
+            btn.addEventListener('click', function () {
+                var isOpen = menu.classList.contains('open');
+                menu.classList.toggle('open', !isOpen);
+                iconHm.classList.toggle('hidden',  !isOpen);
+                iconCl.classList.toggle('hidden',   isOpen);
+                btn.setAttribute('aria-expanded', String(!isOpen));
+            });
+            // Close menu when a link is tapped
+            menu.querySelectorAll('a').forEach(function (a) {
+                a.addEventListener('click', function () {
+                    menu.classList.remove('open');
+                    iconHm.classList.remove('hidden');
+                    iconCl.classList.add('hidden');
+                    btn.setAttribute('aria-expanded', 'false');
+                });
+            });
+        })();
+    </script>
 
     {% block extra_scripts %}{% endblock %}
 </body>

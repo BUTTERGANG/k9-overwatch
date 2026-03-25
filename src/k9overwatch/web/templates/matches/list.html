@@ -1,80 +1,205 @@
 {% extends "base.html" %}
 {% block title %}Matches | K9-Overwatch{% endblock %}
-{% block content %}
-<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
-    <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight mb-2">🔗 Matches</h1>
-    <p class="text-gray-500 mb-6">Potential reunifications and cross-source duplicates detected by the matching engine.</p>
 
-    <!-- Tabs -->
-    <div class="flex gap-2 mb-8 border-b border-gray-200 pb-0">
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full animate-fade-in">
+
+    <!-- Page header ─────────────────────────────────────────────── -->
+    <div class="mb-7">
+        <div class="flex items-center gap-2.5 mb-1.5">
+            <div class="flex items-center justify-center w-8 h-8 rounded-lg bg-brand-50 text-brand-600 flex-shrink-0">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                     class="w-4.5 h-4.5" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
+                </svg>
+            </div>
+            <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Matches</h1>
+        </div>
+        <p class="text-slate-500 text-sm">Potential reunifications and cross-source duplicates detected by the matching engine.</p>
+    </div>
+
+    <!-- Tabs ────────────────────────────────────────────────────── -->
+    <div class="flex gap-1 mb-8 border-b border-slate-200" role="tablist" aria-label="Match type tabs">
         <a href="/matches?match_type=lost_found&confidence=high&confidence=medium"
-           class="px-5 py-2.5 text-sm font-semibold rounded-t-lg transition {% if active_tab == 'lost_found' %}bg-indigo-600 text-white{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
-            Reunifications
+           role="tab"
+           aria-selected="{{ 'true' if active_tab == 'lost_found' else 'false' }}"
+           class="relative px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-colors
+                  {% if active_tab == 'lost_found' %}text-brand-600 bg-white border border-b-white border-slate-200 -mb-px{% else %}text-slate-500 hover:text-slate-700 hover:bg-slate-50{% endif %}">
+            <span class="flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                     class="w-4 h-4" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M21 8.25c0-2.485-2.099-4.5-4.688-4.5-1.935 0-3.597 1.126-4.312 2.733-.715-1.607-2.377-2.733-4.313-2.733C5.1 3.75 3 5.765 3 8.25c0 7.22 9 12 9 12s9-4.78 9-12z"/>
+                </svg>
+                Reunifications
+            </span>
         </a>
         <a href="/matches?match_type=dedup&confidence=high&confidence=medium"
-           class="px-5 py-2.5 text-sm font-semibold rounded-t-lg transition {% if active_tab == 'dedup' %}bg-indigo-600 text-white{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
-            Duplicates
+           role="tab"
+           aria-selected="{{ 'true' if active_tab == 'dedup' else 'false' }}"
+           class="relative px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-colors
+                  {% if active_tab == 'dedup' %}text-brand-600 bg-white border border-b-white border-slate-200 -mb-px{% else %}text-slate-500 hover:text-slate-700 hover:bg-slate-50{% endif %}">
+            <span class="flex items-center gap-1.5">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                     class="w-4 h-4" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75"/>
+                </svg>
+                Duplicates
+            </span>
         </a>
     </div>
 
-    <!-- Match Cards -->
+    <!-- Match pair cards ────────────────────────────────────────── -->
     {% if match_pairs %}
-    <div class="flex flex-col gap-6">
+    <div class="flex flex-col gap-4" role="list" aria-label="Match results">
         {% for item in match_pairs %}
         {% set m = item.match %}
         {% set a = item.pet_a %}
         {% set b = item.pet_b %}
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition">
-            <div class="flex flex-col sm:flex-row gap-6">
+
+        <article class="bg-white rounded-2xl overflow-hidden transition-all duration-200
+                        hover:shadow-card-hover hover:-translate-y-0.5
+                        border border-slate-100"
+                 style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06),0 1px 2px -1px rgb(0 0 0 / 0.06);"
+                 role="listitem">
+
+            <!-- Top bar: confidence + match type -->
+            <div class="flex items-center justify-between px-5 py-2.5 border-b border-slate-100 bg-slate-50/60">
+                <div class="flex items-center gap-2 flex-wrap">
+                    {% if m.confidence == 'high' %}
+                        <span class="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 bg-green-100 text-green-700 rounded-full border border-green-200">
+                            <span class="w-1.5 h-1.5 rounded-full bg-green-500 inline-block" style="animation:pulseDot 2s ease-in-out infinite;"></span>
+                            High confidence
+                        </span>
+                    {% elif m.confidence == 'medium' %}
+                        <span class="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full border border-amber-200">
+                            <span class="w-1.5 h-1.5 rounded-full bg-amber-500 inline-block"></span>
+                            Medium confidence
+                        </span>
+                    {% else %}
+                        <span class="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 bg-slate-100 text-slate-600 rounded-full border border-slate-200">
+                            <span class="w-1.5 h-1.5 rounded-full bg-slate-400 inline-block"></span>
+                            Low confidence
+                        </span>
+                    {% endif %}
+
+                    {% if m.match_type == 'lost_found' %}
+                        <span class="text-xs px-2.5 py-1 bg-brand-50 text-brand-700 rounded-full border border-brand-200 font-semibold">
+                            Reunification candidate
+                        </span>
+                    {% else %}
+                        <span class="text-xs px-2.5 py-1 bg-purple-50 text-purple-700 rounded-full border border-purple-200 font-semibold">
+                            Possible duplicate
+                        </span>
+                    {% endif %}
+                </div>
+
+                <!-- Match score pill -->
+                <span class="text-xs font-black text-brand-600 tabular-nums bg-brand-50 border border-brand-100 px-2.5 py-1 rounded-full">
+                    {{ "%.0f"|format(m.score * 100) }}% match
+                </span>
+            </div>
+
+            <!-- Pet A — score bar — Pet B -->
+            <div class="flex flex-col sm:flex-row items-stretch p-5 gap-4 sm:gap-0">
+
                 <!-- Pet A -->
-                <a href="/pets/{{ a.id }}" class="flex flex-1 gap-4 items-start group">
-                    {% if a.thumbnail_url %}<img src="{{ a.thumbnail_url }}" alt="{{ a.name }}" class="w-20 h-20 object-cover rounded-xl border flex-shrink-0 group-hover:opacity-90 transition">
-                    {% else %}<div class="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center text-3xl flex-shrink-0">🐾</div>{% endif %}
+                <a href="/pets/{{ a.id }}"
+                   class="flex flex-1 gap-3 items-start group min-w-0 hover:opacity-90 transition-opacity rounded-xl p-1 -m-1">
+                    {% if a.thumbnail_url %}
+                    <img src="{{ a.thumbnail_url }}" alt="{{ a.name or 'Pet photo' }}"
+                         class="w-16 h-16 object-cover rounded-xl border border-slate-100 flex-shrink-0 group-hover:ring-2 group-hover:ring-brand-300 transition"
+                         loading="lazy" width="64" height="64">
+                    {% else %}
+                    <div class="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center text-xl flex-shrink-0 border border-slate-100"
+                         aria-hidden="true">🐾</div>
+                    {% endif %}
                     <div class="min-w-0">
-                        <span class="text-xs font-bold uppercase tracking-widest {% if a.record_type == 'lost' %}text-red-500{% elif a.record_type == 'found' %}text-green-500{% else %}text-blue-500{% endif %}">{{ a.record_type }}</span>
-                        <p class="font-bold text-gray-900 group-hover:text-indigo-700 transition truncate">{{ a.name or "Unknown" }}</p>
-                        <p class="text-sm text-gray-500 capitalize truncate">{{ a.breed or "?" }} &bull; {{ a.source }}</p>
-                        <p class="text-xs text-gray-400 font-mono mt-1">{{ a.date_event }}</p>
+                        <span class="block text-xs font-bold uppercase tracking-widest mb-0.5
+                            {% if a.record_type == 'lost' %}text-red-500{% elif a.record_type == 'found' %}text-green-500{% elif a.record_type == 'sighting' %}text-blue-500{% else %}text-amber-500{% endif %}">
+                            {{ a.record_type }}
+                        </span>
+                        <p class="font-bold text-slate-900 group-hover:text-brand-700 transition-colors truncate text-sm leading-snug">
+                            {{ a.name or "Unknown" }}
+                        </p>
+                        <p class="text-xs text-slate-500 capitalize truncate mt-0.5">
+                            {{ a.breed or "?" }} &bull; {{ a.source }}
+                        </p>
+                        <p class="text-xs text-slate-400 font-mono mt-1 tabular-nums">{{ a.date_event }}</p>
                     </div>
                 </a>
 
-                <!-- Score -->
-                <div class="flex flex-col items-center justify-center flex-shrink-0 px-4">
-                    <div class="text-2xl font-black text-indigo-600">{{ "%.0f" | format(m.score * 100) }}%</div>
-                    <div class="text-xs text-gray-400 font-semibold mt-0.5">match</div>
-                    {% if m.confidence == 'high' %}<span class="mt-2 text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-semibold">High</span>
-                    {% elif m.confidence == 'medium' %}<span class="mt-2 text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-semibold">Medium</span>
-                    {% else %}<span class="mt-2 text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full font-semibold">Low</span>{% endif %}
+                <!-- Center divider with score -->
+                <div class="flex flex-row sm:flex-col items-center justify-center flex-shrink-0
+                            px-5 py-2 sm:py-0 gap-2 sm:gap-1 my-0 sm:my-1
+                            border-t sm:border-t-0 sm:border-x border-slate-100">
+                    <div class="text-2xl font-black text-brand-600 tabular-nums leading-none">
+                        {{ "%.0f"|format(m.score * 100) }}%
+                    </div>
+                    <div class="text-xs text-slate-400 font-semibold uppercase tracking-wider">match</div>
                 </div>
 
                 <!-- Pet B -->
-                <a href="/pets/{{ b.id }}" class="flex flex-1 gap-4 items-start group sm:flex-row-reverse sm:text-right">
-                    {% if b.thumbnail_url %}<img src="{{ b.thumbnail_url }}" alt="{{ b.name }}" class="w-20 h-20 object-cover rounded-xl border flex-shrink-0 group-hover:opacity-90 transition">
-                    {% else %}<div class="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center text-3xl flex-shrink-0">🐾</div>{% endif %}
-                    <div class="min-w-0">
-                        <span class="text-xs font-bold uppercase tracking-widest {% if b.record_type == 'lost' %}text-red-500{% elif b.record_type == 'found' %}text-green-500{% else %}text-blue-500{% endif %}">{{ b.record_type }}</span>
-                        <p class="font-bold text-gray-900 group-hover:text-indigo-700 transition truncate">{{ b.name or "Unknown" }}</p>
-                        <p class="text-sm text-gray-500 capitalize truncate">{{ b.breed or "?" }} &bull; {{ b.source }}</p>
-                        <p class="text-xs text-gray-400 font-mono mt-1">{{ b.date_event }}</p>
+                <a href="/pets/{{ b.id }}"
+                   class="flex flex-1 gap-3 items-start group min-w-0 sm:flex-row-reverse hover:opacity-90 transition-opacity rounded-xl p-1 -m-1">
+                    {% if b.thumbnail_url %}
+                    <img src="{{ b.thumbnail_url }}" alt="{{ b.name or 'Pet photo' }}"
+                         class="w-16 h-16 object-cover rounded-xl border border-slate-100 flex-shrink-0 group-hover:ring-2 group-hover:ring-brand-300 transition"
+                         loading="lazy" width="64" height="64">
+                    {% else %}
+                    <div class="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center text-xl flex-shrink-0 border border-slate-100"
+                         aria-hidden="true">🐾</div>
+                    {% endif %}
+                    <div class="min-w-0 sm:text-right">
+                        <span class="block text-xs font-bold uppercase tracking-widest mb-0.5
+                            {% if b.record_type == 'lost' %}text-red-500{% elif b.record_type == 'found' %}text-green-500{% elif b.record_type == 'sighting' %}text-blue-500{% else %}text-amber-500{% endif %}">
+                            {{ b.record_type }}
+                        </span>
+                        <p class="font-bold text-slate-900 group-hover:text-brand-700 transition-colors truncate text-sm leading-snug">
+                            {{ b.name or "Unknown" }}
+                        </p>
+                        <p class="text-xs text-slate-500 capitalize truncate mt-0.5">
+                            {{ b.breed or "?" }} &bull; {{ b.source }}
+                        </p>
+                        <p class="text-xs text-slate-400 font-mono mt-1 tabular-nums">{{ b.date_event }}</p>
                     </div>
                 </a>
             </div>
 
-            <!-- Signals fired -->
+            <!-- Signal pills -->
             {% if m.signals_fired %}
-            <div class="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
+            <div class="px-5 pb-4 flex flex-wrap gap-1.5">
                 {% for signal, weight in m.signals_fired.items() %}
-                <span class="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1 rounded-full font-medium">{{ signal.replace('_', ' ') }}</span>
+                <span class="text-xs bg-brand-50 text-brand-700 border border-brand-100 px-2.5 py-0.5 rounded-full font-medium">
+                    {{ signal.replace('_', ' ') }}
+                </span>
                 {% endfor %}
             </div>
             {% endif %}
-        </div>
+
+        </article>
         {% endfor %}
     </div>
+
     {% else %}
-    <div class="py-16 text-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-300">
-        <p class="text-lg">No matches found for this filter combination.</p>
+    <!-- Empty state -->
+    <div class="py-20 text-center bg-white rounded-2xl flex flex-col items-center gap-5 border border-dashed border-slate-200"
+         role="status" aria-live="polite">
+        <div class="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none" class="w-12 h-12 text-slate-200">
+                <circle cx="33" cy="33" r="20" stroke="currentColor" stroke-width="4"/>
+                <path d="M47 47L65 65" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <div>
+            <p class="text-base font-semibold text-slate-700">No matches found</p>
+            <p class="text-sm text-slate-400 mt-1">No matches for this filter combination. Try the other tab.</p>
+        </div>
+        <a href="/matches?match_type={{ 'dedup' if active_tab == 'lost_found' else 'lost_found' }}&confidence=high&confidence=medium"
+           class="text-sm font-semibold text-brand-600 hover:text-brand-800 transition-colors">
+            Try the {{ 'Duplicates' if active_tab == 'lost_found' else 'Reunifications' }} tab &rarr;
+        </a>
     </div>
     {% endif %}
+
 </div>
 {% endblock %}

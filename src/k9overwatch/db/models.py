@@ -2,10 +2,10 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from sqlalchemy import (
-    JSON, Boolean, Column, Date, DateTime, Float, Integer,
+    JSON, Boolean, Column, Date, DateTime, Float, Index, Integer,
     String, Text, UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase
@@ -88,14 +88,16 @@ class PetRow(Base):
     alert_number = Column(Text)
 
     # Audit
-    scraped_at = Column(DateTime, default=datetime.utcnow)
-    last_checked_at = Column(DateTime, default=datetime.utcnow)
+    scraped_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    last_checked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # Raw payload
     raw = Column(JSON)
 
     __table_args__ = (
         UniqueConstraint("source", "source_id", name="uq_source_record"),
+        Index("ix_pets_active_date_event", "active", "date_event"),
+        Index("ix_pets_active_type_date", "active", "animal_type", "date_event"),
     )
 
     def __repr__(self) -> str:
@@ -117,12 +119,14 @@ class PetMatch(Base):
     confidence = Column(Text, nullable=False)       # "low" | "medium" | "high"
     signals_fired = Column(JSON)                    # dict of signal_name → weight
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     reviewed = Column(Boolean, default=False)       # human-reviewed?
     confirmed = Column(Boolean)                     # human confirmed/rejected?
 
     __table_args__ = (
         UniqueConstraint("pet_a_id", "pet_b_id", "match_type", name="uq_match_pair"),
+        Index("ix_matches_pet_a_type", "pet_a_id", "match_type"),
+        Index("ix_matches_pet_b_type", "pet_b_id", "match_type"),
     )
 
 
@@ -149,5 +153,5 @@ class GeocodeCache(Base):
     lon = Column(Float, nullable=False)
     geocode_source = Column(Text)
     geocode_confidence = Column(Text)
-    cached_at = Column(DateTime, default=datetime.utcnow)
+    cached_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     hit_count = Column(Integer, default=1)

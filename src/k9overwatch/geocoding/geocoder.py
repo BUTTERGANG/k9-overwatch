@@ -4,7 +4,7 @@ from __future__ import annotations
 import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -176,6 +176,7 @@ class GeocodingService:
         )
 
     async def _save_cache(self, address: str, result: GeocodeResult) -> None:
+        from sqlalchemy.exc import IntegrityError
         from ..db.models import GeocodeCache
 
         key = _normalize_address(address)
@@ -185,11 +186,14 @@ class GeocodingService:
             lon=result.lon,
             geocode_source=str(result.geocode_source),
             geocode_confidence=str(result.geocode_confidence),
-            cached_at=datetime.utcnow(),
+            cached_at=datetime.now(timezone.utc).replace(tzinfo=None),
         )
-        self.session.add(row)
         try:
-            await self.session.flush()
-        except Exception:
-            # Duplicate key — already cached by concurrent request, ignore
-            await self.session.rollback()
+            async with self.session.begin_nested():  # SAVEPOINT
+                self.session.add(row)
+                await self.session.flush()
+        except IntegrityError:
+            # Duplicate cache entry — a concurrent request already wrote it.
+            # begin_nested() rolls back only the savepoint, leaving the outer
+            # transaction (including any pet upserts) intact.
+            pass

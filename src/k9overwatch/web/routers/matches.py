@@ -26,13 +26,21 @@ async def matches_page(
     result = await db.execute(stmt)
     matches = result.scalars().all()
 
-    # Load both pets for each match pair
+    # Bulk-fetch all referenced pet rows in a single query
+    pet_ids = set()
+    for m in matches:
+        pet_ids.add(m.pet_a_id)
+        pet_ids.add(m.pet_b_id)
+    pets_by_id: dict = {}
+    if pet_ids:
+        pets_result = await db.execute(select(PetRow).where(PetRow.id.in_(list(pet_ids))))
+        for row in pets_result.scalars().all():
+            pets_by_id[row.id] = row
+
     match_pairs = []
     for m in matches:
-        pet_a_res = await db.execute(select(PetRow).where(PetRow.id == m.pet_a_id))
-        pet_b_res = await db.execute(select(PetRow).where(PetRow.id == m.pet_b_id))
-        pet_a = pet_a_res.scalar_one_or_none()
-        pet_b = pet_b_res.scalar_one_or_none()
+        pet_a = pets_by_id.get(m.pet_a_id)
+        pet_b = pets_by_id.get(m.pet_b_id)
         if pet_a and pet_b:
             match_pairs.append({"match": m, "pet_a": pet_a, "pet_b": pet_b})
 

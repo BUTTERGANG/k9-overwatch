@@ -1,9 +1,11 @@
-"""Structured logging configuration for K9-Overwatch."""
+"""Structured logging configuration for K9-Overwatch using structlog."""
 from __future__ import annotations
 
 import logging
 import sys
 from typing import Optional
+
+import structlog
 
 
 _CONFIGURED = False
@@ -15,7 +17,7 @@ def configure_logging(
     json_format: bool = False,
 ) -> None:
     """
-    Configure root logger. Safe to call multiple times — only applies once.
+    Configure root logger via structlog. Safe to call multiple times — only applies once.
 
     Args:
         level:       Log level string (DEBUG, INFO, WARNING, ERROR).
@@ -27,26 +29,66 @@ def configure_logging(
         return
     _CONFIGURED = True
 
-    root = logging.getLogger()
-    root.setLevel(getattr(logging, level.upper(), logging.INFO))
+    log_level = getattr(logging, level.upper(), logging.INFO)
+
+    # Shared processor chain for both structlog-native and stdlib log records
+    shared_processors: list = [
+        structlog.contextvars.merge_contextvars,
+        structlog.stdlib.add_log_level,
+        structlog.stdlib.add_logger_name,
+        structlog.processors.TimeStamper(fmt="iso", utc=True),
+        structlog.processors.StackInfoRenderer(),
+    ]
 
     if json_format:
-        formatter = _JsonFormatter()
-    else:
-        formatter = logging.Formatter(
-            fmt="%(asctime)s %(levelname)-8s %(name)s — %(message)s",
-            datefmt="%Y-%m-%dT%H:%M:%S",
+        # Production: machine-readable JSON on each line
+        stdlib_formatter = structlog.stdlib.ProcessorFormatter(
+            processors=[
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                structlog.processors.format_exc_info,
+                structlog.processors.JSONRenderer(),
+            ],
+            foreign_pre_chain=shared_processors,
         )
+        structlog.configure(
+            processors=shared_processors + [
+                structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+            ],
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            wrapper_class=structlog.stdlib.BoundLogger,
+            cache_logger_on_first_use=True,
+        )
+    else:
+        # Development: colourful, human-readable console output
+        stdlib_formatter = structlog.stdlib.ProcessorFormatter(
+            processors=[
+                structlog.stdlib.ProcessorFormatter.remove_processors_meta,
+                structlog.processors.format_exc_info,
+                structlog.dev.ConsoleRenderer(),
+            ],
+            foreign_pre_chain=shared_processors,
+        )
+        structlog.configure(
+            processors=shared_processors + [
+                structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+            ],
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            wrapper_class=structlog.stdlib.BoundLogger,
+            cache_logger_on_first_use=True,
+        )
+
+    root = logging.getLogger()
+    root.setLevel(log_level)
 
     # stderr handler
     stderr_handler = logging.StreamHandler(sys.stderr)
-    stderr_handler.setFormatter(formatter)
+    stderr_handler.setFormatter(stdlib_formatter)
     root.addHandler(stderr_handler)
 
-    # optional file handler
+    # Optional file handler
     if log_file:
         file_handler = logging.FileHandler(log_file, encoding="utf-8")
-        file_handler.setFormatter(formatter)
+        file_handler.setFormatter(stdlib_formatter)
         root.addHandler(file_handler)
 
     # Quiet noisy third-party loggers
@@ -60,21 +102,3 @@ def configure_logging(
 def get_logger(name: str) -> logging.Logger:
     """Return a named logger. Call configure_logging() first."""
     return logging.getLogger(name)
-
-
-class _JsonFormatter(logging.Formatter):
-    """Emit log records as single-line JSON objects."""
-
-    def format(self, record: logging.LogRecord) -> str:
-        import json
-        from datetime import datetime, timezone
-
-        payload = {
-            "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
-            "level": record.levelname,
-            "logger": record.name,
-            "msg": record.getMessage(),
-        }
-        if record.exc_info:
-            payload["exc"] = self.formatException(record.exc_info)
-        return json.dumps(payload, ensure_ascii=False)

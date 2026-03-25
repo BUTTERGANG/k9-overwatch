@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Request, Depends, Query
+from fastapi import APIRouter, HTTPException, Request, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, func
 
@@ -18,9 +18,12 @@ async def get_map_geojson(
     sw_lat: float, sw_lng: float, ne_lat: float, ne_lng: float,
     record_type: list[str] = Query(default=["lost", "found", "sighting", "adoptable"]),
     animal_type: list[str] = Query(default=[]),
-    days: int = Query(default=90),
+    days: int = Query(default=90, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
 ):
+    if sw_lat >= ne_lat or sw_lng >= ne_lng:
+        raise HTTPException(status_code=422, detail="Invalid bounding box")
+
     stmt = select(PetRow).where(
         PetRow.active == True,
         PetRow.lat >= sw_lat,
@@ -35,9 +38,9 @@ async def get_map_geojson(
     if animal_type:
         stmt = stmt.where(PetRow.animal_type.in_(animal_type))
         
-    from datetime import datetime, timedelta
+    from datetime import datetime, timedelta, timezone
     if days:
-        cutoff = datetime.now() - timedelta(days=days)
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
         stmt = stmt.where(PetRow.date_event >= cutoff.date())
 
     # limit to roughly 500 features so browser doesn't choke

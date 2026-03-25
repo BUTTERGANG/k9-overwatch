@@ -1,0 +1,78 @@
+<!-- HTMX swap target: result count + pet cards + pagination -->
+<div class="mb-4 flex items-center gap-2" aria-live="polite" aria-atomic="true">
+    <span class="text-sm text-slate-500 font-medium">
+        {% if total == 1 %}
+            <strong class="text-slate-700 font-bold">1</strong> record matching your criteria
+        {% else %}
+            <strong class="text-slate-700 font-bold">{{ total }}</strong> records matching your criteria
+        {% endif %}
+    </span>
+</div>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
+    {% for pet in pets %}
+        {% include 'pets/card.html' %}
+    {% else %}
+        <!-- Empty state -->
+        <div class="col-span-full py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 flex flex-col items-center gap-4 animate-fade-in">
+            <div class="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none" class="w-14 h-14 text-slate-200">
+                    <circle cx="33" cy="33" r="20" stroke="currentColor" stroke-width="5"/>
+                    <path d="M47 47L65 65" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
+                    <!-- paw inside glass -->
+                    <ellipse cx="28" cy="29" rx="3"  ry="4"  fill="currentColor" opacity="0.45"/>
+                    <ellipse cx="38" cy="29" rx="3"  ry="4"  fill="currentColor" opacity="0.45"/>
+                    <ellipse cx="24" cy="37" rx="3"  ry="4"  fill="currentColor" opacity="0.45"/>
+                    <ellipse cx="42" cy="37" rx="3"  ry="4"  fill="currentColor" opacity="0.45"/>
+                    <path d="M33 34c-4 0-8 3-8 7 0 2.5.8 4 2.5 5.5 1.3 1.3 2.4 1.5 5.5 1.5s4.2-.2 5.5-1.5C40.2 45 41 43.5 41 41c0-4-4-7-8-7z" fill="currentColor" opacity="0.45"/>
+                </svg>
+            </div>
+            <div>
+                <p class="text-base font-semibold text-slate-700">No pets found</p>
+                <p class="text-sm text-slate-400 mt-1">Try adjusting your filters or expanding the timeframe.</p>
+            </div>
+        </div>
+    {% endfor %}
+</div>
+
+{% if total_pages > 1 %}
+<nav class="mt-8 flex justify-center items-center gap-2" aria-label="Pagination">
+    {% if page > 1 %}
+    <button hx-get="/pets/results?page={{ page - 1 }}"
+            hx-include="#pet-filters"
+            hx-target="#results-container"
+            hx-push-url="true"
+            hx-indicator="#filter-indicator"
+            class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 bg-white text-slate-700
+                   hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition shadow-sm
+                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            aria-label="Previous page">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5"/>
+        </svg>
+        Previous
+    </button>
+    {% endif %}
+
+    <span class="px-4 py-2 text-sm text-slate-500 font-medium tabular-nums">
+        Page <strong class="text-slate-800">{{ page }}</strong> of <strong class="text-slate-800">{{ total_pages }}</strong>
+    </span>
+
+    {% if page < total_pages %}
+    <button hx-get="/pets/results?page={{ page + 1 }}"
+            hx-include="#pet-filters"
+            hx-target="#results-container"
+            hx-push-url="true"
+            hx-indicator="#filter-indicator"
+            class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 bg-white text-slate-700
+                   hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition shadow-sm
+                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
+            aria-label="Next page">
+        Next
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5"/>
+        </svg>
+    </button>
+    {% endif %}
+</nav>
+{% endif %}

@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
-from sqlalchemy import and_, func, or_, select, update
+from sqlalchemy import and_, exists, func, not_, or_, select, update
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from ..matching.breed_normalizer import normalize_breed
 from ..models.pet_record import PetRecord
 from .models import PetMatch, PetRow, ScraperState
 
@@ -33,7 +34,7 @@ class PetRepository:
         result = await self.session.execute(stmt)
         existing = result.scalar_one_or_none()
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
 
         if existing is None:
             row = PetRow(
@@ -45,6 +46,7 @@ class PetRepository:
                 name=record.name,
                 breed=record.breed,
                 breed_secondary=record.breed_secondary,
+                breed_normalized=normalize_breed(record.breed),
                 color_primary=record.color_primary,
                 color_secondary=record.color_secondary,
                 gender=str(record.gender) if record.gender else None,
@@ -98,6 +100,7 @@ class PetRepository:
             existing.source_url = record.source_url or existing.source_url
             existing.active = record.active
             existing.status = record.status or existing.status
+            existing.breed_normalized = normalize_breed(record.breed) or existing.breed_normalized
             existing.date_updated = record.date_updated or existing.date_updated
             existing.days_since_event = record.days_since_event or existing.days_since_event
             existing.description = record.description or existing.description
@@ -119,7 +122,7 @@ class PetRepository:
         stmt = (
             update(PetRow)
             .where(and_(PetRow.source == source, PetRow.source_id == source_id))
-            .values(active=False, last_checked_at=datetime.utcnow())
+            .values(active=False, last_checked_at=datetime.now(timezone.utc).replace(tzinfo=None))
         )
         await self.session.execute(stmt)
 
@@ -138,7 +141,7 @@ class PetRepository:
                     PetRow.source_id.not_in(seen_source_ids),
                 )
             )
-            .values(active=False, last_checked_at=datetime.utcnow())
+            .values(active=False, last_checked_at=datetime.now(timezone.utc).replace(tzinfo=None))
         )
         result = await self.session.execute(stmt)
         return result.rowcount
@@ -183,7 +186,7 @@ class PetRepository:
         if animal_type:
             filters.append(PetRow.animal_type == animal_type)
         if days:
-            cutoff = datetime.utcnow() - timedelta(days=days)
+            cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
             filters.append(PetRow.date_event >= cutoff.date())
 
         stmt = select(PetRow).where(and_(*filters))
@@ -257,12 +260,42 @@ class PetRepository:
 
         return candidates
 
+    async def get_stale_records(
+        self, source: str, *, older_than_hours: int = 48
+    ) -> list[PetRow]:
+        """
+        Return active records from `source` whose `last_checked_at` is older
+        than `older_than_hours` hours (or NULL). Used by the staleness checker
+        to verify that records still exist on the source website.
+        """
+        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=older_than_hours)
+        stmt = select(PetRow).where(
+            and_(
+                PetRow.source == source,
+                PetRow.active == True,
+                or_(
+                    PetRow.last_checked_at.is_(None),
+                    PetRow.last_checked_at < cutoff,
+                ),
+            )
+        )
+        result = await self.session.execute(stmt)
+        return result.scalars().all()
+
     async def get_unmatched_records(
         self, source: Optional[str] = None, limit: int = 500
     ) -> list[PetRow]:
         """Records not yet present in pet_matches — candidates for a matching pass."""
-        matched_ids_stmt = select(PetMatch.pet_a_id).union(select(PetMatch.pet_b_id))
-        filters = [PetRow.active == True, PetRow.id.not_in(matched_ids_stmt)]
+        # Use NOT EXISTS correlated subquery — faster than NOT IN for large tables
+        # because NOT IN materializes the entire subquery result.
+        matched_subq = (
+            select(PetMatch.pet_a_id)
+            .where(PetMatch.pet_a_id == PetRow.id)
+            .union(
+                select(PetMatch.pet_b_id).where(PetMatch.pet_b_id == PetRow.id)
+            )
+        )
+        filters = [PetRow.active == True, not_(exists(matched_subq))]
         if source:
             filters.append(PetRow.source == source)
         stmt = select(PetRow).where(and_(*filters)).limit(limit)
@@ -290,7 +323,7 @@ class PetRepository:
         result = await self.session.execute(stmt)
         state = result.scalar_one_or_none()
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc).replace(tzinfo=None)
         if state is None:
             state = ScraperState(source=source)
             self.session.add(state)

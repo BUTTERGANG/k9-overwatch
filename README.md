@@ -21,7 +21,7 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 | `docs/api-analysis-24petconnect.md` | 24petconnect.com — PetHarbor backend, HTML scraping |
 | `docs/api-analysis-pawboost.md` | PawBoost — Cloudflare-protected, Playwright required |
 | `docs/api-analysis-indylostpetalert.md` | IndyLostPetAlert — Open WordPress REST API |
-| `docs/api-analysis-petfbi.md` | Pet FBI — GraphQL API, AWS WAF protected, **provides lat/lon directly** |
+| `docs/api-analysis-petfbi.md` | Pet FBI — GraphQL API, AWS WAF protected, provides lat/lon directly |
 | `docs/api-analysis-lostmydoggie.md` | Lost My Doggie — Cloudflare-protected, phone alert service |
 | `docs/unified-data-schema.md` | Canonical pet record schema across all sources |
 
@@ -31,17 +31,17 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 
 | # | Source | Coverage | Access Method | Status |
 |---|---|---|---|---|
-| 1 | [24petconnect.com](https://24petconnect.com) | National (US + CA) | HTML scraping via POST | ✅ Scraper built & tested |
-| 2 | [pawboost.com](https://www.pawboost.com) | National (US) | Playwright (Cloudflare) | ✅ Scraper built (needs Playwright install) |
-| 3 | [indylostpetalert.com](https://www.indylostpetalert.com) | Indianapolis metro | WordPress REST API | ✅ Scraper built & tested |
-| 4 | [petfbi.org](https://petfbi.org) | National (US) | GraphQL + Playwright (AWS WAF) | ✅ Scraper built (needs Playwright install) |
-| 5 | [lostmydoggie.com](https://www.lostmydoggie.com) | National (US) | Playwright (Cloudflare) | ✅ Scraper built & tested |
+| 1 | [24petconnect.com](https://24petconnect.com) | National (US + CA) | HTML scraping via POST | ✅ Built & tested |
+| 2 | [pawboost.com](https://www.pawboost.com) | National (US) | Playwright (Cloudflare) | ✅ Built (needs Playwright) |
+| 3 | [indylostpetalert.com](https://www.indylostpetalert.com) | Indianapolis metro | WordPress REST API | ✅ Built & tested |
+| 4 | [petfbi.org](https://petfbi.org) | National (US) | GraphQL + Playwright (AWS WAF) | ✅ Built (needs Playwright) |
+| 5 | [lostmydoggie.com](https://www.lostmydoggie.com) | National (US) | Playwright (Cloudflare) | ✅ Built & tested |
 
 ### Planned Sources
 
 | Source | Notes |
 |---|---|
-| [petfinder.com](https://www.petfinder.com/developers/) | Official public JSON API — adoptions primarily; developer page currently inaccessible |
+| [petfinder.com](https://www.petfinder.com/developers/) | Official public JSON API — adoptions primarily |
 | [findingrover.com](https://www.findingrover.com) | Facial recognition for dogs |
 | [petcolove.org/lost](https://petcolove.org/lost) | AI-powered facial recognition, Next.js frontend |
 | Local municipal shelters | Many run on PetHarbor (same backend as 24petconnect) |
@@ -61,7 +61,7 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 | **Bot protection** | None | Cloudflare (strict) | None | AWS WAF (strict) | Cloudflare (strict) |
 | **Auth required** | No | No | No | WAF token | No |
 | **Address precision** | Street level | Street level | Street level | Street level | ZIP/city level |
-| **Lat/lon provided** | No (geocode) | No (geocode) | No (geocode) | **✅ Yes** | No (geocode) |
+| **Lat/lon provided** | No (geocode) | No (geocode) | No (geocode) | ✅ Yes | No (geocode) |
 | **Photos** | Yes | Yes | Yes | Yes | Yes |
 | **Breed info** | Yes (structured) | Yes (description) | Yes (description) | Yes (structured) | Yes |
 | **Color info** | In description | In description | Structured tag | Yes (structured) | In description |
@@ -98,14 +98,14 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 ┌─────────────────────────────────────────────────────────────────────┐
 │                        Geocoding Layer                              │
 │   location_text → lat/lon  (Google Maps → Nominatim → ZIP centroid) │
-│                  Cache results to avoid re-geocoding                │
+│                  Results cached to geocode_cache table              │
 │              PetFBI skipped — provides coordinates natively         │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          Database                                   │
-│          SQLite (dev) · PostgreSQL + PostGIS (production)           │
+│               SQLite (dev) · NeonDB/PostgreSQL (prod)               │
 │          pets · pet_matches · scraper_state · geocode_cache         │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
@@ -123,16 +123,17 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 │                       Scheduler (APScheduler)                       │
 │   Each scraper runs on its own interval; matching pass every 30 min │
 │   Staleness check every 6 hours (marks removed listings inactive)   │
+│   Runs inside the web process when RUN_SCHEDULER=true               │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                       Application Layer  (planned)                  │
-│   · Geographic map view (Leaflet / MapboxGL)                        │
-│   · Filters: type, species, color, size, date, radius               │
-│   · Pet detail pages with source attribution                        │
-│   · Lost ↔ Found match alerts                                       │
-│   · User accounts + saved search notifications                      │
+│                       Web Application (FastAPI)                     │
+│   · Interactive Leaflet map — clustered pins, bounding-box search   │
+│   · Pet grid — filters by type, status, species, days; HTMX partials│
+│   · Pet detail pages — full info, gallery, mini-map, match cards    │
+│   · Lost ↔ Found match list — scored pairs with confidence tiers    │
+│   · Admin dashboard — scraper health, live stats (auth-protected)   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -143,20 +144,17 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 ### Prerequisites
 
 - Python 3.11+
-- [optional] Playwright (for browser-based scrapers: PawBoost, PetFBI, LostMyDoggie)
+- Playwright (optional — for browser-based scrapers: PawBoost, PetFBI, LostMyDoggie)
 
 ### Install
 
 ```bash
-# Clone and enter the project
-cd "/Volumes/T5 EVO/REPLIT/NEW PROJECTS/K9-OVERWATCH"
-
 # Create virtual environment
-python3 -m venv .venv
-source .venv/bin/activate
+python3.11 -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 
-# Install core dependencies
-pip install -e ".[dev]"
+# Install with PostgreSQL support (production)
+pip install -e ".[dev,postgres]"
 
 # Install browser scraper dependencies (optional)
 pip install -e ".[browser]"
@@ -167,7 +165,7 @@ playwright install chromium
 
 ```bash
 cp .env.example .env
-# Edit .env to set your search coordinates, geocoding provider, etc.
+# Edit .env — set DATABASE_URL, search coordinates, geocoding provider, etc.
 ```
 
 Key `.env` settings:
@@ -177,10 +175,31 @@ Key `.env` settings:
 | `DATABASE_URL` | `sqlite+aiosqlite:///data/k9overwatch.db` | Database connection string |
 | `SEARCH_LAT` | `39.7684` | Search center latitude (default: Indianapolis) |
 | `SEARCH_LON` | `-86.1581` | Search center longitude |
-| `SEARCH_RADIUS_MILES` | `25` | Search radius |
+| `SEARCH_RADIUS_MILES` | `25` | Search radius in miles |
 | `SEARCH_ZIP` | `46201` | ZIP code for sources that require it |
 | `GEOCODE_PROVIDER` | `nominatim` | `nominatim` (free) or `google` |
 | `GOOGLE_MAPS_API_KEY` | — | Required only when `GEOCODE_PROVIDER=google` |
+| `ADMIN_USER` | `admin` | HTTP Basic username for `/admin` routes |
+| `ADMIN_PASSWORD` | `changeme` | HTTP Basic password — **change in production** |
+| `RUN_SCHEDULER` | `false` | Set `true` to run scrapers inside the web process |
+| `LOG_FORMAT` | `pretty` | `pretty` (dev) or `json` (production) |
+
+### Run the Web App
+
+```bash
+# Development
+PYTHONPATH=src uvicorn k9overwatch.web.main:app --host 0.0.0.0 --port 5000 --reload
+
+# With scheduler running inside the web process
+RUN_SCHEDULER=true PYTHONPATH=src uvicorn k9overwatch.web.main:app --host 0.0.0.0 --port 5000 --reload
+```
+
+### Run the Scheduler Standalone
+
+```bash
+# As a separate process (alternative to RUN_SCHEDULER=true)
+PYTHONPATH=src python -m k9overwatch.scheduler.runner
+```
 
 ### Test a Single Scraper
 
@@ -201,10 +220,19 @@ python scripts/scrape_one.py petfbi --max-pages 1
 python scripts/scrape_one.py lostmydoggie --max-pages 2
 ```
 
-### Run the Full Scheduler
+### Run Tests
 
 ```bash
-python -m k9overwatch.scheduler.runner
+# All tests
+pytest tests/
+
+# Specific suites
+pytest tests/test_normalizers.py     # scraper normalizers
+pytest tests/test_matching.py        # matching engine signals
+pytest tests/test_geocoding.py       # geocoding service
+pytest tests/test_integration.py     # full DB pipeline
+pytest tests/test_web_routes.py      # FastAPI route tests
+pytest tests/test_repository_extra.py  # repository edge cases
 ```
 
 ---
@@ -218,8 +246,8 @@ src/k9overwatch/
 │   └── pet_record.py         # PetRecord — canonical in-memory model (Pydantic v2)
 ├── db/
 │   ├── models.py             # SQLAlchemy ORM: PetRow, PetMatch, ScraperState, GeocodeCache
-│   ├── connection.py         # Async engine + session factory
-│   └── repository.py         # PetRepository — upsert, queries, geo search, match storage
+│   ├── connection.py         # Async engine + session factory (SQLite dev / asyncpg prod)
+│   └── repository.py         # PetRepository — upsert, geo search, match storage, staleness
 ├── geocoding/
 │   ├── geocoder.py           # GeocodingService — cascade: cache → Google → Nominatim → ZIP
 │   └── providers/
@@ -246,21 +274,80 @@ src/k9overwatch/
 │   ├── breed_normalizer.py   # normalize_breed() with alias dict + rapidfuzz fallback
 │   ├── deduplicator.py       # Deduplicator — same pet on multiple platforms
 │   └── lost_found_matcher.py # LostFoundMatcher — lost → found reunification
-└── scheduler/
-    ├── jobs.py               # run_scraper(), run_matching_pass(), check_stale_records()
-    └── runner.py             # ScraperScheduler — APScheduler interval jobs
+├── scheduler/
+│   ├── jobs.py               # run_scraper(), run_matching_pass(), check_stale_records()
+│   └── runner.py             # ScraperScheduler — APScheduler interval jobs
+├── web/
+│   ├── main.py               # FastAPI app + lifespan (init DB, warm pool, optional scheduler)
+│   ├── dependencies.py       # get_db() — async session injection
+│   ├── templates_config.py   # Jinja2 environment setup
+│   ├── routers/
+│   │   ├── pets.py           # /pets, /pets/{id}, /pets/results (HTMX partial)
+│   │   ├── map.py            # /map, /api/map/geojson (GeoJSON bounding-box endpoint)
+│   │   ├── matches.py        # /matches (lost→found pairs, dedup pairs)
+│   │   └── admin.py          # /admin, /admin/stats-partial (HTTP Basic auth required)
+│   ├── templates/
+│   │   ├── base.html         # Nav, mobile hamburger menu, active link highlighting
+│   │   ├── macros.html       # Shared Jinja2 macros (camera placeholder SVG, etc.)
+│   │   ├── map.html          # Leaflet map + filter sidebar
+│   │   ├── pets/             # list.html, _results.html (HTMX partial), card.html, detail.html
+│   │   ├── matches/          # list.html — scored match pairs
+│   │   ├── admin/            # dashboard.html, stats_partial.html
+│   │   └── errors/           # 404.html, 500.html
+│   └── static/
+│       └── js/
+│           └── map.js        # Leaflet pin loading, popups, search-area button, XSS-safe
+└── utils/
+    └── logging_config.py     # structlog-based JSON/pretty logging (configure_logging())
 scripts/
-└── scrape_one.py             # CLI test utility for any individual scraper
+├── scrape_one.py             # CLI test utility for any individual scraper
+└── geocode_batch.py          # Batch geocode existing DB records
+tests/
+├── conftest.py               # Shared async DB fixtures (in-memory SQLite)
+├── test_normalizers.py       # All 5 source normalizers against realistic fixtures
+├── test_matching.py          # Signal scoring, dedup, lost→found matcher
+├── test_geocoding.py         # Geocoding cascade, cache, ZIP centroid fallback
+├── test_integration.py       # Full pipeline: upsert → geocode → match → save
+├── test_web_routes.py        # FastAPI TestClient: routes, validation, auth
+└── test_repository_extra.py  # mark_inactive_bulk, get_stale_records, cache savepoint
 docs/
-├── api-analysis-*.md         # Per-source API analysis documentation
+├── api-analysis-*.md         # Per-source API analysis
 └── unified-data-schema.md    # Canonical schema + PostgreSQL DDL
 ```
 
 ---
 
-## Matching Engine
+## Web Application
 
-The matching engine runs in two modes:
+### Pages
+
+| Route | Description |
+|---|---|
+| `/map` | Interactive Leaflet map — pins colored by record type, bounding-box search, filter sidebar |
+| `/pets` | Filterable pet card grid — species, type, days; HTMX partial updates; URL-reflected filter state |
+| `/pets/{id}` | Pet detail page — full info, photo gallery, mini-map, matched pets |
+| `/matches` | Lost ↔ Found match list — confidence-scored pairs across sources |
+| `/admin` | Scraper health dashboard — live stats, run history, error counts (auth required) |
+
+### API Endpoints
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/map/geojson` | GeoJSON FeatureCollection filtered by bounding box + type + days |
+| `GET /api/health` | Health check — returns 200 (ok) or 503 (db error) |
+| `GET /admin/stats-partial` | HTMX-polled stats partial (refreshes every 30s) |
+
+### Tech Stack
+
+- **Framework:** FastAPI + Jinja2 templates
+- **Interactivity:** HTMX (filter partials, admin polling, lazy match cards)
+- **Map:** Leaflet.js with OpenStreetMap tiles
+- **Styles:** Tailwind CSS (CDN)
+- **Database:** SQLite (dev) / NeonDB PostgreSQL (production)
+
+---
+
+## Matching Engine
 
 ### Deduplication (min score: 0.35)
 
@@ -287,7 +374,7 @@ Identifies found pet reports that likely correspond to a specific lost pet. Hard
 - `medium` — score ≥ 0.40
 - `low` — score ≥ 0.30
 
-> Note: Geo signals are the strongest gate. Records without geocoded coordinates will produce more weak matches (expected until geocoding runs).
+> Note: Geo signals are the strongest gate. Records without geocoded coordinates will produce more weak matches.
 
 ---
 
@@ -301,6 +388,8 @@ Geocoding cascade for all other sources:
 2. **Google Maps** — if `GEOCODE_PROVIDER=google` and API key is set
 3. **Nominatim** — free OpenStreetMap geocoder (1 req/sec rate limit enforced)
 4. **ZIP centroid fallback** — approximate coordinates from ZIP code (low confidence)
+
+Cache writes use a SAVEPOINT so a duplicate key collision never rolls back surrounding pet record writes.
 
 Geocoding cost:
 - Google Maps: $5 per 1,000 requests (first 40,000/month free)
@@ -318,7 +407,20 @@ Geocoding cost:
 | Pet FBI | every 40 min | Playwright required (WAF token capture) |
 | Lost My Doggie | every 45 min | Playwright required |
 | Matching pass | every 30 min | Dedup + lost→found on unmatched records |
-| Staleness check | every 6 hours | Verifies IndyLostPetAlert records still active |
+| Staleness check | every 6 hours | Marks IndyLostPetAlert records inactive when removed |
+
+---
+
+## Deployment (Replit + NeonDB)
+
+The app is configured for Replit with NeonDB as the production database.
+
+1. Add your NeonDB connection string as a Replit secret named `neondb`
+2. Add `ADMIN_USER` and `ADMIN_PASSWORD` secrets for the admin dashboard
+3. Optionally add `RUN_SCHEDULER=true` to run scrapers inside the web process
+4. Hit **Run** — the workflow installs dependencies, then starts uvicorn on port 5000
+
+The `DATABASE_URL` environment variable is automatically set to `$neondb` by the workflow. The app normalizes `postgres://` URLs to `postgresql+asyncpg://` and handles NeonDB's `sslmode=require` automatically.
 
 ---
 
@@ -335,38 +437,33 @@ Geocoding cost:
 - [x] Source-specific normalizers (all 5 validated against live pages)
 
 ### Phase 2 — Storage & Matching ✅ Complete
-- [x] Database schema (SQLAlchemy ORM, SQLite dev / PostgreSQL+PostGIS prod)
+- [x] Database schema (SQLAlchemy ORM, SQLite dev / PostgreSQL prod)
 - [x] Upsert with deduplication by `source` + `source_id`
 - [x] Cross-source matching engine (signal-weighted scoring)
 - [x] Lost → Found reunification matching
-- [x] Geocoding service (Google Maps + Nominatim cascade + ZIP centroid fallback)
-- [x] APScheduler polling jobs (7 jobs: 5 scrapers + matching pass + staleness check)
+- [x] Geocoding service (Google Maps + Nominatim + ZIP centroid cascade)
+- [x] APScheduler polling jobs (5 scrapers + matching pass + staleness check)
 - [x] Scraper state tracking (high-water mark for incremental polling)
 - [x] Staleness checks (mark inactive listings)
-- [x] LostMyDoggie HTML structure confirmed (`.box_icon` cards, full-res image URLs)
+- [x] Comprehensive test suite (195 tests — normalizers, matching, geocoding, DB, web routes)
 
-### Phase 2b — Finalization (In Progress)
-- [ ] Write test suite (`tests/`) — pytest + pytest-asyncio, normalizers + matching + geocoding
-- [ ] Populate `utils/` — `logging_config.py`, `http_client.py`, `text.py`
-- [ ] Run batch geocoding on existing DB records (`scripts/geocode_batch.py`)
-- [ ] End-to-end integration test: run full scheduler cycle, verify DB state
-
-### Phase 3 — Application
-- [ ] REST API layer (FastAPI)
-- [ ] Map UI (interactive, cluster markers)
-- [ ] Filter panel (type, species, color, size, date range, radius)
-- [ ] Pet detail pages with source attribution
-- [ ] Match alert display
-- [ ] Image proxy endpoint (resize + cache for large sources like IndyLostPetAlert)
+### Phase 3 — Web Application ✅ Complete
+- [x] FastAPI + Jinja2 web application
+- [x] Interactive Leaflet map with bounding-box search and type filters
+- [x] Filterable pet card grid (HTMX partials, URL-reflected filter state)
+- [x] Pet detail pages with gallery, mini-map, and match cards
+- [x] Lost ↔ Found match list with confidence scoring
+- [x] Admin dashboard with live scraper health stats (HTTP Basic auth)
+- [x] Mobile-responsive layout with hamburger nav
+- [x] NeonDB (PostgreSQL) production deployment on Replit
 
 ### Phase 4 — Advanced Features
 - [ ] User accounts + saved searches
 - [ ] Email/push alerts for new matches
-- [ ] **Visual similarity matching** — generate CLIP/MobileNet embedding vectors per image,
-      store in DB, use cosine similarity as an additional matching signal to catch
-      same-dog listings with mismatched text descriptions (e.g. "brown mutt" vs "tan terrier")
-- [ ] Adoption listings integration
-- [ ] Add additional sources: Petfinder (official API), Petco Love Lost (facial recognition), Finding Rover
+- [ ] **Visual similarity matching** — CLIP/MobileNet image embeddings as an additional matching signal (catches same-pet listings with mismatched text, e.g. "brown mutt" vs "tan terrier")
+- [ ] PostGIS migration for `ST_DWithin()` geo queries at scale
+- [ ] Image proxy endpoint (resize + cache thumbnails)
+- [ ] Additional sources: Petfinder API, Petco Love Lost, Finding Rover
 
 ### Planned Sources (Phase 4)
 | Source | Notes |

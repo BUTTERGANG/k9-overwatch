@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from fastapi import APIRouter, Request, Depends, Query, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, desc, or_
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import math
 
 from k9overwatch.db.models import PetRow, PetMatch
@@ -28,7 +28,7 @@ async def search_pets(
     if animal_type:
         stmt = stmt.where(PetRow.animal_type.in_(animal_type))
         
-    cutoff_date = datetime.now() - timedelta(days=days)
+    cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
     stmt = stmt.where(PetRow.date_event >= cutoff_date.date())
     
     # Get total count
@@ -50,13 +50,13 @@ async def pets_page(
     request: Request,
     record_type: list[str] = Query(default=["lost", "found", "sighting", "adoptable"]),
     animal_type: list[str] = Query(default=[]),
-    days: int = Query(default=30),
-    page: int = Query(default=1),
+    days: int = Query(default=30, ge=1, le=365),
+    page: int = Query(default=1, ge=1),
     db: AsyncSession = Depends(get_db)
 ):
     pets, total = await search_pets(db, record_type, animal_type, days, page)
     total_pages = math.ceil(total / PAGE_SIZE) if total > 0 else 1
-    
+
     return templates.TemplateResponse(
         request,
         "pets/list.html",
@@ -65,7 +65,6 @@ async def pets_page(
             "total": total,
             "page": page,
             "total_pages": total_pages,
-            "is_partial": False,
             "filters": {
                 "record_type": record_type,
                 "animal_type": animal_type,
@@ -79,22 +78,21 @@ async def pets_results(
     request: Request,
     record_type: list[str] = Query(default=["lost", "found", "sighting", "adoptable"]),
     animal_type: list[str] = Query(default=[]),
-    days: int = Query(default=30),
-    page: int = Query(default=1),
+    days: int = Query(default=30, ge=1, le=365),
+    page: int = Query(default=1, ge=1),
     db: AsyncSession = Depends(get_db)
 ):
     pets, total = await search_pets(db, record_type, animal_type, days, page)
     total_pages = math.ceil(total / PAGE_SIZE) if total > 0 else 1
-    
+
     return templates.TemplateResponse(
         request,
-        "pets/list.html",
+        "pets/_results.html",
         {
             "pets": pets,
             "total": total,
             "page": page,
             "total_pages": total_pages,
-            "is_partial": True,
             "filters": {
                 "record_type": record_type,
                 "animal_type": animal_type,
@@ -131,11 +129,18 @@ async def pet_matches_partial(
     match_result = await db.execute(match_stmt)
     matches = match_result.scalars().all()
 
+    # Bulk-fetch all referenced "other" pet rows in a single query
+    other_ids = [m.pet_b_id if m.pet_a_id == pet_id else m.pet_a_id for m in matches]
+    others_by_id: dict = {}
+    if other_ids:
+        others_result = await db.execute(select(PetRow).where(PetRow.id.in_(other_ids)))
+        for row in others_result.scalars().all():
+            others_by_id[row.id] = row
+
     match_pairs = []
     for m in matches:
         other_id = m.pet_b_id if m.pet_a_id == pet_id else m.pet_a_id
-        other_result = await db.execute(select(PetRow).where(PetRow.id == other_id))
-        other = other_result.scalar_one_or_none()
+        other = others_by_id.get(other_id)
         if other:
             match_pairs.append({"match": m, "other": other})
 

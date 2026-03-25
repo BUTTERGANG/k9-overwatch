@@ -1,40 +1,93 @@
+{% from 'macros.html' import camera_placeholder %}
+
 {% if match_pairs %}
-<h2 class="font-bold text-gray-800 mb-4 border-b pb-2 text-lg">🔗 Possible Matches</h2>
-<div class="flex flex-col gap-4">
+<!-- Header -->
+<div class="flex items-center gap-2 mb-5 pb-3 border-b border-slate-100">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+         class="w-4 h-4 text-brand-500 flex-shrink-0" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
+    </svg>
+    <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Possible Matches</h2>
+    <span class="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold
+                 text-brand-700 bg-brand-100 border border-brand-200 rounded-full tabular-nums">
+        {{ match_pairs|length }}
+    </span>
+</div>
+
+<div class="flex flex-col gap-3" role="list" aria-label="Possible matches">
     {% for item in match_pairs %}
     {% set m = item.match %}
     {% set other = item.other %}
-    <div class="border border-gray-200 rounded-xl p-4 bg-gray-50 hover:shadow-sm transition">
-        <div class="flex items-start gap-4">
+    <div class="rounded-xl p-4 border transition-all hover:shadow-sm"
+         style="background:#f8faff;border-color:#e0eaff;"
+         role="listitem">
+        <div class="flex items-start gap-3">
+
             <!-- Other pet thumbnail -->
-            <a href="/pets/{{ other.id }}" class="flex-shrink-0">
+            <a href="/pets/{{ other.id }}"
+               class="flex-shrink-0 rounded-xl overflow-hidden border border-slate-200 hover:opacity-90 transition block"
+               aria-label="View {{ other.name or 'this pet' }}'s profile">
                 {% if other.thumbnail_url %}
-                <img src="{{ other.thumbnail_url }}" alt="{{ other.name }}" class="w-20 h-20 object-cover rounded-lg border border-gray-200">
+                <img src="{{ other.thumbnail_url }}" alt="{{ other.name or 'Pet photo' }}"
+                     class="w-16 h-16 object-cover" loading="lazy" width="64" height="64">
                 {% else %}
-                <div class="w-20 h-20 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400 text-2xl">🐾</div>
+                <div class="w-16 h-16 bg-slate-100 flex items-center justify-center text-slate-300">
+                    {{ camera_placeholder("w-7 h-7") }}
+                </div>
                 {% endif %}
             </a>
+
             <!-- Match details -->
             <div class="flex-1 min-w-0">
-                <div class="flex items-center gap-2 flex-wrap">
-                    <a href="/pets/{{ other.id }}" class="font-bold text-gray-900 hover:text-indigo-700 transition truncate">{{ other.name or "Unknown" }}</a>
+                <!-- Name + badges row -->
+                <div class="flex items-center gap-2 flex-wrap mb-1">
+                    <a href="/pets/{{ other.id }}"
+                       class="font-bold text-slate-900 hover:text-brand-700 transition-colors truncate text-sm">
+                        {{ other.name or "Unknown" }}
+                    </a>
+
                     <!-- Confidence badge -->
-                    {% if m.confidence == 'high' %}<span class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-semibold">High confidence</span>
-                    {% elif m.confidence == 'medium' %}<span class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-semibold">Medium confidence</span>
-                    {% else %}<span class="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full font-semibold">Low confidence</span>
+                    {% if m.confidence == 'high' %}
+                        <span class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-semibold border border-green-200 whitespace-nowrap">High</span>
+                    {% elif m.confidence == 'medium' %}
+                        <span class="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full font-semibold border border-amber-200 whitespace-nowrap">Medium</span>
+                    {% else %}
+                        <span class="text-xs px-2 py-0.5 bg-slate-100 text-slate-600 rounded-full font-semibold border border-slate-200 whitespace-nowrap">Low</span>
                     {% endif %}
-                    <!-- Match type -->
-                    {% if m.match_type == 'lost_found' %}<span class="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">Reunification candidate</span>
-                    {% else %}<span class="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">Possible duplicate</span>
+
+                    <!-- Match type badge -->
+                    {% if m.match_type == 'lost_found' %}
+                        <span class="text-xs px-2 py-0.5 bg-brand-50 text-brand-700 rounded-full border border-brand-200 whitespace-nowrap">Reunification</span>
+                    {% else %}
+                        <span class="text-xs px-2 py-0.5 bg-purple-50 text-purple-700 rounded-full border border-purple-200 whitespace-nowrap">Duplicate</span>
                     {% endif %}
                 </div>
-                <p class="text-sm text-gray-600 mt-1 capitalize">{{ other.breed or "Unknown breed" }} &bull; {{ other.animal_type or "" }} &bull; {{ other.record_type }}</p>
-                <p class="text-xs text-gray-400 mt-1 font-mono">Score: {{ "%.0f" | format(m.score * 100) }}% &bull; {{ other.date_event }}</p>
-                <!-- Signals fired -->
+
+                <p class="text-xs text-slate-500 capitalize mb-1.5">
+                    {{ other.breed or "Unknown breed" }} &bull; {{ other.animal_type or "" }} &bull;
+                    <span class="font-medium
+                        {% if other.record_type == 'lost' %}text-red-600
+                        {% elif other.record_type == 'found' %}text-green-600
+                        {% elif other.record_type == 'sighting' %}text-blue-600
+                        {% else %}text-amber-600{% endif %}">
+                        {{ other.record_type }}
+                    </span>
+                </p>
+
+                <div class="flex items-center gap-3">
+                    <span class="text-base font-black text-brand-600 tabular-nums leading-none">
+                        {{ "%.0f"|format(m.score * 100) }}%
+                    </span>
+                    <span class="text-xs text-slate-400 font-mono">{{ other.date_event }}</span>
+                </div>
+
+                <!-- Signal pills -->
                 {% if m.signals_fired %}
                 <div class="mt-2 flex flex-wrap gap-1">
                     {% for signal, weight in m.signals_fired.items() %}
-                    <span class="text-xs bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{{ signal.replace('_', ' ') }}</span>
+                    <span class="text-xs bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded-full leading-tight">
+                        {{ signal.replace('_', ' ') }}
+                    </span>
                     {% endfor %}
                 </div>
                 {% endif %}
@@ -43,7 +96,28 @@
     </div>
     {% endfor %}
 </div>
+
 {% else %}
-<h2 class="font-bold text-gray-800 mb-3 border-b pb-2 text-lg">🔗 Possible Matches</h2>
-<p class="text-sm text-gray-400 italic">No matches found for this pet.</p>
+<!-- Header -->
+<div class="flex items-center gap-2 mb-4 pb-2.5 border-b border-slate-100">
+    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+         class="w-4 h-4 text-brand-500 flex-shrink-0" aria-hidden="true">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
+    </svg>
+    <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Possible Matches</h2>
+</div>
+
+<!-- Empty state -->
+<div class="py-8 flex flex-col items-center gap-3 text-center">
+    <div class="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+             class="w-6 h-6 text-slate-300">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
+        </svg>
+    </div>
+    <div>
+        <p class="text-sm font-medium text-slate-600">No matches found</p>
+        <p class="text-xs text-slate-400 mt-0.5">No similar pets were detected in the system.</p>
+    </div>
+</div>
 {% endif %}

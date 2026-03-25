@@ -1,79 +1,192 @@
-{% if not is_partial %}
 {% extends "base.html" %}
-{% block title %}Pet Search | K9-Overwatch{% endblock %}
+{% block title %}Pet Directory | K9-Overwatch{% endblock %}
+
+{% block extra_head %}
+<style>
+    /* ── Mobile filter drawer ────────────────────────────────── */
+    #filter-drawer {
+        transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    @media (max-width: 767px) {
+        #filter-drawer {
+            position: fixed;
+            left: 0; top: 0; bottom: 0;
+            width: 288px;
+            z-index: 100;
+            transform: translateX(-100%);
+            background: white;
+            overflow-y: auto;
+            box-shadow: 4px 0 24px rgb(0 0 0 / 0.12);
+        }
+        #filter-drawer.open {
+            transform: translateX(0);
+        }
+        #filter-backdrop {
+            display: none;
+            position: fixed;
+            inset: 0;
+            z-index: 99;
+            background: rgb(0 0 0 / 0.4);
+            backdrop-filter: blur(2px);
+        }
+        #filter-backdrop.visible { display: block; }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
-  <div class="flex flex-col md:flex-row gap-8">
-    
-    <!-- Filters Sidebar -->
-    <aside class="w-full md:w-64 flex-shrink-0">
-      <form id="pet-filters" hx-get="/pets/results" hx-target="#results-container" hx-trigger="change, submit" class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 sticky top-6">
-        <h2 class="text-xl font-bold mb-4 border-b pb-2 tracking-tight text-gray-800">Filters</h2>
-        
-        <div class="space-y-6 text-sm">
-          <div>
-              <label class="font-semibold text-gray-700 block mb-2">Record Status</label>
-              <div class="flex flex-col gap-2">
-                  <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="record_type" value="lost" {% if "lost" in filters.record_type %}checked{% endif %} class="rounded text-red-500 focus:ring-red-500"> Lost</label>
-                  <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="record_type" value="found" {% if "found" in filters.record_type %}checked{% endif %} class="rounded text-green-500 focus:ring-green-500"> Found</label>
-                  <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="record_type" value="sighting" {% if "sighting" in filters.record_type %}checked{% endif %} class="rounded text-blue-500 focus:ring-blue-500"> Sighting</label>
-                  <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="record_type" value="adoptable" {% if "adoptable" in filters.record_type %}checked{% endif %} class="rounded text-orange-500 focus:ring-orange-500"> Adoptable</label>
-              </div>
-          </div>
-          <div>
-              <label class="font-semibold text-gray-700 block mb-2">Species</label>
-              <div class="flex flex-col gap-2">
-                  <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="animal_type" value="dog" {% if "dog" in filters.animal_type %}checked{% endif %} class="rounded text-indigo-600 focus:ring-indigo-600"> Dog</label>
-                  <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="animal_type" value="cat" {% if "cat" in filters.animal_type %}checked{% endif %} class="rounded text-indigo-600 focus:ring-indigo-600"> Cat</label>
-                  <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="animal_type" value="other" {% if "other" in filters.animal_type %}checked{% endif %} class="rounded text-indigo-600 focus:ring-indigo-600"> Other</label>
-              </div>
-          </div>
-        </div>
-      </form>
-    </aside>
+    <div class="flex flex-col md:flex-row gap-8">
 
-    <!-- Results Area -->
-    <section class="flex-1">
-      <div class="flex justify-between items-end mb-6 border-b pb-4 border-gray-200">
-        <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Pet Directory</h1>
-      </div>
-      
-      <div id="results-container">
-{% endif %}
+        <!-- Mobile filter backdrop -->
+        <div id="filter-backdrop" aria-hidden="true"></div>
 
-<!-- HTMX Target Content -->
-<div class="mb-4 text-sm text-gray-500 font-medium">
-  Found {{ total }} records matching your criteria.
-</div>
+        <!-- ── Filters Sidebar ──────────────────────────────────── -->
+        <aside id="filter-drawer" class="w-full md:w-60 flex-shrink-0" aria-label="Pet filters">
+            <form id="pet-filters" method="get"
+                  hx-get="/pets/results"
+                  hx-target="#results-container"
+                  hx-trigger="change, submit"
+                  hx-push-url="true"
+                  hx-indicator="#filter-indicator"
+                  class="bg-white rounded-2xl p-5 md:sticky md:top-24 space-y-5"
+                  style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06),0 1px 2px -1px rgb(0 0 0 / 0.06);border:1px solid #f1f5f9;">
 
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-  {% for pet in pets %}
-    {% include 'pets/card.html' %}
-  {% else %}
-    <div class="col-span-full py-12 text-center text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
-      <p class="text-lg">No pets found matching these filters.</p>
+                <!-- Header row -->
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                    <h2 class="text-xs font-bold text-slate-700 tracking-wider uppercase">Filters</h2>
+                    <div class="flex items-center gap-2">
+                        <!-- HTMX loading indicator -->
+                        <span id="filter-indicator" class="htmx-indicator">
+                            <svg class="animate-spin w-3.5 h-3.5 text-brand-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-label="Loading" role="status">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+                            </svg>
+                        </span>
+                        <!-- Mobile close -->
+                        <button type="button" id="close-filter-btn"
+                                class="md:hidden p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                                aria-label="Close filters">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Status -->
+                <fieldset>
+                    <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5">Status</legend>
+                    <div class="flex flex-col gap-2">
+                        {% for val, label, color in [
+                            ('lost',     'Lost',     'red'),
+                            ('found',    'Found',    'green'),
+                            ('sighting', 'Sighting', 'blue'),
+                            ('adoptable','Adoptable','amber')
+                        ] %}
+                        <label class="flex items-center gap-2.5 cursor-pointer group select-none">
+                            <input type="checkbox" name="record_type" value="{{ val }}"
+                                   {% if val in filters.record_type %}checked{% endif %}
+                                   class="w-4 h-4 rounded border-slate-300 text-{{ color }}-500 focus:ring-{{ color }}-400 cursor-pointer">
+                            <span class="flex items-center gap-1.5 text-sm text-slate-700 group-hover:text-slate-900 transition-colors">
+                                <span class="w-2 h-2 rounded-full bg-{{ color }}-500 flex-shrink-0"></span>
+                                {{ label }}
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+
+                <!-- Species -->
+                <fieldset class="pt-4 border-t border-slate-100">
+                    <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5">Species</legend>
+                    <div class="flex flex-col gap-2">
+                        {% for val, label in [('dog','🐕 Dog'),('cat','🐈 Cat'),('other','🐾 Other')] %}
+                        <label class="flex items-center gap-2.5 cursor-pointer group select-none">
+                            <input type="checkbox" name="animal_type" value="{{ val }}"
+                                   {% if val in filters.animal_type %}checked{% endif %}
+                                   class="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer">
+                            <span class="text-sm text-slate-700 group-hover:text-slate-900 transition-colors">{{ label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+
+                <!-- Timeframe -->
+                <div class="pt-4 border-t border-slate-100">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5"
+                           for="days-select">Timeframe</label>
+                    <select id="days-select" name="days"
+                            class="w-full border border-slate-200 rounded-lg py-2 px-3 bg-white text-sm text-slate-700
+                                   cursor-pointer transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none">
+                        <option value="7"   {% if filters.days == 7  %}selected{% endif %}>Last 7 days</option>
+                        <option value="30"  {% if filters.days == 30 or not filters.days %}selected{% endif %}>Last 30 days</option>
+                        <option value="90"  {% if filters.days == 90  %}selected{% endif %}>Last 90 days</option>
+                        <option value="365" {% if filters.days == 365 %}selected{% endif %}>Last year</option>
+                    </select>
+                </div>
+            </form>
+        </aside>
+
+        <!-- ── Results Area ─────────────────────────────────────── -->
+        <section class="flex-1 min-w-0">
+            <!-- Page heading + mobile filter toggle -->
+            <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
+                <div>
+                    <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Pet Directory</h1>
+                    <p class="text-sm text-slate-500 mt-0.5">Lost, found, sightings and adoptable pets in your area.</p>
+                </div>
+                <!-- Mobile: open filters -->
+                <button type="button" id="open-filter-btn"
+                        class="md:hidden flex items-center gap-1.5 px-3 py-2 text-sm font-medium
+                               border border-slate-200 rounded-xl bg-white text-slate-700
+                               hover:bg-slate-50 hover:border-slate-300 transition shadow-sm"
+                        aria-expanded="false"
+                        aria-controls="filter-drawer"
+                        aria-label="Open filters">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"/>
+                    </svg>
+                    Filters
+                </button>
+            </div>
+
+            <div id="results-container">
+                {% include 'pets/_results.html' %}
+            </div>
+        </section>
     </div>
-  {% endfor %}
-</div>
-
-{% if total_pages > 1 %}
-<div class="mt-8 flex justify-center gap-2">
-    {% if page > 1 %}
-    <button hx-get="/pets/results?page={{ page - 1 }}" hx-include="#pet-filters" hx-target="#results-container" class="px-4 py-2 border rounded shadow-sm bg-white hover:bg-gray-50">Previous</button>
-    {% endif %}
-    
-    <span class="px-4 py-2 text-gray-700">Page {{ page }} of {{ total_pages }}</span>
-    
-    {% if page < total_pages %}
-    <button hx-get="/pets/results?page={{ page + 1 }}" hx-include="#pet-filters" hx-target="#results-container" class="px-4 py-2 border rounded shadow-sm bg-white hover:bg-gray-50">Next</button>
-    {% endif %}
-</div>
-{% endif %}
-
-{% if not is_partial %}
-      </div>
-    </section>
-  </div>
 </div>
 {% endblock %}
-{% endif %}
+
+{% block extra_scripts %}
+<script>
+    (function () {
+        var openBtn  = document.getElementById('open-filter-btn');
+        var closeBtn = document.getElementById('close-filter-btn');
+        var drawer   = document.getElementById('filter-drawer');
+        var backdrop = document.getElementById('filter-backdrop');
+
+        function openDrawer() {
+            drawer.classList.add('open');
+            backdrop.classList.add('visible');
+            openBtn.setAttribute('aria-expanded', 'true');
+            closeBtn && closeBtn.focus();
+        }
+        function closeDrawer() {
+            drawer.classList.remove('open');
+            backdrop.classList.remove('visible');
+            openBtn.setAttribute('aria-expanded', 'false');
+            openBtn && openBtn.focus();
+        }
+
+        if (openBtn)  openBtn.addEventListener('click', openDrawer);
+        if (closeBtn) closeBtn.addEventListener('click', closeDrawer);
+        if (backdrop) backdrop.addEventListener('click', closeDrawer);
+
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && drawer.classList.contains('open')) closeDrawer();
+        });
+    })();
+</script>
+{% endblock %}

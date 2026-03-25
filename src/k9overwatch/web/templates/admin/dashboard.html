@@ -1,98 +1,51 @@
 {% extends "base.html" %}
 {% block title %}Admin | K9-Overwatch{% endblock %}
+
 {% block content %}
-<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
-    <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight mb-2">⚙️ Admin Dashboard</h1>
-    <p class="text-gray-500 mb-8">System health, scraper status, and database statistics. Auto-refreshes every 30 seconds.</p>
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full animate-fade-in">
 
-    <!-- Stats Summary -->
-    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
-        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
-            <div class="text-3xl font-black text-indigo-600">{{ stats.active_pets }}</div>
-            <div class="text-sm text-gray-500 mt-1">Active Listings</div>
-        </div>
-        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
-            <div class="text-3xl font-black text-red-500">{{ stats.lost_count }}</div>
-            <div class="text-sm text-gray-500 mt-1">Lost</div>
-        </div>
-        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
-            <div class="text-3xl font-black text-green-500">{{ stats.found_count }}</div>
-            <div class="text-sm text-gray-500 mt-1">Found</div>
-        </div>
-        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
-            <div class="text-3xl font-black text-purple-600">{{ stats.reunification_matches }}</div>
-            <div class="text-sm text-gray-500 mt-1">Reunification Candidates</div>
-        </div>
-    </div>
-
-    <!-- Scraper Status Table -->
-    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-8 overflow-hidden"
-         hx-get="/api/admin/stats"
-         hx-trigger="every 30s"
-         hx-swap="none"
-         id="stats-container">
-        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-            <h2 class="text-lg font-bold text-gray-800">🕷️ Scraper Status</h2>
-            <span id="last-refresh" class="text-xs text-gray-400 font-mono"></span>
-        </div>
-        <div class="overflow-x-auto">
-            <table class="w-full text-sm">
-                <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
-                    <tr>
-                        <th class="px-6 py-3 text-left">Source</th>
-                        <th class="px-6 py-3 text-left">Last Run</th>
-                        <th class="px-6 py-3 text-left">Status</th>
-                        <th class="px-6 py-3 text-right">Fetched</th>
-                        <th class="px-6 py-3 text-right">New</th>
-                        <th class="px-6 py-3 text-left">Error</th>
-                    </tr>
-                </thead>
-                <tbody class="divide-y divide-gray-100">
-                    {% for s in stats.scrapers %}
-                    <tr class="hover:bg-gray-50 transition">
-                        <td class="px-6 py-4 font-semibold text-gray-800">{{ s.source }}</td>
-                        <td class="px-6 py-4 text-gray-500 font-mono text-xs">{{ s.last_run_at or "Never" }}</td>
-                        <td class="px-6 py-4">
-                            {% if s.last_run_success %}
-                            <span class="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">✓ OK</span>
-                            {% elif s.last_run_at %}
-                            <span class="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">✗ Failed</span>
-                            {% else %}
-                            <span class="px-2.5 py-1 bg-gray-100 text-gray-500 rounded-full text-xs font-semibold">— Pending</span>
-                            {% endif %}
-                        </td>
-                        <td class="px-6 py-4 text-right text-gray-700 font-mono">{{ s.records_fetched or 0 }}</td>
-                        <td class="px-6 py-4 text-right text-gray-700 font-mono">{{ s.records_new or 0 }}</td>
-                        <td class="px-6 py-4 text-red-500 text-xs truncate max-w-xs" title="{{ s.error_message or '' }}">{{ s.error_message or "—" }}</td>
-                    </tr>
-                    {% else %}
-                    <tr><td colspan="6" class="px-6 py-8 text-center text-gray-400 italic">No scraper state records found. Run the scrapers first.</td></tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
-    </div>
-
-    <!-- DB Summary -->
-    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-            <h3 class="font-bold text-gray-700 mb-3">Database Summary</h3>
-            <dl class="text-sm space-y-1">
-                <div class="flex justify-between"><dt class="text-gray-500">Total records</dt><dd class="font-semibold">{{ stats.total_pets }}</dd></div>
-                <div class="flex justify-between"><dt class="text-gray-500">Active records</dt><dd class="font-semibold text-green-600">{{ stats.active_pets }}</dd></div>
-                <div class="flex justify-between"><dt class="text-gray-500">Missing geocode</dt><dd class="font-semibold text-yellow-600">{{ stats.no_geocode }}</dd></div>
-                <div class="flex justify-between"><dt class="text-gray-500">Total matches</dt><dd class="font-semibold text-purple-600">{{ stats.total_matches }}</dd></div>
-            </dl>
-        </div>
-        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
-            <h3 class="font-bold text-gray-700 mb-3">Quick Links</h3>
-            <div class="flex flex-col gap-2">
-                <a href="/map" class="text-sm text-indigo-600 hover:underline">→ Map View</a>
-                <a href="/pets" class="text-sm text-indigo-600 hover:underline">→ Pet Directory</a>
-                <a href="/matches" class="text-sm text-indigo-600 hover:underline">→ Matches</a>
-                <a href="/api/health" class="text-sm text-indigo-600 hover:underline">→ Health check (JSON)</a>
-                <a href="/api/admin/stats" class="text-sm text-indigo-600 hover:underline">→ Stats JSON</a>
+    <!-- Page header ─────────────────────────────────────────────── -->
+    <div class="flex flex-wrap items-start justify-between gap-4 mb-8">
+        <div>
+            <div class="flex items-center gap-2.5 mb-1">
+                <div class="flex items-center justify-center w-9 h-9 rounded-xl bg-slate-800 text-white shadow-sm flex-shrink-0">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                         class="w-5 h-5" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </div>
+                <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Admin Dashboard</h1>
             </div>
+            <p class="text-slate-500 text-sm">System health, scraper status, and database statistics.</p>
+        </div>
+
+        <!-- Auto-refresh badge -->
+        <div class="flex items-center gap-2 text-xs text-slate-500 bg-slate-100 rounded-xl px-3.5 py-2.5 border border-slate-200">
+            <span class="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" style="animation:pulseDot 2s ease-in-out infinite;" aria-hidden="true"></span>
+            Auto-refreshes every 30s
+            &mdash;
+            <span id="last-refresh" class="font-mono text-slate-600 font-medium" aria-live="polite" aria-label="Last refreshed at"></span>
+        </div>
+    </div>
+
+    <!-- Stats container — HTMX polled refresh ───────────────────── -->
+    <div id="stats-container"
+         hx-get="/admin/stats-partial"
+         hx-trigger="every 30s"
+         hx-swap="innerHTML"
+         hx-indicator="#stats-spinner">
+        {% include 'admin/stats_partial.html' %}
+    </div>
+
+    <!-- Loading indicator for HTMX poll -->
+    <div id="stats-spinner" class="htmx-indicator fixed bottom-4 right-4 z-50">
+        <div class="flex items-center gap-2 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-card">
+            <svg class="animate-spin w-3.5 h-3.5 text-brand-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            Refreshing&hellip;
         </div>
     </div>
 </div>
@@ -100,11 +53,45 @@
 
 {% block extra_scripts %}
 <script>
-    // Update last-refresh timestamp on page load + after every HTMX poll
-    function updateTimestamp() {
-        document.getElementById('last-refresh').textContent = 'Refreshed: ' + new Date().toLocaleTimeString();
+    function formatRelativeTime(isoString) {
+        if (!isoString) return null;
+        try {
+            var rtf    = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
+            var then   = new Date(isoString);
+            var diffMs = then - Date.now();
+            var diffSec  = Math.round(diffMs / 1000);
+            var diffMin  = Math.round(diffSec / 60);
+            var diffHr   = Math.round(diffMin / 60);
+            var diffDay  = Math.round(diffHr / 24);
+            if (Math.abs(diffSec) < 60)  return rtf.format(diffSec, 'second');
+            if (Math.abs(diffMin) < 60)  return rtf.format(diffMin, 'minute');
+            if (Math.abs(diffHr)  < 24)  return rtf.format(diffHr,  'hour');
+            return rtf.format(diffDay, 'day');
+        } catch (e) { return null; }
     }
+
+    function applyRelativeTimestamps() {
+        document.querySelectorAll('.js-relative-time').forEach(function (el) {
+            var iso = el.getAttribute('data-iso');
+            if (!iso) return;
+            var rel = formatRelativeTime(iso);
+            if (rel) { el.title = iso; el.textContent = rel; }
+        });
+    }
+
+    function updateTimestamp() {
+        var el = document.getElementById('last-refresh');
+        if (el) el.textContent = new Date().toLocaleTimeString();
+    }
+
+    applyRelativeTimestamps();
     updateTimestamp();
-    document.body.addEventListener('htmx:afterRequest', updateTimestamp);
+
+    document.body.addEventListener('htmx:afterSwap', function (evt) {
+        if (evt.detail.target && evt.detail.target.id === 'stats-container') {
+            applyRelativeTimestamps();
+            updateTimestamp();
+        }
+    });
 </script>
 {% endblock %}

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Optional
 from uuid import uuid4
 
@@ -83,8 +83,8 @@ class PetRecord(BaseModel):
     alert_number: Optional[str] = None
 
     # ── Audit ─────────────────────────────────────────────────────────────────
-    scraped_at: datetime = Field(default_factory=datetime.utcnow)
-    last_checked_at: datetime = Field(default_factory=datetime.utcnow)
+    scraped_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    last_checked_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
 
     # ── Raw source payload (stored for re-parsing) ────────────────────────────
     raw: Optional[dict] = None

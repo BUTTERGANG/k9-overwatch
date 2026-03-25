@@ -3,79 +3,257 @@
 {% block title %}Map | K9-Overwatch{% endblock %}
 
 {% block extra_head %}
-<!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <style>
-    /* Full height minus navbar and footer */
-    #map { height: calc(100vh - 64px - 64px); width: 100%; z-index: 10; cursor: crosshair; }
-    
-    .pin-lost { background-color: #ef4444; border-radius: 50%; width: 16px; height: 16px; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
-    .pin-found { background-color: #22c55e; border-radius: 50%; width: 16px; height: 16px; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
-    .pin-sighting { background-color: #3b82f6; border-radius: 50%; width: 16px; height: 16px; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
-    .pin-adoptable { background-color: #f97316; border-radius: 50%; width: 16px; height: 16px; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
-    
-    .popup-thumb { max-width: 100%; height: auto; border-radius: 4px; margin-bottom: 8px; }
-    .leaflet-popup-content-wrapper { padding-bottom: 4px; }
+    /* ── Full-bleed map layout ─────────────────────────────────── */
+    #map-layout {
+        height: calc(100vh - 64px);   /* subtract navbar height */
+    }
+
+    #map {
+        height: 100%;
+        width: 100%;
+        z-index: 10;
+        cursor: crosshair;
+    }
+
+    /* ── Map pins ──────────────────────────────────────────────── */
+    .pin-base {
+        border-radius: 50%;
+        width: 14px;
+        height: 14px;
+        border: 2.5px solid white;
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .pin-base:hover { transform: scale(1.3); }
+    .pin-lost     { background-color: #dc2626; box-shadow: 0 1px 6px rgba(220,38,38,0.55); }
+    .pin-found    { background-color: #16a34a; box-shadow: 0 1px 6px rgba(22,163,74,0.55); }
+    .pin-sighting { background-color: #2563eb; box-shadow: 0 1px 6px rgba(37,99,235,0.55); }
+    .pin-adoptable{ background-color: #d97706; box-shadow: 0 1px 6px rgba(217,119,6,0.55); }
+
+    /* ── Popup styles ──────────────────────────────────────────── */
+    .leaflet-popup-content-wrapper {
+        border-radius: 14px;
+        padding: 0;
+        overflow: hidden;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 12px 32px -4px rgb(0 0 0 / 0.14), 0 4px 12px -2px rgb(0 0 0 / 0.08);
+    }
+    .leaflet-popup-content { margin: 0; }
+    .leaflet-popup-tip { background: white; }
+    .leaflet-popup-close-button {
+        color: #64748b !important;
+        font-size: 18px !important;
+        padding: 6px 8px !important;
+    }
+    .leaflet-popup-close-button:hover { color: #1e293b !important; background: #f1f5f9; border-radius: 6px; }
+
+    /* ── Mobile filter sidebar drawer ─────────────────────────── */
+    #filter-sidebar {
+        transition: transform 0.26s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    @media (max-width: 639px) {
+        #filter-sidebar {
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 280px;
+            z-index: 30;
+            transform: translateX(-100%);
+        }
+        #filter-sidebar.mobile-open {
+            transform: translateX(0);
+        }
+        #sidebar-backdrop {
+            display: none;
+            position: absolute;
+            inset: 0;
+            z-index: 29;
+            background: rgb(0 0 0 / 0.35);
+            backdrop-filter: blur(1px);
+        }
+        #sidebar-backdrop.visible { display: block; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="flex flex-1 relative flex-col sm:flex-row shadow-inner">
-    <!-- Filter Sidebar (hidden on mobile by default) -->
-    <aside id="filter-sidebar" class="w-full sm:w-64 bg-white shadow-lg p-5 flex flex-col gap-5 z-20 overflow-y-auto">
-        <h2 class="text-lg font-bold text-gray-800 border-b pb-2 tracking-tight">Map Filters</h2>
-        
-        <!-- Filter Form -->
-        <form id="map-filters" class="flex flex-col gap-5 text-sm">
-            <div>
-                <label class="font-semibold text-gray-700 block mb-2">Record Status</label>
-                <div class="flex flex-col gap-2">
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="record_type" value="lost" checked class="rounded text-red-500 focus:ring-red-500"> <span class="flex items-center gap-2"><div class="w-3 h-3 bg-red-500 rounded-full"></div> Lost</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="record_type" value="found" checked class="rounded text-green-500 focus:ring-green-500"> <span class="flex items-center gap-2"><div class="w-3 h-3 bg-green-500 rounded-full"></div> Found</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="record_type" value="sighting" checked class="rounded text-blue-500 focus:ring-blue-500"> <span class="flex items-center gap-2"><div class="w-3 h-3 bg-blue-500 rounded-full"></div> Sighting</span></label>
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="record_type" value="adoptable" checked class="rounded text-orange-500 focus:ring-orange-500"> <span class="flex items-center gap-2"><div class="w-3 h-3 bg-orange-500 rounded-full"></div> Adoptable</span></label>
+<div id="map-layout" class="flex flex-1 relative overflow-hidden">
+
+    <!-- Mobile sidebar backdrop -->
+    <div id="sidebar-backdrop" aria-hidden="true"></div>
+
+    <!-- ── Filter sidebar ──────────────────────────────────────── -->
+    <aside id="filter-sidebar"
+           class="w-64 bg-white flex flex-col z-20 overflow-y-auto flex-shrink-0"
+           style="box-shadow: 1px 0 0 0 #f1f5f9, 2px 0 8px -2px rgb(0 0 0 / 0.05);"
+           aria-label="Map filters">
+
+        <div class="p-5 flex flex-col gap-5 flex-1">
+            <!-- Header -->
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+                <div class="flex items-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                         class="w-4 h-4 text-brand-500 flex-shrink-0" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
+                    </svg>
+                    <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Map Filters</h2>
+                </div>
+                <!-- Mobile close button -->
+                <button id="close-sidebar-btn" class="sm:hidden p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                        aria-label="Close filters">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- Filter form -->
+            <form id="map-filters" class="flex flex-col gap-5 text-sm">
+
+                <!-- Status -->
+                <fieldset>
+                    <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5">Status</legend>
+                    <div class="flex flex-col gap-2">
+                        {% for val, label, color in [
+                            ('lost',     'Lost',     'red'),
+                            ('found',    'Found',    'green'),
+                            ('sighting', 'Sighting', 'blue'),
+                            ('adoptable','Adoptable','amber')
+                        ] %}
+                        <label class="flex items-center gap-2.5 cursor-pointer group select-none">
+                            <input type="checkbox" name="record_type" value="{{ val }}" checked
+                                   class="w-4 h-4 rounded border-slate-300 text-{{ color }}-500 focus:ring-{{ color }}-400 cursor-pointer">
+                            <span class="flex items-center gap-1.5 text-slate-700 group-hover:text-slate-900 transition-colors">
+                                <span class="w-2.5 h-2.5 rounded-full bg-{{ color }}-500 flex-shrink-0"></span>
+                                {{ label }}
+                            </span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+
+                <!-- Species -->
+                <fieldset class="pt-4 border-t border-slate-100">
+                    <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5">Species</legend>
+                    <div class="flex flex-col gap-2">
+                        {% for val, label in [('dog','🐕 Dog'), ('cat','🐈 Cat'), ('other','🐾 Other')] %}
+                        <label class="flex items-center gap-2.5 cursor-pointer group select-none">
+                            <input type="checkbox" name="animal_type" value="{{ val }}" checked
+                                   class="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer">
+                            <span class="text-slate-700 group-hover:text-slate-900 transition-colors">{{ label }}</span>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </fieldset>
+
+                <!-- Timeframe -->
+                <div class="pt-4 border-t border-slate-100">
+                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5"
+                           for="map-days-select">Timeframe</label>
+                    <select id="map-days-select" name="days"
+                            class="w-full border border-slate-200 rounded-lg py-2 px-3 bg-white text-sm text-slate-700
+                                   cursor-pointer transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none">
+                        <option value="7">Last 7 days</option>
+                        <option value="30" selected>Last 30 days</option>
+                        <option value="90">Last 90 days</option>
+                        <option value="365">Last year</option>
+                    </select>
+                </div>
+
+                <!-- Apply button -->
+                <button type="button" id="apply-filters-btn"
+                        class="w-full bg-brand-600 text-white rounded-xl py-2.5 text-sm font-semibold
+                               shadow-sm hover:bg-brand-700 active:scale-95 transition-all
+                               focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1
+                               flex items-center justify-center gap-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
+                    </svg>
+                    Update Map
+                </button>
+            </form>
+
+            <!-- Legend -->
+            <div class="pt-4 border-t border-slate-100">
+                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Legend</p>
+                <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
+                    {% for color, label in [('#dc2626','Lost'), ('#16a34a','Found'), ('#2563eb','Sighting'), ('#d97706','Adoptable')] %}
+                    <div class="flex items-center gap-1.5 text-xs text-slate-600">
+                        <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:{{ color }};"></span>
+                        {{ label }}
+                    </div>
+                    {% endfor %}
                 </div>
             </div>
-            
-            <div class="border-t pt-4 border-gray-100">
-                <label class="font-semibold text-gray-700 block mb-2">Species</label>
-                <div class="flex flex-col gap-2">
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="animal_type" value="dog" checked class="rounded text-indigo-600 focus:ring-indigo-600"> Dog</label>
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="animal_type" value="cat" checked class="rounded text-indigo-600 focus:ring-indigo-600"> Cat</label>
-                    <label class="flex items-center gap-2 cursor-pointer"><input type="checkbox" name="animal_type" value="other" checked class="rounded text-indigo-600 focus:ring-indigo-600"> Other</label>
-                </div>
-            </div>
-            
-            <div class="border-t pt-4 border-gray-100">
-                <label class="font-semibold text-gray-700 block mb-2">Timeframe (days)</label>
-                <select name="days" class="w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 py-2 cursor-pointer bg-gray-50">
-                    <option value="7">Last 7 days</option>
-                    <option value="30" selected>Last 30 days</option>
-                    <option value="90">Last 90 days</option>
-                    <option value="365">Last year</option>
-                </select>
-            </div>
-            
-            <button type="button" id="apply-filters-btn" class="mt-2 w-full bg-indigo-600 text-white rounded-md py-2.5 font-medium shadow hover:bg-indigo-700 transition active:scale-95">Update Map</button>
-        </form>
+        </div>
     </aside>
 
-    <!-- Map container -->
+    <!-- ── Map container ───────────────────────────────────────── -->
     <div class="flex-1 relative">
-        <div id="map"></div>
-        <button id="search-this-area-btn" class="absolute top-6 left-1/2 transform -translate-x-1/2 z-[1000] bg-white text-indigo-700 px-5 py-2.5 rounded-full shadow-lg font-semibold border border-indigo-100 hover:bg-indigo-50 hover:shadow-xl transition active:scale-95 hidden flex items-center gap-2">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+        <!-- Mobile "open filters" FAB -->
+        <button id="open-sidebar-btn"
+                class="sm:hidden absolute top-3 left-3 z-[1000]
+                       bg-white text-slate-700 px-3 py-2 rounded-xl font-medium text-xs
+                       border border-slate-200 shadow-md hover:shadow-lg hover:bg-slate-50
+                       active:scale-95 transition-all flex items-center gap-1.5"
+                aria-label="Open map filters"
+                aria-expanded="false"
+                aria-controls="filter-sidebar">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75"/>
+            </svg>
+            Filters
+        </button>
+
+        <!-- Floating "Search this area" pill -->
+        <button id="search-this-area-btn"
+                class="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] hidden
+                       bg-white text-brand-700 px-5 py-2.5 rounded-full font-semibold text-sm
+                       border border-slate-200 shadow-lg hover:shadow-xl hover:bg-brand-50 hover:border-brand-300
+                       active:scale-95 transition-all flex items-center gap-2">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
             </svg>
             Search this area
         </button>
+
+        <div id="map"></div>
     </div>
 </div>
 {% endblock %}
 
 {% block extra_scripts %}
-<!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<!-- Main Map logic -->
 <script src="/static/js/map.js"></script>
+<script>
+    // ── Mobile sidebar toggle ───────────────────────────────────
+    (function () {
+        var openBtn   = document.getElementById('open-sidebar-btn');
+        var closeBtn  = document.getElementById('close-sidebar-btn');
+        var sidebar   = document.getElementById('filter-sidebar');
+        var backdrop  = document.getElementById('sidebar-backdrop');
+
+        function openSidebar() {
+            sidebar.classList.add('mobile-open');
+            backdrop.classList.add('visible');
+            openBtn.setAttribute('aria-expanded', 'true');
+            closeBtn.focus();
+        }
+        function closeSidebar() {
+            sidebar.classList.remove('mobile-open');
+            backdrop.classList.remove('visible');
+            openBtn.setAttribute('aria-expanded', 'false');
+            openBtn.focus();
+        }
+
+        if (openBtn)  openBtn.addEventListener('click', openSidebar);
+        if (closeBtn) closeBtn.addEventListener('click', closeSidebar);
+        if (backdrop) backdrop.addEventListener('click', closeSidebar);
+
+        // Close on Escape
+        document.addEventListener('keydown', function (e) {
+            if (e.key === 'Escape' && sidebar.classList.contains('mobile-open')) closeSidebar();
+        });
+    })();
+</script>
 {% endblock %}

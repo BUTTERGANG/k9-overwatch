@@ -1,11 +1,59 @@
 {% extends "base.html" %}
 {% block title %}Server Error | K9-Overwatch{% endblock %}
+
 {% block content %}
-<div class="flex flex-col items-center justify-center flex-1 py-24 text-center px-6">
-    <div class="text-7xl mb-6">⚠️</div>
-    <h1 class="text-4xl font-extrabold text-gray-900 mb-3">Something Went Wrong</h1>
-    <p class="text-lg text-gray-500 mb-4 max-w-md">An unexpected error occurred. Please try again in a moment.</p>
-    {% if detail %}<p class="text-sm text-gray-400 font-mono bg-gray-100 px-4 py-2 rounded mb-6 max-w-lg">{{ detail }}</p>{% endif %}
-    <a href="/" class="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition shadow">Go Home</a>
+<div class="flex flex-col items-center justify-center flex-1 py-24 text-center px-6 animate-fade-in">
+
+    <!-- Illustration -->
+    <div class="relative mb-8" aria-hidden="true">
+        <!-- Soft amber background circle -->
+        <div class="w-32 h-32 rounded-full flex items-center justify-center" style="background:#fffbeb;border:2px solid #fde68a;">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none" class="w-20 h-20">
+                <path d="M40 8L74 68H6L40 8z" stroke="#fbbf24" stroke-width="3.5" fill="#fffbeb"/>
+                <path d="M40 32v18" stroke="#d97706" stroke-width="4" stroke-linecap="round"/>
+                <circle cx="40" cy="58" r="3" fill="#d97706"/>
+            </svg>
+        </div>
+    </div>
+
+    <!-- Error code + heading -->
+    <div class="mb-3">
+        <span class="text-xs font-bold text-slate-300 uppercase tracking-widest">Error 500</span>
+    </div>
+    <h1 class="text-4xl font-extrabold text-slate-900 tracking-tight mb-3">Something Went Wrong</h1>
+    <p class="text-base text-slate-500 mb-4 max-w-sm leading-relaxed">
+        An unexpected error occurred on our end. Please try again in a moment.
+    </p>
+
+    <!-- Error detail (dev/debug) -->
+    {% if detail %}
+    <div class="mb-8 w-full max-w-lg">
+        <details class="text-left">
+            <summary class="text-xs text-slate-400 font-semibold uppercase tracking-wider cursor-pointer hover:text-slate-600 transition-colors mb-2">
+                Technical details
+            </summary>
+            <pre class="text-xs text-slate-500 font-mono bg-slate-100 border border-slate-200 rounded-xl px-4 py-3 overflow-auto max-h-40 whitespace-pre-wrap break-all">{{ detail }}</pre>
+        </details>
+    </div>
+    {% else %}
+    <div class="mb-8"></div>
+    {% endif %}
+
+    <!-- CTAs -->
+    <div class="flex flex-wrap justify-center gap-3">
+        <a href="/"
+           class="px-6 py-3 bg-brand-600 text-white rounded-xl font-semibold
+                  hover:bg-brand-700 active:scale-95 transition-all shadow-sm text-sm
+                  focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2">
+            Go Home
+        </a>
+        <button type="button"
+                onclick="window.location.reload()"
+                class="px-6 py-3 bg-white border border-slate-200 text-slate-700 rounded-xl font-semibold
+                       hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition-all shadow-sm text-sm
+                       focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 focus-visible:ring-offset-2">
+            Try Again
+        </button>
+    </div>
 </div>
 {% endblock %}
