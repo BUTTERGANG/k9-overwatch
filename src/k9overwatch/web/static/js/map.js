@@ -51,7 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const searchAreaBtn = document.getElementById('search-this-area-btn');
 
     // ── Spinner overlay ──────────────────────────────────────────────────
-    const mapContainer = document.querySelector('.flex-1.relative');
+    const mapContainer = document.getElementById('map').parentElement;
     const spinner = document.createElement('div');
     spinner.id = 'map-spinner';
     spinner.className = 'absolute inset-0 z-[999] flex items-center justify-center bg-white/60 backdrop-blur-sm hidden';
@@ -192,7 +192,7 @@ document.addEventListener("DOMContentLoaded", () => {
             searchAreaBtn.classList.add('hidden');
         } catch (err) {
             showError('Failed to load map pins. Please try again.');
-            console.error('[K9-Map] Failed to load pins:', err);
+            console.error('[K9-Map] Failed to load pins:', err && (err.stack || err.message || err));
         } finally {
             hideSpinner();
         }
@@ -203,6 +203,6 @@ document.addEventListener("DOMContentLoaded", () => {
     searchAreaBtn.addEventListener('click', loadPins);
     document.getElementById('apply-filters-btn').addEventListener('click', loadPins);
 
-    // Initial load
-    loadPins();
+    // Initial load — wait until the map has a real viewport
+    map.whenReady(() => loadPins());
 });

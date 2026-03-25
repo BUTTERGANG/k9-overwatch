@@ -4,9 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}K9-Overwatch{% endblock %}</title>
-    <!-- Tailwind config must come BEFORE the CDN script -->
+    <!-- Tailwind Play CDN: set window.tailwind BEFORE the script loads -->
     <script>
-        tailwind.config = {
+        window.tailwind = { config: {
             theme: {
                 extend: {
                     colors: {
@@ -71,7 +71,7 @@
                     }
                 }
             }
-        }
+        } };
     </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- HTMX -->

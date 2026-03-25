@@ -21,7 +21,7 @@ async def get_map_geojson(
     days: int = Query(default=90, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
 ):
-    if sw_lat >= ne_lat or sw_lng >= ne_lng:
+    if sw_lat > ne_lat or sw_lng > ne_lng:
         raise HTTPException(status_code=422, detail="Invalid bounding box")
 
     stmt = select(PetRow).where(
