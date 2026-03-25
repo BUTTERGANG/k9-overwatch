@@ -137,6 +137,7 @@ class ScraperState(Base):
     records_fetched = Column(Integer, default=0)
     records_new = Column(Integer, default=0)
     error_message = Column(Text)
+    consecutive_errors = Column(Integer, default=0)
 
 
 class GeocodeCache(Base):

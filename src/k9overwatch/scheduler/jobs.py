@@ -99,6 +99,14 @@ async def run_scraper(
             await repo.update_scraper_state(
                 source, success=False, error_message=str(exc)
             )
+            # Re-fetch state to check consecutive errors
+            state = await repo.get_scraper_state(source)
+            if state and state.consecutive_errors >= 3:
+                logger.critical(
+                    f"[{source}] ALERT: Scraper has failed {state.consecutive_errors} "
+                    f"times in a row! Target website structure may have changed. "
+                    f"Error: {exc}"
+                )
             raise
 
         # Update scraper state

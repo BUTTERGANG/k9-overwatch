@@ -9,6 +9,11 @@ from typing import AsyncIterator, Optional
 from ..models.pet_record import PetRecord
 
 
+class StructuralChangeError(Exception):
+    """Raised when a scraper fails to find critical DOM elements, indicating a site layout change."""
+    pass
+
+
 @dataclass
 class ScraperConfig:
     """Runtime configuration injected into every scraper."""

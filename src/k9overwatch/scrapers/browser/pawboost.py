@@ -58,9 +58,11 @@ class PawBoostScraper(BrowserBaseScraper):
                 self._record_error(exc, f"PawBoost page {page_num}")
                 break
 
-            # Parse listing cards
             cards = await page.query_selector_all(".pet-search-result")
             if not cards:
+                if page_num == 1:
+                    from ..base import StructuralChangeError
+                    raise StructuralChangeError("No '.pet-search-result' cards found on page 1. Site layout may have changed.")
                 break
 
             page_has_new = False

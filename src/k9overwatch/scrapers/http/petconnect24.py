@@ -92,6 +92,9 @@ class PetConnect24Scraper(BaseScraper):
             soup = BeautifulSoup(html, "lxml")
             cards = soup.select("div.gridResult")
             if not cards:
+                if page == 0 and total > 0:
+                    from ..base import StructuralChangeError
+                    raise StructuralChangeError(f"No gridResult cards found despite total={total}. HTML layout may have changed.")
                 break
 
             for card in cards:

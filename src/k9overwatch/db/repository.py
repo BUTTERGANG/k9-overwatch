@@ -300,6 +300,11 @@ class PetRepository:
         state.records_fetched = records_fetched
         state.records_new = records_new
         state.error_message = error_message
+        if success:
+            state.consecutive_errors = 0
+        else:
+            state.consecutive_errors = (state.consecutive_errors or 0) + 1
+            
         if last_record_at:
             state.last_record_at = last_record_at
         await self.session.flush()

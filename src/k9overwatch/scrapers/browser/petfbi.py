@@ -221,7 +221,11 @@ class PetFBIScraper(BrowserBaseScraper):
                 self._record_error(exc, f"GraphQL page {page_count}")
                 break
 
-            result = data.get("data", {}).get("result", {})
+            result = data.get("data", {}).get("result")
+            if result is None and page_count == 0:
+                from ..base import StructuralChangeError
+                raise StructuralChangeError(f"Unexpected GraphQL response structure: {data}")
+                
             metadata = result.get("metadata", {})
             reports = result.get("reports", [])
 

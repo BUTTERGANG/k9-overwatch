@@ -81,6 +81,9 @@ class LostMyDoggieScraper(BrowserBaseScraper):
 
             cards = await page.query_selector_all(".box_icon")
             if not cards:
+                if page_num == 1:
+                    from ..base import StructuralChangeError
+                    raise StructuralChangeError("No '.box_icon' cards found on page 1. Site layout may have changed.")
                 break
 
             page_yielded = False
