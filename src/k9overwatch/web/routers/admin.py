@@ -16,7 +16,7 @@ async def admin_dashboard(
     db: AsyncSession = Depends(get_db),
 ):
     stats = await _get_stats(db)
-    return templates.TemplateResponse("admin/dashboard.html", {"request": request, "stats": stats})
+    return templates.TemplateResponse(request, "admin/dashboard.html", {"stats": stats})
 
 
 @router.get("/api/admin/stats")

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 from contextlib import asynccontextmanager
+from urllib.parse import urlparse, urlunparse, parse_qs, urlencode
 
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -15,14 +16,53 @@ _engine = None
 _session_factory = None
 
 
+def _normalize_database_url(url: str) -> tuple[str, dict]:
+    """
+    Ensure the URL uses an async-compatible driver scheme.
+    Returns (normalized_url, engine_kwargs).
+    asyncpg does not support libpq query params like sslmode — strip them
+    and translate to engine kwargs instead.
+    """
+    engine_kwargs: dict = {}
+
+    if url.startswith("postgresql://") or url.startswith("postgres://"):
+        url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+    elif url.startswith("sqlite://") and "+aiosqlite" not in url:
+        url = url.replace("sqlite://", "sqlite+aiosqlite://", 1)
+
+    # asyncpg does not support libpq query params — strip them all
+    # and translate the important ones to connect_args instead.
+    if url.startswith("postgresql+asyncpg://"):
+        parsed = urlparse(url)
+        params = parse_qs(parsed.query, keep_blank_values=True)
+
+        sslmode = params.pop("sslmode", [None])[0]
+        # Strip other libpq-only params asyncpg rejects
+        for libpq_param in ("channel_binding", "sslcert", "sslkey", "sslrootcert",
+                             "connect_timeout", "options", "gssencmode"):
+            params.pop(libpq_param, None)
+
+        # Translate sslmode → asyncpg ssl connect_arg
+        if sslmode in ("require", "verify-ca", "verify-full"):
+            engine_kwargs["connect_args"] = {"ssl": True}
+        elif sslmode == "disable":
+            engine_kwargs["connect_args"] = {"ssl": False}
+
+        new_query = urlencode({k: v[0] for k, v in params.items()})
+        url = urlunparse(parsed._replace(query=new_query))
+
+    return url, engine_kwargs
+
+
 def get_engine():
     global _engine
     if _engine is None:
-        url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///data/k9overwatch.db")
-        connect_args = {}
+        raw_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///data/k9overwatch.db")
+        url, engine_kwargs = _normalize_database_url(raw_url)
         if url.startswith("sqlite"):
-            connect_args["check_same_thread"] = False
-        _engine = create_async_engine(url, echo=False, connect_args=connect_args)
+            engine_kwargs.setdefault("connect_args", {})["check_same_thread"] = False
+        _engine = create_async_engine(url, echo=False, **engine_kwargs)
     return _engine
 
 
@@ -50,7 +90,9 @@ async def get_session():
 
 async def init_db():
     """Create all tables if they don't exist."""
-    import os
-    os.makedirs("data", exist_ok=True)
+    raw_url = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///data/k9overwatch.db")
+    normalized_url, _ = _normalize_database_url(raw_url)
+    if normalized_url.startswith("sqlite"):
+        os.makedirs("data", exist_ok=True)
     async with get_engine().begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

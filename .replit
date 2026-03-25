@@ -1,6 +1,10 @@
 modules = ["python-3.11"]
 [deployment]
-run = ["uvicorn", "k9overwatch.web.main:app", "--host", "0.0.0.0", "--port", "8080"]
+run = "DATABASE_URL=$neondb LD_LIBRARY_PATH=/home/runner/.nix-profile/lib PYTHONPATH=src .venv/bin/uvicorn k9overwatch.web.main:app --host 0.0.0.0 --port 8080"
+
+[[ports]]
+localPort = 5000
+externalPort = 5000
 
 [[ports]]
 localPort = 8080
@@ -8,7 +12,7 @@ externalPort = 80
 
 [nix]
 channel = "stable-25_05"
-packages = ["libxcrypt", "postgresql", "rapidfuzz-cpp", "taskflow", "xcodebuild", "zlib"]
+packages = ["libxcrypt", "postgresql", "rapidfuzz-cpp", "taskflow", "xcodebuild", "zlib", "gcc-unwrapped"]
 
 [workflows]
 runButton = "Project"
@@ -28,8 +32,11 @@ author = "agent"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "PYTHONPATH=src uvicorn k9overwatch.web.main:app --host 0.0.0.0 --port 5000 --reload"
+args = "[ -d .venv ] || python3.11 -m venv .venv && PIP_USER=0 .venv/bin/pip install -e '.[dev]' -q && DATABASE_URL=$neondb LD_LIBRARY_PATH=/home/runner/.nix-profile/lib PYTHONPATH=src .venv/bin/uvicorn k9overwatch.web.main:app --host 0.0.0.0 --port 5000 --reload"
 waitForPort = 5000
 
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[agent]
+expertMode = true

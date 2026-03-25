@@ -58,9 +58,9 @@ async def pets_page(
     total_pages = math.ceil(total / PAGE_SIZE) if total > 0 else 1
     
     return templates.TemplateResponse(
+        request,
         "pets/list.html",
         {
-            "request": request,
             "pets": pets,
             "total": total,
             "page": page,
@@ -87,9 +87,9 @@ async def pets_results(
     total_pages = math.ceil(total / PAGE_SIZE) if total > 0 else 1
     
     return templates.TemplateResponse(
+        request,
         "pets/list.html",
         {
-            "request": request,
             "pets": pets,
             "total": total,
             "page": page,
@@ -115,10 +115,7 @@ async def pet_detail(
     if pet is None:
         raise HTTPException(status_code=404, detail="Pet not found")
 
-    return templates.TemplateResponse(
-        "pets/detail.html",
-        {"request": request, "pet": pet},
-    )
+    return templates.TemplateResponse(request, "pets/detail.html", {"pet": pet})
 
 
 @router.get("/pets/{pet_id}/matches")
@@ -142,7 +139,4 @@ async def pet_matches_partial(
         if other:
             match_pairs.append({"match": m, "other": other})
 
-    return templates.TemplateResponse(
-        "pets/matches_partial.html",
-        {"request": request, "match_pairs": match_pairs},
-    )
+    return templates.TemplateResponse(request, "pets/matches_partial.html", {"match_pairs": match_pairs})

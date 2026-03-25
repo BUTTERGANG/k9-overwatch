@@ -11,7 +11,7 @@ router = APIRouter()
 
 @router.get("/map")
 async def map_page(request: Request):
-    return templates.TemplateResponse("map.html", {"request": request})
+    return templates.TemplateResponse(request, "map.html")
 
 @router.get("/api/map/geojson", response_model=GeoJSONCollection)
 async def get_map_geojson(

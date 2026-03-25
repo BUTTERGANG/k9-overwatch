@@ -2,7 +2,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse, HTMLResponse
+from fastapi.responses import RedirectResponse, HTMLResponse, Response
 from starlette.exceptions import HTTPException as StarletteHTTPException
 import uvicorn
 
@@ -39,9 +39,9 @@ app.include_router(admin_router.router)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     from k9overwatch.web.templates_config import templates
     if exc.status_code == 404:
-        return templates.TemplateResponse("errors/404.html", {"request": request}, status_code=404)
+        return templates.TemplateResponse(request, "errors/404.html", status_code=404)
     return templates.TemplateResponse(
-        "errors/500.html", {"request": request, "detail": exc.detail}, status_code=exc.status_code
+        request, "errors/500.html", {"detail": exc.detail}, status_code=exc.status_code
     )
 
 
@@ -55,6 +55,11 @@ async def health_check():
     except Exception as e:
         db_status = f"error: {e}"
     return {"status": "ok", "db": db_status}
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return Response(status_code=204)
 
 
 @app.get("/")

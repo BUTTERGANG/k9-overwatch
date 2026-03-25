@@ -37,9 +37,9 @@ async def matches_page(
             match_pairs.append({"match": m, "pet_a": pet_a, "pet_b": pet_b})
 
     return templates.TemplateResponse(
+        request,
         "matches/list.html",
         {
-            "request": request,
             "match_pairs": match_pairs,
             "active_tab": match_type,
             "confidence": confidence,
