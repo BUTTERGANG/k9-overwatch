@@ -19,17 +19,17 @@ dependencies = [
     # Database
     "sqlalchemy>=2.0",
     "aiosqlite>=0.19",
-    "greenlet>=3.0",        # required by SQLAlchemy async on Python 3.12+
+    "greenlet>=3.0", # required by SQLAlchemy async on Python 3.12+
     # Geocoding / geo math
     "geopy>=2.4",
     # Fuzzy matching
     "rapidfuzz>=3.6",
     # Scheduling
-    "APScheduler>=3.10",
+    "apscheduler>=3.10",
     # Utilities
     "python-dotenv>=1.0",
     "structlog>=24.1",
-    "tenacity>=8.2",       # retry decorator for HTTP/scraper calls
+    "tenacity>=8.2", # retry decorator for HTTP/scraper calls
     # Web App
     "fastapi>=0.111",
     "uvicorn[standard]>=0.29",
