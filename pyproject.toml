@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "k9overwatch"
+version = "0.1.0"
+description = "Lost & found pet aggregation platform"
+requires-python = ">=3.11"
+dependencies = [
+    # HTTP
+    "requests>=2.31",
+    "aiohttp>=3.9",
+    # HTML parsing
+    "beautifulsoup4>=4.12",
+    "lxml>=4.9",
+    # Data modeling / validation
+    "pydantic>=2.6",
+    # Database
+    "sqlalchemy>=2.0",
+    "aiosqlite>=0.19",
+    "greenlet>=3.0",        # required by SQLAlchemy async on Python 3.12+
+    # Geocoding / geo math
+    "geopy>=2.4",
+    # Fuzzy matching
+    "rapidfuzz>=3.6",
+    # Scheduling
+    "APScheduler>=3.10",
+    # Utilities
+    "python-dotenv>=1.0",
+    "structlog>=24.1",
+    "tenacity>=8.2",       # retry decorator for HTTP/scraper calls
+]
+
+[project.optional-dependencies]
+browser = [
+    "playwright>=1.43",
+    "playwright-stealth>=0.0.1",
+]
+dev = [
+    "pytest>=7.4",
+    "pytest-asyncio>=0.23",
+    "pytest-httpx>=0.28",
+    "ruff>=0.3",
+    "mypy>=1.9",
+    "ipython",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]

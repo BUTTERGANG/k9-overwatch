@@ -1,0 +1,139 @@
+"""
+ScraperScheduler — APScheduler-based polling loop for all data sources.
+
+Usage:
+    python -m k9overwatch.scheduler.runner
+"""
+from __future__ import annotations
+
+import asyncio
+import logging
+import os
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from dotenv import load_dotenv
+
+from ..db.connection import init_db
+from ..scrapers.base import ScraperConfig
+from .jobs import check_stale_records, run_matching_pass, run_scraper
+
+load_dotenv()
+logger = logging.getLogger(__name__)
+
+
+def _config() -> ScraperConfig:
+    return ScraperConfig(
+        search_lat=float(os.getenv("SEARCH_LAT", "39.7684")),
+        search_lon=float(os.getenv("SEARCH_LON", "-86.1581")),
+        search_radius_miles=int(os.getenv("SEARCH_RADIUS_MILES", "25")),
+        rate_limit_seconds=float(os.getenv("HTTP_RATE_LIMIT_SECONDS", "1.5")),
+        extra={"zip_code": os.getenv("SEARCH_ZIP", "46201")},
+    )
+
+
+class ScraperScheduler:
+
+    def build(self) -> AsyncIOScheduler:
+        from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
+        from ..scrapers.http.petconnect24 import PetConnect24Scraper
+        from ..scrapers.browser.pawboost import PawBoostScraper
+        from ..scrapers.browser.petfbi import PetFBIScraper
+        from ..scrapers.browser.lostmydoggie import LostMyDoggieScraper
+
+        scheduler = AsyncIOScheduler(timezone="UTC")
+        cfg = _config()
+
+        # ── Phase 1: HTTP scrapers (fast, cheap) ──────────────────────────────
+        scheduler.add_job(
+            run_scraper,
+            "interval", minutes=15,
+            id="indy_lost_pet_alert",
+            args=[IndyLostPetAlertScraper, cfg],
+            kwargs={"run_matching": True},
+            max_instances=1,
+            coalesce=True,
+        )
+        scheduler.add_job(
+            run_scraper,
+            "interval", minutes=30,
+            id="petconnect24",
+            args=[PetConnect24Scraper, cfg],
+            kwargs={"run_matching": False},  # matching runs in its own job
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # ── Phase 2: Browser scrapers (Playwright — use longer intervals) ─────
+        scheduler.add_job(
+            run_scraper,
+            "interval", minutes=35,
+            id="pawboost",
+            args=[PawBoostScraper, cfg],
+            kwargs={"run_matching": False},
+            max_instances=1,
+            coalesce=True,
+        )
+        scheduler.add_job(
+            run_scraper,
+            "interval", minutes=40,
+            id="petfbi",
+            args=[PetFBIScraper, cfg],
+            kwargs={"run_matching": False},
+            max_instances=1,
+            coalesce=True,
+        )
+        scheduler.add_job(
+            run_scraper,
+            "interval", minutes=45,
+            id="lostmydoggie",
+            args=[LostMyDoggieScraper, cfg],
+            kwargs={"run_matching": False},
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # ── Matching pass — runs after all scrapers have had a chance to run ──
+        scheduler.add_job(
+            run_matching_pass,
+            "interval", minutes=30,
+            id="matching_pass",
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # ── Staleness check — marks old records inactive ───────────────────────
+        scheduler.add_job(
+            check_stale_records,
+            "interval", hours=6,
+            id="staleness_check",
+            max_instances=1,
+            coalesce=True,
+        )
+
+        return scheduler
+
+
+async def main():
+    logging.basicConfig(
+        level=os.getenv("LOG_LEVEL", "INFO"),
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    )
+
+    logger.info("Initializing database...")
+    await init_db()
+
+    scheduler = ScraperScheduler().build()
+
+    logger.info("Starting scheduler...")
+    scheduler.start()
+
+    try:
+        while True:
+            await asyncio.sleep(60)
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Shutting down...")
+        scheduler.shutdown()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())
