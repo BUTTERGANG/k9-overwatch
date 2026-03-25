@@ -43,3 +43,7 @@ htmlcov/
 
 # Claude Code project memory / session files
 .claude/
+
+# macOS resource forks
+._*
+.DS_Store

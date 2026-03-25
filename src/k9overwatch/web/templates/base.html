@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}K9-Overwatch{% endblock %}</title>
+    <!-- Tailwind CSS (CDN for now) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- HTMX -->
+    <script src="https://unpkg.com/htmx.org@1.9.11"></script>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="bg-gray-50 text-gray-900 flex flex-col min-h-screen">
+    <nav class="bg-indigo-600 text-white shadow-md">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <a href="/map" class="text-xl font-bold flex items-center gap-2">
+                        🐾 K9-Overwatch
+                    </a>
+                </div>
+                <div class="flex items-center space-x-4">
+                    <a href="/map" class="hover:text-indigo-200">Map</a>
+                    <a href="/pets" class="hover:text-indigo-200">Pets</a>
+                    <a href="/matches" class="hover:text-indigo-200">Matches</a>
+                    <a href="/admin" class="hover:text-indigo-200">Admin</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <main class="flex-grow flex flex-col">
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="bg-gray-800 text-gray-300 py-6 text-center text-sm mt-auto">
+        <p>&copy; 2026 K9-Overwatch</p>
+    </footer>
+
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

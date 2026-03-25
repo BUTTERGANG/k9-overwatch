@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Matches | K9-Overwatch{% endblock %}
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
+    <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight mb-2">🔗 Matches</h1>
+    <p class="text-gray-500 mb-6">Potential reunifications and cross-source duplicates detected by the matching engine.</p>
+
+    <!-- Tabs -->
+    <div class="flex gap-2 mb-8 border-b border-gray-200 pb-0">
+        <a href="/matches?match_type=lost_found&confidence=high&confidence=medium"
+           class="px-5 py-2.5 text-sm font-semibold rounded-t-lg transition {% if active_tab == 'lost_found' %}bg-indigo-600 text-white{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
+            Reunifications
+        </a>
+        <a href="/matches?match_type=dedup&confidence=high&confidence=medium"
+           class="px-5 py-2.5 text-sm font-semibold rounded-t-lg transition {% if active_tab == 'dedup' %}bg-indigo-600 text-white{% else %}text-gray-600 hover:bg-gray-100{% endif %}">
+            Duplicates
+        </a>
+    </div>
+
+    <!-- Match Cards -->
+    {% if match_pairs %}
+    <div class="flex flex-col gap-6">
+        {% for item in match_pairs %}
+        {% set m = item.match %}
+        {% set a = item.pet_a %}
+        {% set b = item.pet_b %}
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 hover:shadow-md transition">
+            <div class="flex flex-col sm:flex-row gap-6">
+                <!-- Pet A -->
+                <a href="/pets/{{ a.id }}" class="flex flex-1 gap-4 items-start group">
+                    {% if a.thumbnail_url %}<img src="{{ a.thumbnail_url }}" alt="{{ a.name }}" class="w-20 h-20 object-cover rounded-xl border flex-shrink-0 group-hover:opacity-90 transition">
+                    {% else %}<div class="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center text-3xl flex-shrink-0">🐾</div>{% endif %}
+                    <div class="min-w-0">
+                        <span class="text-xs font-bold uppercase tracking-widest {% if a.record_type == 'lost' %}text-red-500{% elif a.record_type == 'found' %}text-green-500{% else %}text-blue-500{% endif %}">{{ a.record_type }}</span>
+                        <p class="font-bold text-gray-900 group-hover:text-indigo-700 transition truncate">{{ a.name or "Unknown" }}</p>
+                        <p class="text-sm text-gray-500 capitalize truncate">{{ a.breed or "?" }} &bull; {{ a.source }}</p>
+                        <p class="text-xs text-gray-400 font-mono mt-1">{{ a.date_event }}</p>
+                    </div>
+                </a>
+
+                <!-- Score -->
+                <div class="flex flex-col items-center justify-center flex-shrink-0 px-4">
+                    <div class="text-2xl font-black text-indigo-600">{{ "%.0f" | format(m.score * 100) }}%</div>
+                    <div class="text-xs text-gray-400 font-semibold mt-0.5">match</div>
+                    {% if m.confidence == 'high' %}<span class="mt-2 text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-semibold">High</span>
+                    {% elif m.confidence == 'medium' %}<span class="mt-2 text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-semibold">Medium</span>
+                    {% else %}<span class="mt-2 text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full font-semibold">Low</span>{% endif %}
+                </div>
+
+                <!-- Pet B -->
+                <a href="/pets/{{ b.id }}" class="flex flex-1 gap-4 items-start group sm:flex-row-reverse sm:text-right">
+                    {% if b.thumbnail_url %}<img src="{{ b.thumbnail_url }}" alt="{{ b.name }}" class="w-20 h-20 object-cover rounded-xl border flex-shrink-0 group-hover:opacity-90 transition">
+                    {% else %}<div class="w-20 h-20 bg-gray-100 rounded-xl flex items-center justify-center text-3xl flex-shrink-0">🐾</div>{% endif %}
+                    <div class="min-w-0">
+                        <span class="text-xs font-bold uppercase tracking-widest {% if b.record_type == 'lost' %}text-red-500{% elif b.record_type == 'found' %}text-green-500{% else %}text-blue-500{% endif %}">{{ b.record_type }}</span>
+                        <p class="font-bold text-gray-900 group-hover:text-indigo-700 transition truncate">{{ b.name or "Unknown" }}</p>
+                        <p class="text-sm text-gray-500 capitalize truncate">{{ b.breed or "?" }} &bull; {{ b.source }}</p>
+                        <p class="text-xs text-gray-400 font-mono mt-1">{{ b.date_event }}</p>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Signals fired -->
+            {% if m.signals_fired %}
+            <div class="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-2">
+                {% for signal, weight in m.signals_fired.items() %}
+                <span class="text-xs bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-1 rounded-full font-medium">{{ signal.replace('_', ' ') }}</span>
+                {% endfor %}
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="py-16 text-center text-gray-400 bg-white rounded-2xl border border-dashed border-gray-300">
+        <p class="text-lg">No matches found for this filter combination.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

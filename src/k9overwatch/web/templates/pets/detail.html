@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+{% block title %}{{ pet.name or "Unknown Pet" }} | K9-Overwatch{% endblock %}
+
+{% block extra_head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<style>#mini-map { height: 220px; border-radius: 0.75rem; }</style>
+{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
+    <!-- Back link -->
+    <a href="/pets" class="inline-flex items-center gap-1 text-indigo-600 hover:text-indigo-800 text-sm font-medium mb-6 transition">
+        &larr; Back to directory
+    </a>
+
+    <!-- Header -->
+    <div class="flex flex-wrap items-start gap-4 mb-8">
+        <div class="flex-1 min-w-0">
+            <h1 class="text-4xl font-extrabold text-gray-900 tracking-tight truncate">{{ pet.name or "Unknown Name" }}</h1>
+            <p class="mt-1 text-gray-500 capitalize text-lg">{{ pet.breed or "Unknown breed" }} &bull; {{ pet.animal_type or "Unknown species" }}</p>
+        </div>
+        <div>
+            {% if pet.record_type == 'lost' %}<span class="inline-block px-4 py-2 text-base font-bold uppercase tracking-widest bg-red-500 text-white rounded-full shadow">Lost</span>
+            {% elif pet.record_type == 'found' %}<span class="inline-block px-4 py-2 text-base font-bold uppercase tracking-widest bg-green-500 text-white rounded-full shadow">Found</span>
+            {% elif pet.record_type == 'sighting' %}<span class="inline-block px-4 py-2 text-base font-bold uppercase tracking-widest bg-blue-500 text-white rounded-full shadow">Sighting</span>
+            {% elif pet.record_type == 'adoptable' %}<span class="inline-block px-4 py-2 text-base font-bold uppercase tracking-widest bg-orange-500 text-white rounded-full shadow">Adoptable</span>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+
+        <!-- Left column: photos + contact -->
+        <div class="md:col-span-1 flex flex-col gap-6">
+            <!-- Photo -->
+            <div class="bg-gray-100 rounded-2xl overflow-hidden shadow-sm">
+                {% if pet.thumbnail_url %}
+                    <img src="{{ pet.thumbnail_url }}" alt="{{ pet.name }}" class="w-full object-cover max-h-72">
+                {% else %}
+                    <div class="w-full h-48 flex items-center justify-center text-gray-400">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-16 h-16"><path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" /><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z" /></svg>
+                    </div>
+                {% endif %}
+                {% if pet.photos and pet.photos|length > 1 %}
+                <div class="grid grid-cols-3 gap-1 p-2">
+                    {% for photo in pet.photos[1:7] %}
+                    <img src="{{ photo }}" alt="Photo" class="w-full h-16 object-cover rounded cursor-pointer hover:opacity-80 transition" onclick="window.open('{{ photo }}','_blank')">
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Contact -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-5">
+                <h2 class="font-bold text-gray-800 mb-3 border-b pb-2">Contact Info</h2>
+                {% if pet.contact_name %}<p class="text-sm text-gray-700 mb-1">👤 {{ pet.contact_name }}</p>{% endif %}
+                {% if pet.contact_phone %}
+                <p class="text-sm text-gray-700 mb-1">📞
+                    <span id="phone-masked" class="cursor-pointer text-indigo-600 hover:underline" onclick="document.getElementById('phone-masked').textContent='{{ pet.contact_phone }}'">Click to reveal phone</span>
+                </p>
+                {% endif %}
+                {% if pet.contact_email %}
+                <p class="text-sm text-gray-700 mb-1">✉️
+                    <span id="email-masked" class="cursor-pointer text-indigo-600 hover:underline" onclick="document.getElementById('email-masked').textContent='{{ pet.contact_email }}'">Click to reveal email</span>
+                </p>
+                {% endif %}
+                {% if pet.source_url %}
+                <a href="{{ pet.source_url }}" target="_blank" class="mt-3 block text-center text-sm font-semibold text-indigo-600 hover:text-indigo-800 border border-indigo-200 rounded-lg py-2 hover:bg-indigo-50 transition">View on {{ pet.source }} &rarr;</a>
+                {% endif %}
+                {% if not pet.contact_phone and not pet.contact_email and not pet.source_url %}
+                <p class="text-sm text-gray-400 italic">No contact info available.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Right column: details + location + matches -->
+        <div class="md:col-span-2 flex flex-col gap-6">
+
+            <!-- Details -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <h2 class="font-bold text-gray-800 mb-4 border-b pb-2 text-lg">Details</h2>
+                <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
+                    <div><dt class="font-medium text-gray-500">Date</dt><dd class="text-gray-900">{{ pet.date_event or "Unknown" }}</dd></div>
+                    <div><dt class="font-medium text-gray-500">Species</dt><dd class="text-gray-900 capitalize">{{ pet.animal_type or "Unknown" }}</dd></div>
+                    <div><dt class="font-medium text-gray-500">Breed</dt><dd class="text-gray-900">{{ pet.breed or "Unknown" }}{% if pet.breed_secondary %} / {{ pet.breed_secondary }}{% endif %}</dd></div>
+                    <div><dt class="font-medium text-gray-500">Color</dt><dd class="text-gray-900">{{ pet.color_primary or "Unknown" }}{% if pet.color_secondary %} / {{ pet.color_secondary }}{% endif %}</dd></div>
+                    <div><dt class="font-medium text-gray-500">Gender</dt><dd class="text-gray-900 capitalize">{{ pet.gender or "Unknown" }}</dd></div>
+                    <div><dt class="font-medium text-gray-500">Age</dt><dd class="text-gray-900">{{ pet.age or "Unknown" }}</dd></div>
+                    <div><dt class="font-medium text-gray-500">Size</dt><dd class="text-gray-900 capitalize">{{ pet.size or "Unknown" }}</dd></div>
+                    <div><dt class="font-medium text-gray-500">Source</dt><dd class="text-gray-900">{{ pet.source }}</dd></div>
+                    {% if pet.distinctive_features %}
+                    <div class="col-span-2"><dt class="font-medium text-gray-500">Distinctive Features</dt><dd class="text-gray-900">{{ pet.distinctive_features }}</dd></div>
+                    {% endif %}
+                </dl>
+
+                {% if pet.description %}
+                <div class="mt-4 pt-4 border-t border-gray-100">
+                    <h3 class="font-semibold text-gray-700 mb-2">Description</h3>
+                    <p class="text-sm text-gray-700 leading-relaxed whitespace-pre-line">{{ pet.description }}</p>
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- Mini Map -->
+            {% if pet.lat and pet.lon %}
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6">
+                <h2 class="font-bold text-gray-800 mb-3 border-b pb-2 text-lg">Location</h2>
+                {% if pet.location_text %}<p class="text-sm text-gray-600 mb-3">📍 {{ pet.location_text }}</p>{% endif %}
+                <div id="mini-map"></div>
+            </div>
+            {% endif %}
+
+            <!-- Possible Matches (lazy-loaded via HTMX) -->
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 p-6"
+                 hx-get="/pets/{{ pet.id }}/matches"
+                 hx-trigger="load"
+                 hx-swap="innerHTML">
+                <p class="text-sm text-gray-400 animate-pulse">Loading possible matches…</p>
+            </div>
+
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+{% if pet.lat and pet.lon %}
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+    const map = L.map('mini-map').setView([{{ pet.lat }}, {{ pet.lon }}], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
+    L.circleMarker([{{ pet.lat }}, {{ pet.lon }}], {
+        radius: 10, color: '#4f46e5', fillColor: '#6366f1', fillOpacity: 0.8, weight: 3
+    }).addTo(map).bindPopup("{{ pet.name or 'Pet location' }}").openPopup();
+});
+</script>
+{% endif %}
+{% endblock %}

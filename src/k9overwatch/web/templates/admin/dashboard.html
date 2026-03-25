@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% block title %}Admin | K9-Overwatch{% endblock %}
+{% block content %}
+<div class="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-10 w-full">
+    <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight mb-2">⚙️ Admin Dashboard</h1>
+    <p class="text-gray-500 mb-8">System health, scraper status, and database statistics. Auto-refreshes every 30 seconds.</p>
+
+    <!-- Stats Summary -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-10">
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
+            <div class="text-3xl font-black text-indigo-600">{{ stats.active_pets }}</div>
+            <div class="text-sm text-gray-500 mt-1">Active Listings</div>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
+            <div class="text-3xl font-black text-red-500">{{ stats.lost_count }}</div>
+            <div class="text-sm text-gray-500 mt-1">Lost</div>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
+            <div class="text-3xl font-black text-green-500">{{ stats.found_count }}</div>
+            <div class="text-sm text-gray-500 mt-1">Found</div>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100 text-center">
+            <div class="text-3xl font-black text-purple-600">{{ stats.reunification_matches }}</div>
+            <div class="text-sm text-gray-500 mt-1">Reunification Candidates</div>
+        </div>
+    </div>
+
+    <!-- Scraper Status Table -->
+    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 mb-8 overflow-hidden"
+         hx-get="/api/admin/stats"
+         hx-trigger="every 30s"
+         hx-swap="none"
+         id="stats-container">
+        <div class="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+            <h2 class="text-lg font-bold text-gray-800">🕷️ Scraper Status</h2>
+            <span id="last-refresh" class="text-xs text-gray-400 font-mono"></span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-sm">
+                <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider">
+                    <tr>
+                        <th class="px-6 py-3 text-left">Source</th>
+                        <th class="px-6 py-3 text-left">Last Run</th>
+                        <th class="px-6 py-3 text-left">Status</th>
+                        <th class="px-6 py-3 text-right">Fetched</th>
+                        <th class="px-6 py-3 text-right">New</th>
+                        <th class="px-6 py-3 text-left">Error</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-gray-100">
+                    {% for s in stats.scrapers %}
+                    <tr class="hover:bg-gray-50 transition">
+                        <td class="px-6 py-4 font-semibold text-gray-800">{{ s.source }}</td>
+                        <td class="px-6 py-4 text-gray-500 font-mono text-xs">{{ s.last_run_at or "Never" }}</td>
+                        <td class="px-6 py-4">
+                            {% if s.last_run_success %}
+                            <span class="px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">✓ OK</span>
+                            {% elif s.last_run_at %}
+                            <span class="px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">✗ Failed</span>
+                            {% else %}
+                            <span class="px-2.5 py-1 bg-gray-100 text-gray-500 rounded-full text-xs font-semibold">— Pending</span>
+                            {% endif %}
+                        </td>
+                        <td class="px-6 py-4 text-right text-gray-700 font-mono">{{ s.records_fetched or 0 }}</td>
+                        <td class="px-6 py-4 text-right text-gray-700 font-mono">{{ s.records_new or 0 }}</td>
+                        <td class="px-6 py-4 text-red-500 text-xs truncate max-w-xs" title="{{ s.error_message or '' }}">{{ s.error_message or "—" }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="6" class="px-6 py-8 text-center text-gray-400 italic">No scraper state records found. Run the scrapers first.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- DB Summary -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <h3 class="font-bold text-gray-700 mb-3">Database Summary</h3>
+            <dl class="text-sm space-y-1">
+                <div class="flex justify-between"><dt class="text-gray-500">Total records</dt><dd class="font-semibold">{{ stats.total_pets }}</dd></div>
+                <div class="flex justify-between"><dt class="text-gray-500">Active records</dt><dd class="font-semibold text-green-600">{{ stats.active_pets }}</dd></div>
+                <div class="flex justify-between"><dt class="text-gray-500">Missing geocode</dt><dd class="font-semibold text-yellow-600">{{ stats.no_geocode }}</dd></div>
+                <div class="flex justify-between"><dt class="text-gray-500">Total matches</dt><dd class="font-semibold text-purple-600">{{ stats.total_matches }}</dd></div>
+            </dl>
+        </div>
+        <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+            <h3 class="font-bold text-gray-700 mb-3">Quick Links</h3>
+            <div class="flex flex-col gap-2">
+                <a href="/map" class="text-sm text-indigo-600 hover:underline">→ Map View</a>
+                <a href="/pets" class="text-sm text-indigo-600 hover:underline">→ Pet Directory</a>
+                <a href="/matches" class="text-sm text-indigo-600 hover:underline">→ Matches</a>
+                <a href="/api/health" class="text-sm text-indigo-600 hover:underline">→ Health check (JSON)</a>
+                <a href="/api/admin/stats" class="text-sm text-indigo-600 hover:underline">→ Stats JSON</a>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    // Update last-refresh timestamp on page load + after every HTMX poll
+    function updateTimestamp() {
+        document.getElementById('last-refresh').textContent = 'Refreshed: ' + new Date().toLocaleTimeString();
+    }
+    updateTimestamp();
+    document.body.addEventListener('htmx:afterRequest', updateTimestamp);
+</script>
+{% endblock %}

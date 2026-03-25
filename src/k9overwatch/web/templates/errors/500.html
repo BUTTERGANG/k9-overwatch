@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Server Error | K9-Overwatch{% endblock %}
+{% block content %}
+<div class="flex flex-col items-center justify-center flex-1 py-24 text-center px-6">
+    <div class="text-7xl mb-6">⚠️</div>
+    <h1 class="text-4xl font-extrabold text-gray-900 mb-3">Something Went Wrong</h1>
+    <p class="text-lg text-gray-500 mb-4 max-w-md">An unexpected error occurred. Please try again in a moment.</p>
+    {% if detail %}<p class="text-sm text-gray-400 font-mono bg-gray-100 px-4 py-2 rounded mb-6 max-w-lg">{{ detail }}</p>{% endif %}
+    <a href="/" class="px-6 py-3 bg-indigo-600 text-white rounded-xl font-semibold hover:bg-indigo-700 transition shadow">Go Home</a>
+</div>
+{% endblock %}

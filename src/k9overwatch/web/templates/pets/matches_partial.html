@@ -1,0 +1,49 @@
+{% if match_pairs %}
+<h2 class="font-bold text-gray-800 mb-4 border-b pb-2 text-lg">🔗 Possible Matches</h2>
+<div class="flex flex-col gap-4">
+    {% for item in match_pairs %}
+    {% set m = item.match %}
+    {% set other = item.other %}
+    <div class="border border-gray-200 rounded-xl p-4 bg-gray-50 hover:shadow-sm transition">
+        <div class="flex items-start gap-4">
+            <!-- Other pet thumbnail -->
+            <a href="/pets/{{ other.id }}" class="flex-shrink-0">
+                {% if other.thumbnail_url %}
+                <img src="{{ other.thumbnail_url }}" alt="{{ other.name }}" class="w-20 h-20 object-cover rounded-lg border border-gray-200">
+                {% else %}
+                <div class="w-20 h-20 bg-gray-200 rounded-lg flex items-center justify-center text-gray-400 text-2xl">🐾</div>
+                {% endif %}
+            </a>
+            <!-- Match details -->
+            <div class="flex-1 min-w-0">
+                <div class="flex items-center gap-2 flex-wrap">
+                    <a href="/pets/{{ other.id }}" class="font-bold text-gray-900 hover:text-indigo-700 transition truncate">{{ other.name or "Unknown" }}</a>
+                    <!-- Confidence badge -->
+                    {% if m.confidence == 'high' %}<span class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full font-semibold">High confidence</span>
+                    {% elif m.confidence == 'medium' %}<span class="text-xs px-2 py-0.5 bg-yellow-100 text-yellow-700 rounded-full font-semibold">Medium confidence</span>
+                    {% else %}<span class="text-xs px-2 py-0.5 bg-gray-100 text-gray-600 rounded-full font-semibold">Low confidence</span>
+                    {% endif %}
+                    <!-- Match type -->
+                    {% if m.match_type == 'lost_found' %}<span class="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded-full">Reunification candidate</span>
+                    {% else %}<span class="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">Possible duplicate</span>
+                    {% endif %}
+                </div>
+                <p class="text-sm text-gray-600 mt-1 capitalize">{{ other.breed or "Unknown breed" }} &bull; {{ other.animal_type or "" }} &bull; {{ other.record_type }}</p>
+                <p class="text-xs text-gray-400 mt-1 font-mono">Score: {{ "%.0f" | format(m.score * 100) }}% &bull; {{ other.date_event }}</p>
+                <!-- Signals fired -->
+                {% if m.signals_fired %}
+                <div class="mt-2 flex flex-wrap gap-1">
+                    {% for signal, weight in m.signals_fired.items() %}
+                    <span class="text-xs bg-white border border-gray-200 text-gray-600 px-2 py-0.5 rounded-full">{{ signal.replace('_', ' ') }}</span>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<h2 class="font-bold text-gray-800 mb-3 border-b pb-2 text-lg">🔗 Possible Matches</h2>
+<p class="text-sm text-gray-400 italic">No matches found for this pet.</p>
+{% endif %}
