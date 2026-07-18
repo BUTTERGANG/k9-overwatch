@@ -2,11 +2,9 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta
-from typing import Optional
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import and_, func, or_, select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..models.pet_record import PetRecord
@@ -33,7 +31,7 @@ class PetRepository:
         result = await self.session.execute(stmt)
         existing = result.scalar_one_or_none()
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
 
         if existing is None:
             row = PetRow(
@@ -119,7 +117,7 @@ class PetRepository:
         stmt = (
             update(PetRow)
             .where(and_(PetRow.source == source, PetRow.source_id == source_id))
-            .values(active=False, last_checked_at=datetime.utcnow())
+            .values(active=False, last_checked_at=datetime.now(UTC))
         )
         await self.session.execute(stmt)
 
@@ -138,14 +136,14 @@ class PetRepository:
                     PetRow.source_id.not_in(seen_source_ids),
                 )
             )
-            .values(active=False, last_checked_at=datetime.utcnow())
+            .values(active=False, last_checked_at=datetime.now(UTC))
         )
         result = await self.session.execute(stmt)
         return result.rowcount
 
     # ── Queries ───────────────────────────────────────────────────────────────
 
-    async def get_by_key(self, source: str, source_id: str) -> Optional[PetRow]:
+    async def get_by_key(self, source: str, source_id: str) -> PetRow | None:
         stmt = select(PetRow).where(
             and_(PetRow.source == source, PetRow.source_id == source_id)
         )
@@ -157,10 +155,10 @@ class PetRepository:
         lat: float,
         lon: float,
         miles: float,
-        record_type: Optional[str] = None,
-        animal_type: Optional[str] = None,
+        record_type: str | None = None,
+        animal_type: str | None = None,
         active_only: bool = True,
-        days: Optional[int] = None,
+        days: int | None = None,
     ) -> list[PetRow]:
         """
         Find records within `miles` of (lat, lon).
@@ -183,7 +181,7 @@ class PetRepository:
         if animal_type:
             filters.append(PetRow.animal_type == animal_type)
         if days:
-            cutoff = datetime.utcnow() - timedelta(days=days)
+            cutoff = datetime.now(UTC) - timedelta(days=days)
             filters.append(PetRow.date_event >= cutoff.date())
 
         stmt = select(PetRow).where(and_(*filters))
@@ -207,7 +205,8 @@ class PetRepository:
         self,
         record: PetRecord,
         search_radius_miles: float = 15.0,
-        date_window_days: int = 60,
+        date_window_before_days: int = 14,
+        date_window_after_days: int = 90,
     ) -> list[PetRow]:
         """
         Returns rows that are plausible match candidates for `record`:
@@ -215,16 +214,23 @@ class PetRepository:
         - Same animal_type
         - Within radius (if we have coordinates)
         - Within date window
+
+        The window is asymmetric on purpose: LostFoundMatcher permits a found
+        report up to MAX_DAYS_AFTER_LOST (90) days after the lost date and up to
+        MAX_DAYS_BEFORE_LOST (3) days before, while dedup pairs are typically
+        within ~2 weeks. Using a symmetric ±window smaller than 90 would silently
+        exclude valid late found reports, so the after-window is kept wide and the
+        matcher's own hard filters enforce the precise constraints.
         """
         filters = [PetRow.active == True]
 
         if record.animal_type:
             filters.append(PetRow.animal_type == str(record.animal_type))
 
-        # Date window
+        # Date window (asymmetric to match the matcher's allowed range)
         if record.date_event:
-            lower = record.date_event - timedelta(days=date_window_days)
-            upper = record.date_event + timedelta(days=date_window_days)
+            lower = record.date_event - timedelta(days=date_window_before_days)
+            upper = record.date_event + timedelta(days=date_window_after_days)
             filters.append(PetRow.date_event.between(lower, upper))
 
         # Exclude the record itself
@@ -257,21 +263,52 @@ class PetRepository:
 
         return candidates
 
-    async def get_unmatched_records(
-        self, source: Optional[str] = None, limit: int = 500
+    async def get_matchable_records(
+        self, limit: int = 1000, since_date: date | None = None
     ) -> list[PetRow]:
-        """Records not yet present in pet_matches — candidates for a matching pass."""
+        """
+        Active records eligible for (re-)matching.
+
+        Unlike `get_unmatched_records`, this does NOT exclude records that already
+        participate in a match. Re-matching lets (a) new candidates surface for a
+        pet that already had a match and (b) scores refresh as more data arrives
+        (e.g. geocoding fills in coordinates → stronger geo signals).
+
+        `since_date` bounds the pool to recent records so the periodic full pass
+        stays roughly bounded instead of growing as O(records^2). 120 days covers
+        the 90-day lost→found window plus margin.
+        """
+        filters = [PetRow.active == True]
+        if since_date is not None:
+            filters.append(PetRow.date_event >= since_date)
+        stmt = (
+            select(PetRow)
+            .where(and_(*filters))
+            .order_by(PetRow.date_event.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def get_unmatched_records(
+        self, source: str | None = None, limit: int = 500
+    ) -> list[PetRow]:
+        """Deprecated: records with no match row yet.
+
+        Kept for backward compatibility. Prefer `get_matchable_records` so pets
+        that already have a match are still reconsidered when new data arrives.
+        """
         matched_ids_stmt = select(PetMatch.pet_a_id).union(select(PetMatch.pet_b_id))
         filters = [PetRow.active == True, PetRow.id.not_in(matched_ids_stmt)]
         if source:
             filters.append(PetRow.source == source)
         stmt = select(PetRow).where(and_(*filters)).limit(limit)
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     # ── Scraper state ─────────────────────────────────────────────────────────
 
-    async def get_scraper_state(self, source: str) -> Optional[ScraperState]:
+    async def get_scraper_state(self, source: str) -> ScraperState | None:
         stmt = select(ScraperState).where(ScraperState.source == source)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -283,14 +320,14 @@ class PetRepository:
         success: bool,
         records_fetched: int = 0,
         records_new: int = 0,
-        last_record_at: Optional[datetime] = None,
-        error_message: Optional[str] = None,
+        last_record_at: datetime | None = None,
+        error_message: str | None = None,
     ) -> None:
         stmt = select(ScraperState).where(ScraperState.source == source)
         result = await self.session.execute(stmt)
         state = result.scalar_one_or_none()
 
-        now = datetime.utcnow()
+        now = datetime.now(UTC)
         if state is None:
             state = ScraperState(source=source)
             self.session.add(state)
@@ -309,11 +346,51 @@ class PetRepository:
             state.last_record_at = last_record_at
         await self.session.flush()
 
+    # ── Staleness ─────────────────────────────────────────────────────────────
+
+    async def get_stale_records(
+        self, source: str, older_than_hours: int = 48
+    ) -> list[PetRow]:
+        """
+        Return active records from `source` that have not been re-checked by a
+        scrape in the last `older_than_hours`. Used by the staleness job to
+        verify (via check_active) whether a listing is still live.
+
+        Falls back to scraped_at when last_checked_at is null.
+        """
+        cutoff = datetime.now(UTC) - timedelta(hours=older_than_hours)
+        filters = [
+            PetRow.source == source,
+            PetRow.active == True,
+            or_(
+                PetRow.last_checked_at.is_(None),
+                PetRow.last_checked_at < cutoff,
+            ),
+        ]
+        stmt = select(PetRow).where(and_(*filters)).order_by(PetRow.date_posted.desc())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     # ── Match storage ─────────────────────────────────────────────────────────
 
     async def save_match(self, match) -> bool:
-        """Save a MatchResult. Returns False if match already exists."""
-        from ..matching.signals import MatchResult
+        """
+        Save (or update) a MatchResult.
+
+        Idempotent by (pet_a_id, pet_b_id, match_type): if a row already exists
+        for the pair, its score/confidence/signals are refreshed to the latest
+        computed values so matches improve as more data arrives. This is what
+        makes the periodic re-match pass safe to run repeatedly.
+
+        A row that a human has explicitly REJECTED (`confirmed=False`) is
+        preserved and not overwritten, so the pipeline respects human review.
+        A human CONFIRMED row (`confirmed=True`) is refreshed but keeps its
+        confirmed flag.
+
+        Returns True if a new row was created, False if an existing row was
+        updated (or left untouched because it was rejected).
+        """
+
         existing = await self.session.execute(
             select(PetMatch).where(
                 or_(
@@ -322,23 +399,102 @@ class PetRepository:
                 )
             ).where(PetMatch.match_type == match.match_type)
         )
-        if existing.scalar_one_or_none():
+        row = existing.scalar_one_or_none()
+        if row is None:
+            row = PetMatch(
+                pet_a_id=match.pet_a_id,
+                pet_b_id=match.pet_b_id,
+                match_type=match.match_type,
+                score=match.score,
+                confidence=match.confidence,
+                signals_fired=match.signals_fired,
+            )
+            self.session.add(row)
+            await self.session.flush()
+            return True
+
+        # Preserve a human rejection — never auto-overwrite a dismissed match.
+        if row.confirmed is False:
             return False
-        row = PetMatch(
-            pet_a_id=match.pet_a_id,
-            pet_b_id=match.pet_b_id,
-            match_type=match.match_type,
-            score=match.score,
-            confidence=match.confidence,
-            signals_fired=match.signals_fired,
-        )
-        self.session.add(row)
+
+        row.score = match.score
+        row.confidence = match.confidence
+        row.signals_fired = match.signals_fired
         await self.session.flush()
-        return True
+        return False
 
     async def get_matches_for_pet(self, pet_id: str) -> list[PetMatch]:
         stmt = select(PetMatch).where(
             or_(PetMatch.pet_a_id == pet_id, PetMatch.pet_b_id == pet_id)
         ).order_by(PetMatch.score.desc())
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return list(result.scalars().all())
+
+    # ── Active-listing age buckets ─────────────────────────────────────────────
+
+    async def get_active_age_buckets(
+        self, record_type: str | None = None
+    ) -> dict[str, int]:
+        """
+        Count active records grouped by how long ago the event happened:
+        'week' (≤7d), 'fortnight' (8–14d), 'month' (15–30d), 'older' (>30d).
+
+        Robust to missing dates: effective age falls back
+        date_event → days_since_event(+scrape age) → scrape age, so a listing
+        with no parsed date still lands in a sensible bucket instead of vanishing.
+        """
+        filters = [PetRow.active == True]  # noqa: E712 — SQLAlchemy needs ==
+        if record_type:
+            filters.append(PetRow.record_type == record_type)
+        stmt = select(
+            PetRow.date_event, PetRow.days_since_event, PetRow.scraped_at
+        ).where(and_(*filters))
+        result = await self.session.execute(stmt)
+
+        counts: dict[str, int] = dict.fromkeys(AGE_BUCKETS, 0)
+        for date_event, days_since_event, scraped_at in result.all():
+            counts[age_bucket(effective_age_days(date_event, days_since_event, scraped_at))] += 1
+        return counts
+
+
+# ── Age-bucket helpers (module-level: reused by API + tests) ────────────────────
+
+AGE_BUCKETS = ("week", "fortnight", "month", "older")
+
+# Human-friendly labels for the UI — plain language for non-technical users.
+AGE_BUCKET_LABELS = {
+    "week": "Within the last week",
+    "fortnight": "1–2 weeks ago",
+    "month": "2 weeks – 1 month ago",
+    "older": "More than a month ago",
+}
+
+
+def effective_age_days(
+    date_event: date | None,
+    days_since_event: int | None,
+    scraped_at: datetime | None,
+) -> int:
+    """Best-estimate age in days, tolerant of missing fields."""
+    today = datetime.now(UTC).date()
+    if date_event is not None:
+        return max(0, (today - date_event).days)
+    scrape_age = 0
+    if scraped_at is not None:
+        sd = scraped_at.date() if isinstance(scraped_at, datetime) else scraped_at
+        scrape_age = max(0, (today - sd).days)
+    if days_since_event is not None:
+        return max(0, days_since_event) + scrape_age
+    return scrape_age
+
+
+def age_bucket(days: int) -> str:
+    """Map an age in days to a bucket key."""
+    if days <= 7:
+        return "week"
+    if days <= 14:
+        return "fortnight"
+    if days <= 30:
+        return "month"
+    return "older"
+

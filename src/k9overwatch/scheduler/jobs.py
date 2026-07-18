@@ -4,11 +4,9 @@ Each job: scrape → geocode → upsert → run matching pass.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Optional, Type
 
 from ..db.connection import get_session
 from ..db.repository import PetRepository
@@ -35,7 +33,7 @@ def _make_geocoder_from_env(session) -> GeocodingService:
 
 
 async def run_scraper(
-    scraper_class: Type[BaseScraper],
+    scraper_class: type[BaseScraper],
     config: ScraperConfig,
     *,
     run_matching: bool = True,
@@ -62,7 +60,7 @@ async def run_scraper(
 
         # Get high-water mark for incremental polling
         state = await repo.get_scraper_state(source)
-        after: Optional[datetime] = None
+        after: datetime | None = None
         if state and state.last_record_at and scraper_class.SUPPORTS_INCREMENTAL:
             # Look back a bit to catch records that arrived late
             after = state.last_record_at - timedelta(hours=2)
@@ -70,7 +68,7 @@ async def run_scraper(
         else:
             logger.info(f"[{source}] Full scrape")
 
-        highest_date: Optional[datetime] = None
+        highest_date: datetime | None = None
 
         try:
             async for record in scraper.scrape(after=after):
@@ -134,11 +132,29 @@ async def run_scraper(
     }
 
 
-async def run_matching_pass(new_row_ids: Optional[list[str]] = None) -> dict:
+async def run_matching_pass(
+    new_row_ids: list[str] | None = None,
+    *,
+    rematch: bool = False,
+    rematch_window_days: int = 120,
+) -> dict:
     """
     Run deduplication and lost→found matching.
-    If new_row_ids is provided, only check those records against existing records.
-    Otherwise, runs a full pass on unmatched active records.
+
+    Modes:
+    - Incremental (new_row_ids given, rematch=False): only check the freshly
+      ingested records. For each new record we compare it against ALL existing
+      candidates in BOTH directions:
+        * a new LOST record is compared against existing FOUND records
+          (lost→found reunification), and
+        * a new FOUND record is compared against existing LOST records
+          (found→lost reunification — the reverse direction, so newly arriving
+          found reports can surface a match for an already-known lost pet),
+      plus dedup in both directions.
+    - Full re-match (rematch=True): scan recent active records
+      (`get_matchable_records`, optionally bounded by `rematch_window_days`) so
+      matches improve as more data arrives (e.g. coordinates filled in by
+      geocoding). Idempotent — `save_match` refreshes scores in place.
     """
     dedup_found = 0
     matches_found = 0
@@ -151,23 +167,34 @@ async def run_matching_pass(new_row_ids: Optional[list[str]] = None) -> dict:
         # Get records to process
         if new_row_ids:
             from sqlalchemy import select
+
             from ..db.models import PetRow
+
             result = await session.execute(
                 select(PetRow).where(PetRow.id.in_(new_row_ids))
             )
             records_to_check = result.scalars().all()
+        elif rematch:
+            from datetime import date as _date
+
+            since = None
+            if rematch_window_days:
+                since = _date.today() - timedelta(days=rematch_window_days)
+            records_to_check = await repo.get_matchable_records(since_date=since)
         else:
+            # Legacy default — only never-matched records. Prefer rematch=True.
             records_to_check = await repo.get_unmatched_records(limit=500)
 
         for record in records_to_check:
-            # Find candidates for both dedup and lost→found
+            # Candidates are the same regardless of which side is "new".
             candidates = await repo.find_match_candidates(
                 _row_to_fingerprint(record),
                 search_radius_miles=15.0,
-                date_window_days=60,
+                date_window_before_days=14,
+                date_window_after_days=90,
             )
 
-            # Deduplication
+            # Deduplication (symmetric — direction doesn't matter)
             dedup_results = deduplicator.find_duplicates(record, candidates)
             for result in dedup_results:
                 saved = await repo.save_match(result)
@@ -178,27 +205,34 @@ async def run_matching_pass(new_row_ids: Optional[list[str]] = None) -> dict:
                         f"signals={list(result.signals_fired.keys())}"
                     )
 
-            # Lost→Found matching
+            # Lost→Found matching — run in BOTH directions so newly ingested
+            # records of either type can surface a reunification:
+            #   * record is LOST  → compare against FOUND/SIGHTING candidates
+            #   * record is FOUND → compare against LOST candidates (reverse)
             if record.record_type == "lost":
                 lf_results = matcher.find_matches(record, candidates)
-                for result in lf_results:
-                    saved = await repo.save_match(result)
-                    if saved:
-                        matches_found += 1
-                        logger.info(
-                            f"LOST→FOUND [{result.confidence}] score={result.score:.2f} "
-                            f"signals={list(result.signals_fired.keys())}"
-                        )
+            elif record.record_type in ("found", "sighting"):
+                lf_results = matcher.find_reverse_matches(record, candidates)
+            else:
+                lf_results = []
+
+            for result in lf_results:
+                saved = await repo.save_match(result)
+                if saved:
+                    matches_found += 1
+                    logger.info(
+                        f"LOST→FOUND [{result.confidence}] score={result.score:.2f} "
+                        f"signals={list(result.signals_fired.keys())}"
+                    )
 
     logger.info(f"Matching pass: {dedup_found} dedup, {matches_found} lost→found")
     return {"dedup_found": dedup_found, "matches_found": matches_found}
 
 
-def _row_to_fingerprint(row) -> "PetRecord":
+def _row_to_fingerprint(row) -> PetRecord:
     """Convert a PetRow to a minimal PetRecord for candidate queries."""
+
     from ..models.pet_record import PetRecord
-    from ..models.enums import RecordType, AnimalType
-    from datetime import date as date_type
     return PetRecord(
         source=row.source,
         source_id=row.source_id,
@@ -223,9 +257,10 @@ async def check_stale_records(stale_hours: int = 48) -> dict:
     seen recently and mark them inactive if they're gone.
     Only runs against IndyLostPetAlert (has direct WP REST endpoint).
     """
-    from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
-    from ..scrapers.base import ScraperConfig
     import os
+
+    from ..scrapers.base import ScraperConfig
+    from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
 
     config = ScraperConfig(
         search_lat=float(os.getenv("SEARCH_LAT", "39.7684")),

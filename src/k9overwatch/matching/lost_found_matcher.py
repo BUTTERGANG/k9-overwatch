@@ -8,9 +8,6 @@ Example: A "lost dog" report (black lab, Indianapolis, March 20) matched against
 """
 from __future__ import annotations
 
-from datetime import date
-from typing import Optional
-
 from ..db.models import PetRow
 from .breed_normalizer import normalize_breed
 from .signals import (
@@ -18,7 +15,6 @@ from .signals import (
     geo_distance_miles,
     score_breed_match,
     score_color_match,
-    score_date_proximity,
     score_description_overlap,
     score_geo_distance,
     score_microchip,
@@ -64,7 +60,35 @@ class LostFoundMatcher:
 
         return sorted(results, key=lambda r: r.score, reverse=True)
 
-    def _compare(self, lost: PetRow, found: PetRow) -> Optional[MatchResult]:
+    def find_reverse_matches(
+        self,
+        found_record: PetRow,
+        candidates: list[PetRow],
+    ) -> list[MatchResult]:
+        """
+        Reverse direction: compare a newly-ingested FOUND/SIGHTING record against a
+        pool of LOST records, to surface reunifications where the lost pet was
+        already in the DB before this found report arrived.
+
+        Delegates to the same `_compare` used by `find_matches` with the roles
+        swapped (the candidate LOST record becomes the "lost" side). The scoring
+        signals are symmetric, so the score is identical regardless of direction.
+        """
+        if found_record.record_type not in ("found", "sighting"):
+            return []
+
+        results = []
+        for candidate in candidates:
+            if candidate.record_type != "lost":
+                continue
+            # _compare expects (lost, found); pass the LOST candidate as lost.
+            result = self._compare(candidate, found_record)
+            if result and result.score >= LOST_FOUND_MIN_SCORE:
+                results.append(result)
+
+        return sorted(results, key=lambda r: r.score, reverse=True)
+
+    def _compare(self, lost: PetRow, found: PetRow) -> MatchResult | None:
         # Hard filters
         if lost.animal_type != found.animal_type:
             return None

@@ -34,11 +34,11 @@ def _config() -> ScraperConfig:
 class ScraperScheduler:
 
     def build(self) -> AsyncIOScheduler:
-        from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
-        from ..scrapers.http.petconnect24 import PetConnect24Scraper
+        from ..scrapers.browser.lostmydoggie import LostMyDoggieScraper
         from ..scrapers.browser.pawboost import PawBoostScraper
         from ..scrapers.browser.petfbi import PetFBIScraper
-        from ..scrapers.browser.lostmydoggie import LostMyDoggieScraper
+        from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
+        from ..scrapers.http.petconnect24 import PetConnect24Scraper
 
         scheduler = AsyncIOScheduler(timezone="UTC")
         cfg = _config()
@@ -97,6 +97,18 @@ class ScraperScheduler:
             run_matching_pass,
             "interval", minutes=30,
             id="matching_pass",
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # ── Full re-match — refreshes scores / surfaces late candidates ───────
+        # Idempotent: save_match upserts in place (unless a human rejected it).
+        # Bounded to the last 120 days so it stays roughly O(records^2)-bounded.
+        scheduler.add_job(
+            run_matching_pass,
+            "cron", hour=4, minute=0,
+            id="rematch_pass",
+            kwargs={"rematch": True, "rematch_window_days": 120},
             max_instances=1,
             coalesce=True,
         )
