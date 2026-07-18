@@ -5,15 +5,25 @@
 {% block extra_head %}
 <!-- Leaflet CSS -->
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<!-- Leaflet.markercluster — groups overlapping pins so the map never feels crowded -->
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <style>
     /* Full height minus navbar and footer */
     #map { height: calc(100vh - 64px - 64px); width: 100%; z-index: 10; cursor: crosshair; }
-    
-    .pin-lost { background-color: #ef4444; border-radius: 50%; width: 16px; height: 16px; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
-    .pin-found { background-color: #22c55e; border-radius: 50%; width: 16px; height: 16px; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
-    .pin-sighting { background-color: #3b82f6; border-radius: 50%; width: 16px; height: 16px; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
-    .pin-adoptable { background-color: #f97316; border-radius: 50%; width: 16px; height: 16px; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
-    
+
+    /* Pins colored by RECORD TYPE (what) with a recency RING (when) */
+    .pin { border-radius: 50%; width: 16px; height: 16px; border: 2px solid white; box-shadow: 0 0 4px rgba(0,0,0,0.5); }
+    .pin-lost { background-color: #ef4444; }
+    .pin-found { background-color: #22c55e; }
+    .pin-sighting { background-color: #3b82f6; }
+    .pin-adoptable { background-color: #f97316; }
+    /* Recency ring: fresh listings glow, older ones fade — read at a glance */
+    .age-week { box-shadow: 0 0 0 3px rgba(37,99,235,0.55), 0 0 5px rgba(0,0,0,0.5); }
+    .age-fortnight { box-shadow: 0 0 0 3px rgba(37,99,235,0.30), 0 0 4px rgba(0,0,0,0.4); }
+    .age-month { opacity: 0.85; }
+    .age-older { opacity: 0.55; }
+
     .popup-thumb { max-width: 100%; height: auto; border-radius: 4px; margin-bottom: 8px; }
     .leaflet-popup-content-wrapper { padding-bottom: 4px; }
 </style>
@@ -63,6 +73,19 @@
     <!-- Map container -->
     <div class="flex-1 relative">
         <div id="map"></div>
+
+        <!-- Recency summary bar — plain-language counts, updates with the map -->
+        <div id="recency-bar" class="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-white/95 backdrop-blur rounded-full shadow-lg border border-gray-100 px-4 py-2 flex items-center gap-3 text-xs sm:text-sm text-gray-700 max-w-[95%] overflow-x-auto">
+            <span class="font-semibold text-gray-500 whitespace-nowrap">Active reports:</span>
+            <span class="whitespace-nowrap" data-bucket="week">— this week</span>
+            <span class="text-gray-300">|</span>
+            <span class="whitespace-nowrap" data-bucket="fortnight">— 1–2 wks</span>
+            <span class="text-gray-300">|</span>
+            <span class="whitespace-nowrap" data-bucket="month">— this month</span>
+            <span class="text-gray-300">|</span>
+            <span class="whitespace-nowrap" data-bucket="older">— older</span>
+        </div>
+
         <button id="search-this-area-btn" class="absolute top-6 left-1/2 transform -translate-x-1/2 z-[1000] bg-white text-indigo-700 px-5 py-2.5 rounded-full shadow-lg font-semibold border border-indigo-100 hover:bg-indigo-50 hover:shadow-xl transition active:scale-95 hidden flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4">
               <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
@@ -76,6 +99,8 @@
 {% block extra_scripts %}
 <!-- Leaflet JS -->
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<!-- Leaflet.markercluster plugin -->
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <!-- Main Map logic -->
 <script src="/static/js/map.js"></script>
 {% endblock %}

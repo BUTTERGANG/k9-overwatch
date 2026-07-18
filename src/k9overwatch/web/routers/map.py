@@ -1,8 +1,15 @@
-from fastapi import APIRouter, Request, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
 
 from k9overwatch.db.models import PetRow
+from k9overwatch.db.repository import (
+    AGE_BUCKET_LABELS,
+    AGE_BUCKETS,
+    PetRepository,
+    age_bucket,
+    effective_age_days,
+)
 from k9overwatch.web.dependencies import get_db
 from k9overwatch.web.schemas.pet import GeoJSONCollection, GeoJSONFeature, PetSummary
 from k9overwatch.web.templates_config import templates
@@ -11,7 +18,24 @@ router = APIRouter()
 
 @router.get("/map")
 async def map_page(request: Request):
-    return templates.TemplateResponse("map.html", {"request": request})
+    return templates.TemplateResponse(request, "map.html", {})
+
+
+@router.get("/api/map/buckets")
+async def get_active_buckets(
+    record_type: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Active-listing counts by recency, with plain-language labels for the UI."""
+    repo = PetRepository(db)
+    counts = await repo.get_active_age_buckets(record_type=record_type)
+    return {
+        "buckets": [
+            {"key": k, "label": AGE_BUCKET_LABELS[k], "count": counts[k]}
+            for k in AGE_BUCKETS
+        ],
+        "total": sum(counts.values()),
+    }
 
 @router.get("/api/map/geojson", response_model=GeoJSONCollection)
 async def get_map_geojson(
@@ -69,7 +93,10 @@ async def get_map_geojson(
             lon=pet.lon,
             thumbnail_url=pet.thumbnail_url,
             active=pet.active,
-            match_count=0  # Could query matching table for this later
+            match_count=0,  # Could query matching table for this later
+            age_bucket=age_bucket(
+                effective_age_days(pet.date_event, pet.days_since_event, pet.scraped_at)
+            ),
         )
         
         feature = GeoJSONFeature(
