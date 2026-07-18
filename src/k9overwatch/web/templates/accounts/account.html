@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}My account | K9-Overwatch{% endblock %}
+{% block content %}
+<div class="max-w-2xl mx-auto px-4 py-10">
+  <div class="bg-white rounded-2xl shadow-sm border border-gray-100 p-8">
+    <h1 class="text-2xl font-bold text-gray-900 mb-1">My account</h1>
+    <p class="text-sm text-gray-500 mb-6">{{ user.email }}</p>
+    {% if saved %}<p class="mb-4 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2">Your alert settings were saved.</p>{% endif %}
+
+    <h2 class="text-lg font-semibold text-gray-800 mb-3 border-b pb-2">Match alerts</h2>
+    <p class="text-sm text-gray-500 mb-4">We'll only contact you about matches you'd want to know about. Default: one daily email, medium confidence or higher — never spam.</p>
+    <form method="post" action="/account/preferences" class="space-y-5">
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">How often</label>
+        <select name="frequency" class="w-full rounded-lg border border-gray-300 px-3 py-2">
+          <option value="off" {% if prefs.frequency == 'off' %}selected{% endif %}>Off — don't email me</option>
+          <option value="digest" {% if prefs.frequency == 'digest' %}selected{% endif %}>Daily summary (recommended)</option>
+          <option value="instant" {% if prefs.frequency == 'instant' %}selected{% endif %}>Right away, as matches appear</option>
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-700 mb-1">Only alert me for</label>
+        <select name="min_confidence" class="w-full rounded-lg border border-gray-300 px-3 py-2">
+          <option value="high" {% if prefs.min_confidence == 'high' %}selected{% endif %}>High confidence only (fewest emails)</option>
+          <option value="medium" {% if prefs.min_confidence == 'medium' %}selected{% endif %}>Medium or higher (recommended)</option>
+          <option value="low" {% if prefs.min_confidence == 'low' %}selected{% endif %}>Anything (most emails)</option>
+        </select>
+      </div>
+      <label class="flex items-center gap-2 cursor-pointer">
+        <input type="checkbox" name="notify_on_found_match" value="true" {% if prefs.notify_on_found_match %}checked{% endif %} class="rounded text-indigo-600">
+        <span class="text-sm text-gray-700">Email me when someone reports finding a pet that may be mine</span>
+      </label>
+      <button type="submit" class="bg-indigo-600 text-white font-semibold rounded-lg px-5 py-2.5 hover:bg-indigo-700">Save settings</button>
+    </form>
+
+    <h2 class="text-lg font-semibold text-gray-800 pt-6 border-t mt-6 mb-3">Your reports</h2>
+    {% if my_reports %}
+    <ul class="space-y-2">
+      {% for r in my_reports %}
+      <li class="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+        <a href="/pets/{{ r.id }}" class="text-sm font-medium text-gray-800 hover:text-indigo-700">
+          {{ r.name or 'Unknown' }} — <span class="capitalize">{{ r.record_type }}</span>
+        </a>
+        <span class="text-xs text-gray-400">{{ r.date_event or 'no date' }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="text-sm text-gray-400 italic">You haven't submitted any reports yet.</p>
+    {% endif %}
+    <a href="/report" class="inline-block mt-4 text-sm font-semibold text-indigo-600 hover:text-indigo-800">+ Submit a new report</a>
+  </div>
+</div>
+{% endblock %}

@@ -73,6 +73,9 @@ class PetRow(Base):
     geocode_source = Column(Text)
     geocode_confidence = Column(Text)
 
+    # Ownership: links a record to the user who submitted it (source == "user")
+    owner_id = Column(String(36), index=True)
+
     # Shelter
     shelter_name = Column(Text)
     shelter_code = Column(Text)
@@ -159,3 +162,40 @@ class GeocodeCache(Base):
     geocode_confidence = Column(Text)
     cached_at = Column(DateTime, default=lambda: datetime.now(UTC))
     hit_count = Column(Integer, default=1)
+
+
+class User(Base):
+    """A person with an account (submits reports, receives match alerts)."""
+    __tablename__ = "users"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    email = Column(Text, nullable=False, unique=True, index=True)
+    display_name = Column(Text)
+    # Scrypt-hashed password (modern, no external dep): "scrypt$<params>$<salt>$<hash>"
+    password_hash = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    is_active = Column(Boolean, default=True, nullable=False)
+
+
+class NotificationPrefs(Base):
+    """Per-user alert preferences. Defaults are low-spam: email digest only."""
+    __tablename__ = "notification_prefs"
+
+    user_id = Column(String(36), primary_key=True)
+
+    # Channel + frequency. "off" = no alerts at all.
+    # "digest" sends at most one email per day (coalesced). "instant" sends per match.
+    email_enabled = Column(Boolean, default=True, nullable=False)
+    frequency = Column(Text, default="digest", nullable=False)  # off | digest | instant
+
+    # Only alert on matches at/above this confidence (never "low" by default => no false hope)
+    min_confidence = Column(Text, default="medium", nullable=False)  # low | medium | high
+
+    # Also alert when someone submits a FOUND/SIGHTING that may match this user's LOST pet
+    notify_on_found_match = Column(Boolean, default=True, nullable=False)
+
+    # Unsubscribe token (opaque) so email footers can disable without login
+    unsubscribe_token = Column(Text, nullable=False, unique=True)
+
+    updated_at = Column(DateTime, default=lambda: datetime.now(UTC))
+

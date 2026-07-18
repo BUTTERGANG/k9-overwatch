@@ -15,7 +15,13 @@ from dotenv import load_dotenv
 
 from ..db.connection import init_db
 from ..scrapers.base import ScraperConfig
-from .jobs import check_stale_records, run_matching_pass, run_scraper
+from .jobs import (
+    check_stale_records,
+    expire_stale_listings,
+    flush_digest_notifications,
+    run_matching_pass,
+    run_scraper,
+)
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -118,6 +124,26 @@ class ScraperScheduler:
             check_stale_records,
             "interval", hours=6,
             id="staleness_check",
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # ── Age-based expiry — source-agnostic fallback so resolved/found pets
+        #    eventually leave the map (the per-source check only covers Indy). ──
+        scheduler.add_job(
+            expire_stale_listings,
+            "interval", hours=24,
+            id="expire_stale_listings",
+            kwargs={"max_age_days": 120},
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # ── Match digest — coalesced daily email (respects per-user prefs) ────
+        scheduler.add_job(
+            flush_digest_notifications,
+            "cron", hour=19, minute=0,
+            id="match_digest",
             max_instances=1,
             coalesce=True,
         )

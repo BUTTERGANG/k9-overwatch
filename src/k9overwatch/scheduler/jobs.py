@@ -224,6 +224,8 @@ async def run_matching_pass(
                         f"LOST→FOUND [{result.confidence}] score={result.score:.2f} "
                         f"signals={list(result.signals_fired.keys())}"
                     )
+                    # Notify the owner of the lost pet (user-submitted) if prefs allow.
+                    await _maybe_notify(session, record, result, candidates)
 
     logger.info(f"Matching pass: {dedup_found} dedup, {matches_found} lost→found")
     return {"dedup_found": dedup_found, "matches_found": matches_found}
@@ -280,3 +282,46 @@ async def check_stale_records(stale_hours: int = 48) -> dict:
 
     logger.info(f"Staleness check: {deactivated} records deactivated")
     return {"deactivated": deactivated}
+
+
+async def expire_stale_listings(max_age_days: int = 120) -> dict:
+    """
+    Source-agnostic fallback so resolved/found pets eventually leave the map.
+
+    The per-source check_active() path (above) only covers IndyLostPetAlert.
+    This expires any active listing whose event date is older than `max_age_days`
+    and that has no live match — kept independent of a source's own verification.
+    """
+    async with get_session() as session:
+        repo = PetRepository(session)
+        count = await repo.deactivate_stale_by_age(max_age_days=max_age_days)
+    logger.info(f"Age-based expiry: {count} records deactivated")
+    return {"deactivated": count}
+
+
+async def _maybe_notify(session, record, result, candidates) -> None:
+    """If this new match involves a user-submitted lost pet, notify its owner."""
+    from sqlalchemy import select
+
+    from k9overwatch.db.models import PetRow as _PetRow
+    from k9overwatch.notifications import MatchEvent, notify_new_match
+
+    # Identify the other pet in the pair.
+    other_id = result.pet_b_id if result.pet_a_id == str(record.id) else result.pet_b_id
+    other = next((c for c in candidates if str(c.id) == other_id), None)
+    if other is None:
+        stmt = select(_PetRow).where(_PetRow.id == other_id)
+        other = (await session.execute(stmt)).scalar_one_or_none()
+    if other is None:
+        return
+    # `record` is the lost side in lost_found matching.
+    await notify_new_match(session, MatchEvent(lost_pet=record, other_pet=other, match=result))
+
+
+async def flush_digest_notifications() -> dict:
+    """Scheduler entry point: send the per-day match digest emails."""
+    from k9overwatch.notifications import flush_digest
+
+    sent = await flush_digest()
+    logger.info(f"Match digest: {sent} email(s) sent")
+    return {"sent": sent}

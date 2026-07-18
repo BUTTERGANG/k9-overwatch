@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, Query, Request
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from k9overwatch.db.models import PetRow
@@ -58,11 +58,17 @@ async def get_map_geojson(
     
     if animal_type:
         stmt = stmt.where(PetRow.animal_type.in_(animal_type))
-        
+
     from datetime import datetime, timedelta
+
     if days:
-        cutoff = datetime.now() - timedelta(days=days)
-        stmt = stmt.where(PetRow.date_event >= cutoff.date())
+        # Include records whose effective age is within `days`. Records with no
+        # parsed date_event are kept (they fall back to scrape age) so a listing
+        # is never hidden just because its date didn't parse — matching bucket logic.
+        cutoff = (datetime.now() - timedelta(days=days)).date()
+        stmt = stmt.where(
+            or_(PetRow.date_event >= cutoff, PetRow.date_event.is_(None))
+        )
 
     # limit to roughly 500 features so browser doesn't choke
     stmt = stmt.order_by(PetRow.date_event.desc()).limit(500)
@@ -71,10 +77,12 @@ async def get_map_geojson(
     pets = result.scalars().all()
     
     features = []
+    # One bulk query for match counts (instead of N per-pin lookups).
+    match_counts = await PetRepository(db).get_match_counts([str(p.id) for p in pets])
     for pet in pets:
         if pet.lat is None or pet.lon is None:
             continue
-            
+
         summary = PetSummary(
             id=str(pet.id),
             source=pet.source,
@@ -93,16 +101,16 @@ async def get_map_geojson(
             lon=pet.lon,
             thumbnail_url=pet.thumbnail_url,
             active=pet.active,
-            match_count=0,  # Could query matching table for this later
+            match_count=match_counts.get(str(pet.id), 0),
             age_bucket=age_bucket(
                 effective_age_days(pet.date_event, pet.days_since_event, pet.scraped_at)
             ),
         )
-        
+
         feature = GeoJSONFeature(
             geometry={"type": "Point", "coordinates": [pet.lon, pet.lat]},
             properties=summary
         )
         features.append(feature)
-        
+
     return GeoJSONCollection(features=features, total=len(features))

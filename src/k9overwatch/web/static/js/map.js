@@ -87,7 +87,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 onEachFeature: (feature, layer) => {
                     const p = feature.properties;
                     const imgHtml = p.thumbnail_url
-                        ? `<img src="${p.thumbnail_url}" class="popup-thumb object-cover w-full h-32 rounded bg-gray-100">`
+                        ? `<img src="/img?url=${encodeURIComponent(p.thumbnail_url)}" class="popup-thumb object-cover w-full h-32 rounded bg-gray-100">`
                         : `<div class="w-full h-32 bg-gray-100 flex items-center justify-center rounded mb-2 text-gray-400 border border-gray-200"><svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-8 h-8"><path stroke-linecap="round" stroke-linejoin="round" d="M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z" /><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0zM18.75 10.5h.008v.008h-.008V10.5z" /></svg></div>`;
 
                     const badgeColors = {
@@ -103,6 +103,10 @@ document.addEventListener("DOMContentLoaded", () => {
                         ? `<a href="${lensUrl(p.thumbnail_url)}" target="_blank" rel="noopener" class="mt-1 mb-1 text-indigo-600 hover:text-indigo-800 hover:underline font-medium flex items-center justify-center gap-1 text-xs">🔍 See similar photos</a>`
                         : '';
 
+                    const matchLine = p.match_count > 0
+                        ? `<p class="text-xs text-indigo-700 font-semibold mb-2">🔗 ${p.match_count} possible match${p.match_count > 1 ? 'es' : ''}</p>`
+                        : '';
+
                     layer.bindPopup(`
                         <div class="w-48 text-sm font-sans">
                             ${imgHtml}
@@ -110,6 +114,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             <p class="text-gray-600 mb-1 capitalize">${p.breed || 'Unknown breed'} ${p.animal_type ? '- ' + p.animal_type : ''}</p>
                             <span class="inline-block px-2 py-0.5 ${badgeClass} text-xs font-semibold rounded-full uppercase tracking-wider mb-2">${p.record_type}</span>
                             <p class="text-xs text-gray-500 mb-2 font-mono">${p.date_event || 'Unknown date'}</p>
+                            ${matchLine}
                             ${lensHtml}
                             <a href="/pets/${p.id}" class="text-indigo-600 hover:text-indigo-800 hover:underline font-medium block text-center border-t border-gray-100 pt-2 transition">View details &rarr;</a>
                         </div>

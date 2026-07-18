@@ -23,7 +23,16 @@
                     <a href="/map" class="hover:text-indigo-200">Map</a>
                     <a href="/pets" class="hover:text-indigo-200">Pets</a>
                     <a href="/matches" class="hover:text-indigo-200">Matches</a>
+                    <a href="/report" class="hover:text-indigo-200">Report</a>
                     <a href="/admin" class="hover:text-indigo-200">Admin</a>
+                    {% if is_logged_in %}
+                    <span class="text-indigo-200 text-sm hidden sm:inline">Hi, {{ current_user_name }}</span>
+                    <a href="/account" class="hover:text-indigo-200">My Account</a>
+                    <a href="/logout" class="hover:text-indigo-200">Log out</a>
+                    {% else %}
+                    <a href="/login" class="hover:text-indigo-200">Log in</a>
+                    <a href="/register" class="hover:text-indigo-200">Sign up</a>
+                    {% endif %}
                 </div>
             </div>
         </div>

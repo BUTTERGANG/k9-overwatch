@@ -188,6 +188,12 @@ Key `.env` settings:
 | `SEARCH_ZIP` | `46201` | ZIP code for sources that require it |
 | `GEOCODE_PROVIDER` | `nominatim` | `nominatim` (free) or `google` |
 | `GOOGLE_MAPS_API_KEY` | — | Required only when `GEOCODE_PROVIDER=google` |
+| `SMTP_HOST` | — | SMTP server for match emails. If unset, emails are logged (no-op) so dev is never blocked |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` | — | SMTP username |
+| `SMTP_PASSWORD` | — | SMTP password |
+| `SMTP_FROM` | `k9-overwatch@localhost` | From address for match emails |
+| `APP_BASE_URL` | `http://localhost:8000` | Public base URL used for unsubscribe / detail links in emails |
 
 ### Test a Single Scraper
 
@@ -366,11 +372,36 @@ Geocoding cost:
 - [x] Pet detail pages with source attribution
 - [x] Match alert display (HTMX partials on pet detail)
 - [x] Admin dashboard (scraper health, match stats)
-- [ ] Image proxy endpoint (resize + cache for large sources like IndyLostPetAlert)
+- [x] Image proxy endpoint (`/img?url=`) — serves remote listing/owner photos
+      through our own origin so browsers never block them; blocks non-http(s)
+      URLs and caches results on disk.
+
+### Phase 3b — Accounts & Owner Reports ✅ Built
+- [x] **User accounts** — register / log in / log out (signed-cookie sessions,
+      scrypt password hashing, no external dependency). Nav shows Sign up /
+      Log in when anonymous and My Account / Log out once signed in.
+- [x] **Owner-submitted reports** — `/report` lets a logged-in person post a
+      lost/found/sighting with photo upload (stored in `data/uploads/`) and
+      contact info. Submitted reports are geocoded from the entered location and
+      appear on the map as `source="user"` listings.
+- [x] **Contact mechanism** — contact info (name/email/phone) is captured on
+      reports and **revealed only to logged-in users** on the pet detail page
+      (anonymous viewers see a "Log in to view" prompt). This protects submitters
+      from scrapers while still making reunification possible.
+- [x] **Opt-in match notifications** (non-spammy by design):
+  - Per-user `NotificationPrefs`: frequency (`off` / `daily` / `immediate`),
+    minimum confidence (`high` / `medium` / `any`), and an opt-out checkbox.
+  - Defaults: **daily digest, medium+ confidence, never spam.**
+  - Only user-submitted LOST pets trigger an email; only when a match clears the
+    user's threshold; `immediate` emails are coalesced into the next daily digest
+    so a person is never blasted. Every email carries a one-click unsubscribe link.
+  - Email is sent via SMTP only if `SMTP_HOST` is configured; otherwise it logs
+    (safe no-op) so the dev environment is never blocked.
+  - Digest job runs daily at 19:00 via the scheduler.
 
 ### Phase 4 — Advanced Features
-- [ ] User accounts + saved searches
-- [ ] Email/push alerts for new matches
+- [x] User accounts + saved searches
+- [x] Email/push alerts for new matches (opt-in, non-spammy — see Phase 3b)
 - [ ] **Visual similarity matching** — generate CLIP/MobileNet embedding vectors per image,
       store in DB, use cosine similarity as an additional matching signal to catch
       same-dog listings with mismatched text descriptions (e.g. "brown mutt" vs "tan terrier")

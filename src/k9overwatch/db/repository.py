@@ -19,10 +19,14 @@ class PetRepository:
 
     # ── Upsert ───────────────────────────────────────────────────────────────
 
-    async def upsert(self, record: PetRecord) -> tuple[PetRow, bool]:
+    async def upsert(
+        self, record: PetRecord, owner_id: str | None = None
+    ) -> tuple[PetRow, bool]:
         """
         INSERT or UPDATE a pet record.
         Returns (row, created) where created=True means new record.
+
+        owner_id links a record to the submitting user (source == "user").
         """
         # Check for existing row
         stmt = select(PetRow).where(
@@ -87,6 +91,7 @@ class PetRepository:
                 scraped_at=now,
                 last_checked_at=now,
                 raw=record.raw,
+                owner_id=owner_id,
             )
             self.session.add(row)
             await self.session.flush()
@@ -102,6 +107,9 @@ class PetRepository:
             existing.photos = record.photos or existing.photos
             existing.thumbnail_url = record.thumbnail_url or existing.thumbnail_url
             existing.last_checked_at = now
+            # Preserve ownership: only set owner_id on first creation, never clobber.
+            if owner_id and not existing.owner_id:
+                existing.owner_id = owner_id
             # Only update geo if we have new data
             if record.lat is not None:
                 existing.lat = record.lat
@@ -371,7 +379,51 @@ class PetRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
-    # ── Match storage ─────────────────────────────────────────────────────────
+    async def deactivate_stale_by_age(
+        self, max_age_days: int = 120, exclude_sources: list[str] | None = None
+    ) -> int:
+        """
+        Mark long-expired listings inactive across ALL sources.
+
+        The original staleness check only verified records against IndyLostPetAlert's
+        live endpoint; the other four sources had no expiry path, so resolved/found
+        pets stayed on the map forever. This is a safe, source-agnostic fallback: any
+        active record whose event date is older than `max_age_days` (and which has no
+        active match) is deactivated so the map and match pool stay fresh.
+
+        `exclude_sources` lets a source opt out (e.g. if it has its own verification).
+        """
+        from .models import PetMatch
+
+        cutoff = (datetime.now(UTC) - timedelta(days=max_age_days)).date()
+        filters = [PetRow.active == True, PetRow.date_event < cutoff]
+        if exclude_sources:
+            filters.append(PetRow.source.not_in(exclude_sources))
+        stmt = select(PetRow).where(and_(*filters))
+        rows = list((await self.session.execute(stmt)).scalars().all())
+        if not rows:
+            return 0
+
+        # Don't expire a record that currently has a live (reviewed, un-rejected) match.
+        active_match_ids = set()
+        match_stmt = select(PetMatch).where(
+            PetMatch.pet_a_id.in_([r.id for r in rows])
+            | PetMatch.pet_b_id.in_([r.id for r in rows])
+        )
+        for m in (await self.session.execute(match_stmt)).scalars().all():
+            if m.confirmed is not False:
+                active_match_ids.add(m.pet_a_id)
+                active_match_ids.add(m.pet_b_id)
+
+        count = 0
+        for r in rows:
+            if r.id in active_match_ids:
+                continue
+            r.active = False
+            r.last_checked_at = datetime.now(UTC)
+            count += 1
+        await self.session.flush()
+        return count
 
     async def save_match(self, match) -> bool:
         """
@@ -429,6 +481,37 @@ class PetRepository:
         ).order_by(PetMatch.score.desc())
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
+
+    async def get_match_counts(self, pet_ids: list[str]) -> dict[str, int]:
+        """Return {pet_id: number_of_matches} for the given pets, in one query."""
+        if not pet_ids:
+            return {}
+        from sqlalchemy import func
+
+        stmt = (
+            select(
+                PetMatch.pet_a_id,
+                func.count().label("n"),
+            )
+            .where(PetMatch.pet_a_id.in_(pet_ids))
+            .group_by(PetMatch.pet_a_id)
+        )
+        a_counts = {
+            row.pet_a_id: row.n
+            for row in (await self.session.execute(stmt)).all()
+        }
+        stmt_b = (
+            select(PetMatch.pet_b_id, func.count().label("n"))
+            .where(PetMatch.pet_b_id.in_(pet_ids))
+            .group_by(PetMatch.pet_b_id)
+        )
+        b_counts = {
+            row.pet_b_id: row.n
+            for row in (await self.session.execute(stmt_b)).all()
+        }
+        return {
+            pid: a_counts.get(pid, 0) + b_counts.get(pid, 0) for pid in pet_ids
+        }
 
     # ── Active-listing age buckets ─────────────────────────────────────────────
 
@@ -497,4 +580,60 @@ def age_bucket(days: int) -> str:
     if days <= 30:
         return "month"
     return "older"
+
+
+# ── User accounts & notification prefs ──────────────────────────────────────────
+
+from .models import NotificationPrefs, User  # noqa: E402  (imported late to avoid cycle)
+
+
+class UserRepository:
+    """User accounts, registration, and notification preferences."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def get_by_email(self, email: str) -> User | None:
+        stmt = select(User).where(User.email == email.strip().lower())
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def get_by_id(self, user_id: str) -> User | None:
+        stmt = select(User).where(User.id == user_id)
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def create(self, email: str, password: str, display_name: str | None = None) -> User:
+        from k9overwatch.web.auth import hash_password, new_unsubscribe_token
+
+        user = User(
+            email=email.strip().lower(),
+            display_name=display_name or email.split("@")[0],
+            password_hash=hash_password(password),
+        )
+        self.session.add(user)
+        await self.session.flush()
+        # Create default (low-spam) notification prefs alongside the user.
+        self.session.add(
+            NotificationPrefs(user_id=user.id, unsubscribe_token=new_unsubscribe_token())
+        )
+        await self.session.flush()
+        return user
+
+    async def get_prefs(self, user_id: str) -> NotificationPrefs | None:
+        stmt = select(NotificationPrefs).where(NotificationPrefs.user_id == user_id)
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def save_prefs(self, user_id: str, **fields) -> NotificationPrefs:
+        prefs = await self.get_prefs(user_id)
+        if prefs is None:
+            from k9overwatch.web.auth import new_unsubscribe_token
+
+            prefs = NotificationPrefs(
+                user_id=user_id, unsubscribe_token=new_unsubscribe_token()
+            )
+            self.session.add(prefs)
+        for key, value in fields.items():
+            if hasattr(prefs, key):
+                setattr(prefs, key, value)
+        await self.session.flush()
+        return prefs
 

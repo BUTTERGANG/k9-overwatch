@@ -76,7 +76,33 @@ async def test_geojson_includes_age_bucket(client, db_session):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("path", ["/map", "/pets", "/pets/results", "/matches", "/admin"])
+async def test_geojson_keeps_records_without_date_event(client, db_session):
+    """A listing with no parsed date_event must still appear on the map.
+
+    The live scrapers often leave date_event null; dropping nulls would hide
+    real pets from the map entirely (this was a regression we fixed).
+    """
+    repo = PetRepository(db_session)
+    await repo.upsert(make_indy_record(
+        source_id="nodate", record_type=RecordType.LOST,
+        date_event=None,  # no parsed date
+        lat=39.77, lon=-86.15,
+    ))
+    await db_session.flush()
+
+    async with client as c:
+        resp = await c.get("/api/map/geojson", params={
+            "sw_lat": 39.0, "sw_lng": -87.0, "ne_lat": 40.5, "ne_lng": -85.0,
+            "days": 30,  # tight window — a null-date record must still show
+        })
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 1  # null-date record is NOT dropped from the map
+    assert data["features"][0]["properties"]["age_bucket"] in ("week", "fortnight", "month", "older")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("path", ["/map", "/pets", "/pets/results", "/matches", "/admin", "/login", "/register", "/report", "/account"])
 async def test_html_pages_render(client, db_session, path):
     """
     Guard against broken TemplateResponse signatures / template syntax:
@@ -93,8 +119,10 @@ async def test_html_pages_render(client, db_session, path):
 
     async with client as c:
         resp = await c.get(path)
-    assert resp.status_code == 200, f"{path} returned {resp.status_code}"
-    assert "text/html" in resp.headers["content-type"]
+    # Auth-gated pages legitimately redirect to /login when anonymous.
+    assert resp.status_code in (200, 302, 303), f"{path} returned {resp.status_code}"
+    if resp.status_code == 200:
+        assert "text/html" in resp.headers["content-type"]
 
 
 @pytest.mark.asyncio
