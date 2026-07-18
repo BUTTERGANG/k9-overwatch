@@ -2,23 +2,22 @@
 from __future__ import annotations
 
 import os
-from typing import Optional
 
 import aiohttp
 
-from ..geocoder import BaseGeocodeProvider, GeocodeResult
 from ...models.enums import GeocodeConfidence, GeocodeSource
+from ..geocoder import BaseGeocodeProvider, GeocodeResult
 
 
 class GoogleMapsProvider(BaseGeocodeProvider):
     BASE_URL = "https://maps.googleapis.com/maps/api/geocode/json"
 
-    def __init__(self, api_key: Optional[str] = None):
+    def __init__(self, api_key: str | None = None):
         self.api_key = api_key or os.getenv("GOOGLE_MAPS_API_KEY", "")
         if not self.api_key:
             raise ValueError("GOOGLE_MAPS_API_KEY environment variable not set")
 
-    async def geocode(self, address: str) -> Optional[GeocodeResult]:
+    async def geocode(self, address: str) -> GeocodeResult | None:
         params = {"address": address, "key": self.api_key, "region": "us"}
 
         try:

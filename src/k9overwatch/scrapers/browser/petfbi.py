@@ -15,13 +15,12 @@ from __future__ import annotations
 
 import asyncio
 import json
-from datetime import datetime, timedelta, timezone
-from typing import AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from datetime import UTC, datetime, timedelta
 
-from .base_browser import BrowserBaseScraper
 from ...models.pet_record import PetRecord
 from ...normalizers.petfbi import PetFBINormalizer
-
+from .base_browser import BrowserBaseScraper
 
 GRAPHQL_QUERY = """
 query searchReports($input: ReportSearch!) {
@@ -97,7 +96,7 @@ class PetFBIScraper(BrowserBaseScraper):
             "Object.defineProperty(navigator, 'webdriver', {get: () => undefined})"
         )
 
-    async def _scrape_with_page(self, page, after: Optional[datetime]) -> AsyncIterator[PetRecord]:
+    async def _scrape_with_page(self, page, after: datetime | None) -> AsyncIterator[PetRecord]:
         # Phase 1: UI flow to establish WAF session for api.petfbi.org
         ok = await self._establish_waf_session(page)
         if not ok:
@@ -152,12 +151,12 @@ class PetFBIScraper(BrowserBaseScraper):
         try:
             await asyncio.wait_for(session_ready.wait(), timeout=20)
             return True
-        except asyncio.TimeoutError:
+        except TimeoutError:
             self._record_error(RuntimeError("Timed out waiting for WAF session"), "PetFBI WAF")
             return False
 
     async def _graphql_scrape(
-        self, page, after: Optional[datetime]
+        self, page, after: datetime | None
     ) -> AsyncIterator[PetRecord]:
         """
         Paginate through PetFBI GraphQL results using AwsWafIntegration.fetch()
@@ -175,7 +174,7 @@ class PetFBIScraper(BrowserBaseScraper):
             if after:
                 start_dt = after
             else:
-                start_dt = datetime.now(timezone.utc) - timedelta(days=FULL_SCRAPE_LOOKBACK_DAYS)
+                start_dt = datetime.now(UTC) - timedelta(days=FULL_SCRAPE_LOOKBACK_DAYS)
 
             variables: dict = {
                 "input": {
@@ -184,7 +183,7 @@ class PetFBIScraper(BrowserBaseScraper):
                     "distance": self.config.search_radius_miles,
                     "report_type": [REPORT_TYPE_LOST, REPORT_TYPE_FOUND],
                     "start_date": start_dt.strftime("%Y-%m-%dT%H:%M:%S.000Z"),
-                    "end_date": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
+                    "end_date": datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z"),
                 }
             }
             if next_page_token:

@@ -2,11 +2,19 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime
+from datetime import UTC, datetime
 
 from sqlalchemy import (
-    JSON, Boolean, Column, Date, DateTime, Float, Integer,
-    String, Text, UniqueConstraint,
+    JSON,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase
 
@@ -88,8 +96,8 @@ class PetRow(Base):
     alert_number = Column(Text)
 
     # Audit
-    scraped_at = Column(DateTime, default=datetime.utcnow)
-    last_checked_at = Column(DateTime, default=datetime.utcnow)
+    scraped_at = Column(DateTime, default=lambda: datetime.now(UTC))
+    last_checked_at = Column(DateTime, default=lambda: datetime.now(UTC))
 
     # Raw payload
     raw = Column(JSON)
@@ -117,7 +125,7 @@ class PetMatch(Base):
     confidence = Column(Text, nullable=False)       # "low" | "medium" | "high"
     signals_fired = Column(JSON)                    # dict of signal_name → weight
 
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(UTC))
     reviewed = Column(Boolean, default=False)       # human-reviewed?
     confirmed = Column(Boolean)                     # human confirmed/rejected?
 
@@ -149,5 +157,5 @@ class GeocodeCache(Base):
     lon = Column(Float, nullable=False)
     geocode_source = Column(Text)
     geocode_confidence = Column(Text)
-    cached_at = Column(DateTime, default=datetime.utcnow)
+    cached_at = Column(DateTime, default=lambda: datetime.now(UTC))
     hit_count = Column(Integer, default=1)

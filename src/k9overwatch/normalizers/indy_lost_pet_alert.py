@@ -4,9 +4,8 @@ from __future__ import annotations
 import re
 from datetime import date, datetime
 from html import unescape
-from typing import Optional
 
-from ..models.enums import AnimalType, Gender, GeocodeConfidence, GeocodeSource, RecordType, Size
+from ..models.enums import AnimalType, Gender, RecordType, Size
 from ..models.pet_record import PetRecord
 
 # ── Category ID maps ──────────────────────────────────────────────────────────
@@ -90,7 +89,7 @@ def _strip_html(html: str) -> str:
     return text.strip()
 
 
-def _extract(pattern: str, text: str, group: int = 1) -> Optional[str]:
+def _extract(pattern: str, text: str, group: int = 1) -> str | None:
     """Return the first match of pattern in text, or None."""
     m = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
     if m:
@@ -98,7 +97,7 @@ def _extract(pattern: str, text: str, group: int = 1) -> Optional[str]:
     return None
 
 
-def _parse_date(date_str: Optional[str]) -> Optional[date]:
+def _parse_date(date_str: str | None) -> date | None:
     if not date_str:
         return None
     for fmt in ("%m/%d/%Y", "%Y-%m-%d", "%m-%d-%Y"):
@@ -169,19 +168,19 @@ class IndyNormalizer:
 
     # ── Private helpers ───────────────────────────────────────────────────────
 
-    def _parse_record_type(self, categories: list[int]) -> Optional[RecordType]:
+    def _parse_record_type(self, categories: list[int]) -> RecordType | None:
         for cat_id in (19, 20, 21):
             if cat_id in categories:
                 return RECORD_TYPE_MAP[cat_id]
         return None
 
-    def _parse_animal_type(self, categories: list[int]) -> Optional[AnimalType]:
+    def _parse_animal_type(self, categories: list[int]) -> AnimalType | None:
         for cat_id in categories:
             if cat_id in ANIMAL_TYPE_MAP:
                 return ANIMAL_TYPE_MAP[cat_id]
         return None
 
-    def _parse_size(self, categories: list[int], text: str) -> tuple[Optional[Size], Optional[str]]:
+    def _parse_size(self, categories: list[int], text: str) -> tuple[Size | None, str | None]:
         # First try category slug
         # (We'd need category objects with slugs; for now use text parsing)
         size_match = _extract(
@@ -195,7 +194,7 @@ class IndyNormalizer:
                     return val, size_match.strip()
         return None, None
 
-    def _parse_colors(self, tags: list[int], text: str) -> tuple[Optional[str], Optional[str]]:
+    def _parse_colors(self, tags: list[int], text: str) -> tuple[str | None, str | None]:
         colors = [COLOR_TAG_MAP[t] for t in tags if t in COLOR_TAG_MAP]
         color_from_text = _extract(r"Color\s+of\s+Pet\s*:\s*(.+?)(?=Date\s+Pet|$)", text)
         if not colors and color_from_text:
@@ -203,7 +202,7 @@ class IndyNormalizer:
             colors = [c for c in color_parts if c]
         return (colors[0] if colors else None), (colors[1] if len(colors) > 1 else None)
 
-    def _parse_gender(self, text: str) -> Optional[Gender]:
+    def _parse_gender(self, text: str) -> Gender | None:
         g = _extract(r"Gender\s*:\s*(\w+)", text)
         if not g:
             return None
@@ -214,7 +213,7 @@ class IndyNormalizer:
             return Gender.FEMALE
         return Gender.UNKNOWN
 
-    def _parse_date_event(self, text: str, record_type: Optional[RecordType]) -> Optional[date]:
+    def _parse_date_event(self, text: str, record_type: RecordType | None) -> date | None:
         patterns = [
             r"Date\s+Pet\s+Went\s+Missing\s*:\s*([\d/]+)",
             r"Date\s+Pet\s+Was\s+Found\s*:\s*([\d/]+)",
@@ -226,7 +225,7 @@ class IndyNormalizer:
                 return _parse_date(val)
         return None
 
-    def _parse_location(self, text: str) -> tuple[Optional[str], Optional[str], Optional[str]]:
+    def _parse_location(self, text: str) -> tuple[str | None, str | None, str | None]:
         loc = _extract(r"Location\s+Information\s*:\s*(.+?)(?=Contact\s+Information|$)", text)
         if not loc:
             return None, None, None
@@ -244,7 +243,7 @@ class IndyNormalizer:
 
         return loc, city, county
 
-    def _extract_description(self, text: str) -> Optional[str]:
+    def _extract_description(self, text: str) -> str | None:
         """Extract free-text description after the structured fields section."""
         # The description follows the last labeled field (usually Gender:)
         m = re.search(r"Gender\s*:\s*\w+\s*(.+)", text, re.IGNORECASE | re.DOTALL)

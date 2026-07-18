@@ -1,23 +1,19 @@
 """Tests for the geocoding service: providers, cache, and ZIP fallback."""
 from __future__ import annotations
 
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
-import pytest_asyncio
 
 from k9overwatch.geocoding.geocoder import (
-    GeocodingService,
-    GeocodeResult,
-    _normalize_address,
     _ZIP_CENTROIDS,
+    GeocodeResult,
+    GeocodingService,
+    _normalize_address,
 )
 from k9overwatch.models.enums import GeocodeConfidence, GeocodeSource
-from k9overwatch.models.pet_record import PetRecord
 
 from .conftest import make_indy_record, make_petfbi_record
-
 
 # ── _normalize_address ────────────────────────────────────────────────────────
 

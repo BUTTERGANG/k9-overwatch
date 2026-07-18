@@ -1,13 +1,16 @@
 from __future__ import annotations
 
-from datetime import date, datetime
-from typing import Optional
-from uuid import uuid4
+from datetime import UTC, date, datetime
 
 from pydantic import BaseModel, Field
 
 from .enums import (
-    AnimalType, Gender, GeocodeConfidence, GeocodeSource, RecordType, Size,
+    AnimalType,
+    Gender,
+    GeocodeConfidence,
+    GeocodeSource,
+    RecordType,
+    Size,
 )
 
 
@@ -20,74 +23,74 @@ class PetRecord(BaseModel):
     # ── Identity ────────────────────────────────────────────────────────────
     source: str                         # e.g. "indylostpetalert"
     source_id: str                      # unique ID within the source
-    source_url: Optional[str] = None    # link back to original listing
+    source_url: str | None = None    # link back to original listing
     record_type: RecordType
 
     # ── Animal characteristics ───────────────────────────────────────────────
-    animal_type: Optional[AnimalType] = None
-    name: Optional[str] = None
-    breed: Optional[str] = None
-    breed_secondary: Optional[str] = None
-    color_primary: Optional[str] = None
-    color_secondary: Optional[str] = None
-    gender: Optional[Gender] = None
-    age: Optional[str] = None
-    size: Optional[Size] = None
-    size_lbs: Optional[str] = None
-    microchipped: Optional[bool] = None
-    microchip_number: Optional[str] = None
-    distinctive_features: Optional[str] = None
+    animal_type: AnimalType | None = None
+    name: str | None = None
+    breed: str | None = None
+    breed_secondary: str | None = None
+    color_primary: str | None = None
+    color_secondary: str | None = None
+    gender: Gender | None = None
+    age: str | None = None
+    size: Size | None = None
+    size_lbs: str | None = None
+    microchipped: bool | None = None
+    microchip_number: str | None = None
+    distinctive_features: str | None = None
 
     # ── Status & timing ──────────────────────────────────────────────────────
-    status: Optional[str] = None
-    date_event: Optional[date] = None       # date lost/found/seen
-    time_event: Optional[str] = None
-    days_since_event: Optional[int] = None
-    date_posted: Optional[datetime] = None  # when posted to source
-    date_updated: Optional[datetime] = None
+    status: str | None = None
+    date_event: date | None = None       # date lost/found/seen
+    time_event: str | None = None
+    days_since_event: int | None = None
+    date_posted: datetime | None = None  # when posted to source
+    date_updated: datetime | None = None
     active: bool = True
 
     # ── Location ─────────────────────────────────────────────────────────────
-    location_text: Optional[str] = None     # raw address as given
-    neighborhood: Optional[str] = None
-    city: Optional[str] = None
-    county: Optional[str] = None
-    state: Optional[str] = None             # 2-letter code
-    zip: Optional[str] = None
+    location_text: str | None = None     # raw address as given
+    neighborhood: str | None = None
+    city: str | None = None
+    county: str | None = None
+    state: str | None = None             # 2-letter code
+    zip: str | None = None
     country: str = "US"
-    lat: Optional[float] = None
-    lon: Optional[float] = None
-    geocode_source: Optional[GeocodeSource] = None
-    geocode_confidence: Optional[GeocodeConfidence] = None
+    lat: float | None = None
+    lon: float | None = None
+    geocode_source: GeocodeSource | None = None
+    geocode_confidence: GeocodeConfidence | None = None
 
     # ── Shelter ───────────────────────────────────────────────────────────────
-    shelter_name: Optional[str] = None
-    shelter_code: Optional[str] = None
-    shelter_id: Optional[str] = None
+    shelter_name: str | None = None
+    shelter_code: str | None = None
+    shelter_id: str | None = None
 
     # ── Contact ───────────────────────────────────────────────────────────────
-    contact_phone: Optional[str] = None
-    contact_email: Optional[str] = None
-    contact_name: Optional[str] = None
-    contact_method: Optional[str] = None
+    contact_phone: str | None = None
+    contact_email: str | None = None
+    contact_name: str | None = None
+    contact_method: str | None = None
 
     # ── Content ───────────────────────────────────────────────────────────────
-    description: Optional[str] = None
-    owner_message: Optional[str] = None
+    description: str | None = None
+    owner_message: str | None = None
     photos: list[str] = Field(default_factory=list)
-    thumbnail_url: Optional[str] = None
+    thumbnail_url: str | None = None
 
     # ── Social / cross-references ─────────────────────────────────────────────
-    facebook_post_url: Optional[str] = None
-    nextdoor_url: Optional[str] = None
-    alert_number: Optional[str] = None
+    facebook_post_url: str | None = None
+    nextdoor_url: str | None = None
+    alert_number: str | None = None
 
     # ── Audit ─────────────────────────────────────────────────────────────────
-    scraped_at: datetime = Field(default_factory=datetime.utcnow)
-    last_checked_at: datetime = Field(default_factory=datetime.utcnow)
+    scraped_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
+    last_checked_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
     # ── Raw source payload (stored for re-parsing) ────────────────────────────
-    raw: Optional[dict] = None
+    raw: dict | None = None
 
     model_config = {"use_enum_values": True}
 
@@ -99,7 +102,7 @@ class PetRecord(BaseModel):
         """True if the record has address text but no coordinates yet."""
         return self.lat is None and bool(self.location_text or self.zip)
 
-    def geocoding_address(self) -> Optional[str]:
+    def geocoding_address(self) -> str | None:
         """Best address string to pass to a geocoder."""
         if self.location_text:
             parts = [self.location_text]

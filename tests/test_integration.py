@@ -8,24 +8,27 @@ Validates that each layer hands off correctly to the next.
 """
 from __future__ import annotations
 
-from datetime import date, timedelta
+from datetime import date
 
 import pytest
 
 from k9overwatch.db.repository import PetRepository
-from k9overwatch.geocoding.geocoder import GeocodingService, GeocodeResult
-from k9overwatch.matching.deduplicator import Deduplicator, DEDUP_MIN_SCORE
-from k9overwatch.matching.lost_found_matcher import LostFoundMatcher, LOST_FOUND_MIN_SCORE
-from k9overwatch.models.enums import AnimalType, GeocodeConfidence, GeocodeSource, Gender, RecordType
+from k9overwatch.geocoding.geocoder import GeocodingService
+from k9overwatch.matching.deduplicator import DEDUP_MIN_SCORE, Deduplicator
+from k9overwatch.matching.lost_found_matcher import LOST_FOUND_MIN_SCORE, LostFoundMatcher
+from k9overwatch.models.enums import (
+    AnimalType,
+    Gender,
+    RecordType,
+)
 
 from .conftest import (
     make_indy_record,
-    make_pawboost_record,
-    make_petfbi_record,
-    make_petconnect24_record,
     make_lostmydoggie_record,
+    make_pawboost_record,
+    make_petconnect24_record,
+    make_petfbi_record,
 )
-
 
 # ── Upsert pipeline ───────────────────────────────────────────────────────────
 
@@ -168,8 +171,9 @@ class TestGeocodingPipeline:
 class TestMatchingPipeline:
     def _make_pet_row(self, db_session, record):
         """Synchronous helper: build a PetRow-like object from a PetRecord for matching tests."""
-        from k9overwatch.db.models import PetRow
         import uuid
+
+        from k9overwatch.db.models import PetRow
         row = PetRow(
             id=str(uuid.uuid4()),
             source=record.source,
@@ -366,7 +370,6 @@ class TestMatchStoragePipeline:
     @pytest.mark.asyncio
     async def test_full_cycle_upsert_geocode_match_save(self, db_session):
         """Full pipeline: upsert two records → geocode → run matcher → save match."""
-        from k9overwatch.matching.signals import MatchResult
 
         repo = PetRepository(db_session)
         geo_service = GeocodingService(session=db_session, providers=[])
@@ -411,8 +414,7 @@ class TestMatchStoragePipeline:
 
         # Run lost→found matcher
         matcher = LostFoundMatcher()
-        from k9overwatch.db.models import PetRow
-        import uuid
+
 
         def row_to_petrow(row):
             """Refresh the PetRow from the session after upsert."""

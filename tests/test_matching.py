@@ -5,20 +5,18 @@ from datetime import date
 
 import pytest
 
+from k9overwatch.matching.breed_normalizer import normalize_breed
 from k9overwatch.matching.signals import (
     MatchResult,
     geo_distance_miles,
     score_breed_match,
     score_color_match,
     score_date_proximity,
-    score_description_overlap,
     score_geo_distance,
     score_microchip,
     score_name_match,
     score_zip_match,
 )
-from k9overwatch.matching.breed_normalizer import normalize_breed
-
 
 # ── geo_distance_miles ────────────────────────────────────────────────────────
 

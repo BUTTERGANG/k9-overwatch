@@ -7,10 +7,9 @@ ensuring consistent scoring and threshold behavior across both match types.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import date
-from typing import Literal, Optional
-
+from typing import Literal
 
 MatchType = Literal["dedup", "lost_found"]
 Confidence = Literal["low", "medium", "high"]
@@ -34,7 +33,7 @@ class MatchResult:
         signals_fired: dict[str, float],
         dedup_thresholds: tuple[float, float] = (0.60, 0.80),
         lost_found_thresholds: tuple[float, float] = (0.40, 0.65),
-    ) -> "MatchResult":
+    ) -> MatchResult:
         score = sum(signals_fired.values())
         if match_type == "dedup":
             low_thresh, high_thresh = dedup_thresholds
@@ -61,9 +60,9 @@ class MatchResult:
 # ── Signal scoring functions ──────────────────────────────────────────────────
 
 def geo_distance_miles(
-    lat1: Optional[float], lon1: Optional[float],
-    lat2: Optional[float], lon2: Optional[float],
-) -> Optional[float]:
+    lat1: float | None, lon1: float | None,
+    lat2: float | None, lon2: float | None,
+) -> float | None:
     """Haversine distance in miles between two points. Returns None if either point is missing."""
     if any(v is None for v in (lat1, lon1, lat2, lon2)):
         return None
@@ -75,7 +74,7 @@ def geo_distance_miles(
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def score_geo_distance(dist_miles: Optional[float]) -> dict[str, float]:
+def score_geo_distance(dist_miles: float | None) -> dict[str, float]:
     """Convert a distance in miles to a set of geo signals."""
     if dist_miles is None:
         return {}
@@ -90,7 +89,7 @@ def score_geo_distance(dist_miles: Optional[float]) -> dict[str, float]:
 
 
 def score_date_proximity(
-    date_a: Optional[date], date_b: Optional[date]
+    date_a: date | None, date_b: date | None
 ) -> dict[str, float]:
     if not date_a or not date_b:
         return {}
@@ -106,7 +105,7 @@ def score_date_proximity(
     return {}
 
 
-def score_breed_match(breed_a: Optional[str], breed_b: Optional[str]) -> dict[str, float]:
+def score_breed_match(breed_a: str | None, breed_b: str | None) -> dict[str, float]:
     """Score breed similarity using exact match then fuzzy fallback."""
     if not breed_a or not breed_b:
         return {}
@@ -126,7 +125,7 @@ def score_breed_match(breed_a: Optional[str], breed_b: Optional[str]) -> dict[st
 
 
 def score_color_match(
-    color_a: Optional[str], color_b: Optional[str], weight: float = 0.10
+    color_a: str | None, color_b: str | None, weight: float = 0.10
 ) -> dict[str, float]:
     if not color_a or not color_b:
         return {}
@@ -142,7 +141,7 @@ def score_color_match(
     return {}
 
 
-def score_name_match(name_a: Optional[str], name_b: Optional[str]) -> dict[str, float]:
+def score_name_match(name_a: str | None, name_b: str | None) -> dict[str, float]:
     if not name_a or not name_b:
         return {}
     if name_a.lower().strip() == name_b.lower().strip():
@@ -150,7 +149,7 @@ def score_name_match(name_a: Optional[str], name_b: Optional[str]) -> dict[str, 
     return {}
 
 
-def score_microchip(chip_a: Optional[str], chip_b: Optional[str]) -> dict[str, float]:
+def score_microchip(chip_a: str | None, chip_b: str | None) -> dict[str, float]:
     if not chip_a or not chip_b:
         return {}
     if chip_a.strip() == chip_b.strip():
@@ -158,7 +157,7 @@ def score_microchip(chip_a: Optional[str], chip_b: Optional[str]) -> dict[str, f
     return {}
 
 
-def score_description_overlap(desc_a: Optional[str], desc_b: Optional[str]) -> dict[str, float]:
+def score_description_overlap(desc_a: str | None, desc_b: str | None) -> dict[str, float]:
     if not desc_a or not desc_b:
         return {}
     try:
@@ -173,7 +172,7 @@ def score_description_overlap(desc_a: Optional[str], desc_b: Optional[str]) -> d
     return {}
 
 
-def score_zip_match(zip_a: Optional[str], zip_b: Optional[str]) -> dict[str, float]:
+def score_zip_match(zip_a: str | None, zip_b: str | None) -> dict[str, float]:
     if not zip_a or not zip_b:
         return {}
     if zip_a[:5] == zip_b[:5]:

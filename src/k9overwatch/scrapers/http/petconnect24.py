@@ -3,15 +3,15 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import AsyncIterator, Optional
 
 import aiohttp
 from bs4 import BeautifulSoup
 
-from ..base import BaseScraper, ScraperConfig
 from ...models.pet_record import PetRecord
 from ...normalizers.petconnect24 import PetConnect24Normalizer
+from ..base import BaseScraper, ScraperConfig
 
 
 class PetConnect24Scraper(BaseScraper):
@@ -44,7 +44,7 @@ class PetConnect24Scraper(BaseScraper):
 
     async def scrape(
         self,
-        after: Optional[datetime] = None,
+        after: datetime | None = None,
     ) -> AsyncIterator[PetRecord]:
         headers = {
             "X-Requested-With": "XMLHttpRequest",

@@ -1,17 +1,19 @@
 """Normalizer: PetFBI GraphQL report dict → PetRecord."""
 from __future__ import annotations
 
-import re
 from datetime import date, datetime
-from typing import Optional
 
 from ..models.enums import (
-    AnimalType, Gender, GeocodeConfidence, GeocodeSource, RecordType,
+    AnimalType,
+    Gender,
+    GeocodeConfidence,
+    GeocodeSource,
+    RecordType,
 )
 from ..models.pet_record import PetRecord
 
 
-def _parse_date(date_str: Optional[str]) -> Optional[date]:
+def _parse_date(date_str: str | None) -> date | None:
     if not date_str:
         return None
     for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%Y-%m-%dT%H:%M:%S"):
@@ -47,14 +49,14 @@ _REPORT_TYPE_MAP = {
 }
 
 
-def _normalize_animal_type(species) -> Optional[AnimalType]:
+def _normalize_animal_type(species) -> AnimalType | None:
     if species is None:
         return None
     key = species if isinstance(species, int) else str(species).lower().strip()
     return _SPECIES_MAP.get(key, AnimalType.OTHER)
 
 
-def _normalize_gender(gender: Optional[str]) -> Optional[Gender]:
+def _normalize_gender(gender: str | None) -> Gender | None:
     if not gender:
         return None
     g = str(gender).lower().strip()

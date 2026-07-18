@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import Optional
 
 # Canonical name → list of aliases (all lowercase)
 _BREED_ALIASES: dict[str, list[str]] = {
@@ -71,7 +70,7 @@ def _preprocess(breed: str) -> str:
 
 
 @lru_cache(maxsize=2048)
-def normalize_breed(breed: Optional[str]) -> Optional[str]:
+def normalize_breed(breed: str | None) -> str | None:
     """
     Normalize a breed string to its canonical form.
     Returns None for missing/unknown breeds (not useful for matching).

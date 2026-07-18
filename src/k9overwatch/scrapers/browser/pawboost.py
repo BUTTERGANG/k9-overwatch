@@ -3,13 +3,13 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import AsyncIterator, Optional
 from urllib.parse import parse_qs, unquote, urlparse
 
-from .base_browser import BrowserBaseScraper
 from ...models.pet_record import PetRecord
 from ...normalizers.pawboost import PawBoostNormalizer
+from .base_browser import BrowserBaseScraper
 
 
 class PawBoostScraper(BrowserBaseScraper):
@@ -25,13 +25,13 @@ class PawBoostScraper(BrowserBaseScraper):
         # Use ZIP code from config extra or default to searching by lat/lon city
         self.zip_code = config.extra.get("zip_code", "46201")
 
-    async def _scrape_with_page(self, page, after: Optional[datetime]) -> AsyncIterator[PetRecord]:
+    async def _scrape_with_page(self, page, after: datetime | None) -> AsyncIterator[PetRecord]:
         for status_code, record_type in self.STATUSES:
             async for record in self._scrape_status(page, status_code, record_type, after):
                 yield record
 
     async def _scrape_status(
-        self, page, status_code: int, record_type: str, after: Optional[datetime]
+        self, page, status_code: int, record_type: str, after: datetime | None
     ) -> AsyncIterator[PetRecord]:
         page_num = 1
 
@@ -96,7 +96,7 @@ class PawBoostScraper(BrowserBaseScraper):
             page_num += 1
             await asyncio.sleep(self.config.rate_limit_seconds)
 
-    async def _extract_card_data(self, card) -> Optional[dict]:
+    async def _extract_card_data(self, card) -> dict | None:
         """Extract raw data from a PawBoost listing card element."""
         try:
             # Pet ID — text is "LOST PawBoost ID: 72693371", extract numeric part
@@ -209,7 +209,7 @@ class PawBoostScraper(BrowserBaseScraper):
         except Exception:
             return None
 
-    def _decode_nextdoor_url(self, url: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+    def _decode_nextdoor_url(self, url: str | None) -> tuple[str | None, str | None]:
         """Decode the Nextdoor share URL to extract date and owner message."""
         if not url:
             return None, None

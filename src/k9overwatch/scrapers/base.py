@@ -2,9 +2,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import AsyncIterator, Optional
 
 from ..models.pet_record import PetRecord
 
@@ -21,7 +21,7 @@ class ScraperConfig:
     search_lon: float
     search_radius_miles: int = 25
     lookback_hours: int = 48           # for incremental polling
-    max_pages: Optional[int] = None    # None = fetch all pages
+    max_pages: int | None = None    # None = fetch all pages
     rate_limit_seconds: float = 1.5    # minimum delay between page requests
     extra: dict = field(default_factory=dict)  # source-specific overrides
 
@@ -51,7 +51,7 @@ class BaseScraper(ABC):
     @abstractmethod
     async def scrape(
         self,
-        after: Optional[datetime] = None,
+        after: datetime | None = None,
     ) -> AsyncIterator[PetRecord]:
         """
         Yield normalized PetRecord objects.

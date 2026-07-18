@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import re
 from datetime import date, datetime
-from typing import Optional
 
 from ..models.enums import AnimalType, Gender, RecordType
 from ..models.pet_record import PetRecord
 
 
-def _parse_date_text(text: Optional[str]) -> Optional[date]:
+def _parse_date_text(text: str | None) -> date | None:
     if not text:
         return None
     for fmt in ("%B %d, %Y", "%B %d %Y", "%m/%d/%Y"):
@@ -20,7 +19,7 @@ def _parse_date_text(text: Optional[str]) -> Optional[date]:
     return None
 
 
-def _parse_city_state_zip(location_str: Optional[str]) -> tuple[Optional[str], Optional[str], Optional[str]]:
+def _parse_city_state_zip(location_str: str | None) -> tuple[str | None, str | None, str | None]:
     """Parse 'City, ST 12345' into (city, state, zip)."""
     if not location_str:
         return None, None, None

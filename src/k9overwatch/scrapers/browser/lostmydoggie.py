@@ -13,12 +13,12 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import AsyncIterator, Optional
 
-from .base_browser import BrowserBaseScraper
 from ...models.pet_record import PetRecord
 from ...normalizers.lostmydoggie import LostMyDoggieNormalizer
+from .base_browser import BrowserBaseScraper
 
 
 class LostMyDoggieScraper(BrowserBaseScraper):
@@ -43,7 +43,7 @@ class LostMyDoggieScraper(BrowserBaseScraper):
         self.normalizer = LostMyDoggieNormalizer()
         self.zip_code = config.extra.get("zip_code", "46201")
 
-    async def _scrape_with_page(self, page, after: Optional[datetime]) -> AsyncIterator[PetRecord]:
+    async def _scrape_with_page(self, page, after: datetime | None) -> AsyncIterator[PetRecord]:
         for petkindid, alerttypeid, animal_type, record_type in self.SEARCHES:
             async for record in self._scrape_search(
                 page, petkindid, alerttypeid, animal_type, record_type, after
@@ -52,7 +52,7 @@ class LostMyDoggieScraper(BrowserBaseScraper):
 
     async def _scrape_search(
         self, page, petkindid: int, alerttypeid: int,
-        animal_type: str, record_type: str, after: Optional[datetime]
+        animal_type: str, record_type: str, after: datetime | None
     ) -> AsyncIterator[PetRecord]:
         page_num = 1
         start_r1 = 1
@@ -113,7 +113,7 @@ class LostMyDoggieScraper(BrowserBaseScraper):
             start_r1 += self.PER_PAGE
             await asyncio.sleep(self.config.rate_limit_seconds)
 
-    async def _extract_card(self, card) -> Optional[dict]:
+    async def _extract_card(self, card) -> dict | None:
         """Extract structured fields from a .box_icon card element."""
         # Pet ID from link href
         link = await card.query_selector("a[href*='petid=']")

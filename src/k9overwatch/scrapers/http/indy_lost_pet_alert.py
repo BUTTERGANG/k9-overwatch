@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import AsyncIterator, Optional
 
 import aiohttp
 
-from ..base import BaseScraper, ScraperConfig
 from ...models.pet_record import PetRecord
 from ...normalizers.indy_lost_pet_alert import IndyNormalizer
+from ..base import BaseScraper, ScraperConfig
 
 
 class IndyLostPetAlertScraper(BaseScraper):
@@ -31,7 +31,7 @@ class IndyLostPetAlertScraper(BaseScraper):
 
     async def scrape(
         self,
-        after: Optional[datetime] = None,
+        after: datetime | None = None,
     ) -> AsyncIterator[PetRecord]:
         """Yield PetRecords from IndyLostPetAlert, newest first."""
         params = {

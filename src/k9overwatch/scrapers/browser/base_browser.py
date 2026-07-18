@@ -3,11 +3,11 @@ from __future__ import annotations
 
 import os
 from abc import abstractmethod
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import AsyncIterator, Optional
 
-from ..base import BaseScraper, ScraperConfig
 from ...models.pet_record import PetRecord
+from ..base import BaseScraper
 
 
 class BrowserBaseScraper(BaseScraper):
@@ -25,15 +25,15 @@ class BrowserBaseScraper(BaseScraper):
         "Chrome/122.0.0.0 Safari/537.36"
     )
 
-    async def scrape(self, after: Optional[datetime] = None) -> AsyncIterator[PetRecord]:
+    async def scrape(self, after: datetime | None = None) -> AsyncIterator[PetRecord]:
         """Wrap _scrape_with_page in browser lifecycle management."""
         try:
             from playwright.async_api import async_playwright
-        except ImportError:
+        except ImportError as err:
             raise ImportError(
                 "playwright is required for browser scrapers. "
                 "Install with: pip install 'k9overwatch[browser]'"
-            )
+            ) from err
 
         headless = os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() != "false"
 
@@ -61,7 +61,7 @@ class BrowserBaseScraper(BaseScraper):
     async def _scrape_with_page(
         self,
         page,
-        after: Optional[datetime],
+        after: datetime | None,
     ) -> AsyncIterator[PetRecord]:
         """Source-specific scraping logic given an active Playwright Page."""
         ...

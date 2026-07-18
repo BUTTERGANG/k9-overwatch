@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Optional
 
 import aiohttp
 
@@ -25,8 +24,8 @@ DEFAULT_TIMEOUT = aiohttp.ClientTimeout(total=30, connect=10)
 
 @asynccontextmanager
 async def scraping_session(
-    headers: Optional[dict] = None,
-    timeout: Optional[aiohttp.ClientTimeout] = None,
+    headers: dict | None = None,
+    timeout: aiohttp.ClientTimeout | None = None,
     **kwargs,
 ):
     """
@@ -52,11 +51,11 @@ async def scraping_session(
 async def fetch_text(
     url: str,
     method: str = "GET",
-    headers: Optional[dict] = None,
-    data: Optional[dict] = None,
+    headers: dict | None = None,
+    data: dict | None = None,
     retries: int = 2,
     retry_delay: float = 1.0,
-) -> Optional[str]:
+) -> str | None:
     """
     Fetch a URL and return the response body as text.
     Returns None on error after exhausting retries.

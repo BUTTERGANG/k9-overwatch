@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
-from typing import Optional
 
 from bs4 import Tag
 
@@ -41,12 +39,12 @@ _DOG_BREED_FRAGMENTS = {
     "pointer", "setter", "hound", "schnauzer", "akita", "samoyed",
     "weimaraner", "vizsla", "plott", "coonhound", "bloodhound",
     "griffon", "basenji", "affenpinscher", "bichon", "bolognese",
-    "mastiff", "rottweiler", "pinscher", "spitz", "chow", "dingo",
+    "mastiff", "pinscher", "spitz", "chow", "dingo",
     "papillon", "pekinese", "pekingese", "whippet", "greyhound",
 }
 
 
-def _infer_animal_type_from_breed(breed: Optional[str]) -> Optional[AnimalType]:
+def _infer_animal_type_from_breed(breed: str | None) -> AnimalType | None:
     """Infer animal type from breed name when the API doesn't provide one."""
     if not breed:
         return None
@@ -71,7 +69,7 @@ SIZE_MAP = {
 }
 
 
-def _field(card: Tag, label: str) -> Optional[str]:
+def _field(card: Tag, label: str) -> str | None:
     """Extract a labeled field value from a 24petconnect listing card.
     Cards contain spans like: <span>Name : Chase</span>
     """
@@ -84,7 +82,7 @@ def _field(card: Tag, label: str) -> Optional[str]:
     return None
 
 
-def _extract_onclick(card: Tag) -> tuple[Optional[str], Optional[str]]:
+def _extract_onclick(card: Tag) -> tuple[str | None, str | None]:
     """Extract ShelterCode and AnimalId from the onclick handler.
     The onclick is on the card div itself, not a descendant.
     """
@@ -104,7 +102,7 @@ def _extract_onclick(card: Tag) -> tuple[Optional[str], Optional[str]]:
     return None, None
 
 
-def _parse_gender(value: Optional[str]) -> Optional[Gender]:
+def _parse_gender(value: str | None) -> Gender | None:
     if not value:
         return None
     v = value.upper().strip()

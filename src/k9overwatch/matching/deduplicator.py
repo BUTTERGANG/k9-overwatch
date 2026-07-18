@@ -6,8 +6,6 @@ on the same day, same ZIP, same breed → probable duplicate.
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from ..db.models import PetRow
 from .breed_normalizer import normalize_breed
 from .signals import (
@@ -50,7 +48,7 @@ class Deduplicator:
 
         return sorted(results, key=lambda r: r.score, reverse=True)
 
-    def _compare(self, a: PetRow, b: PetRow) -> Optional[MatchResult]:
+    def _compare(self, a: PetRow, b: PetRow) -> MatchResult | None:
         # Hard filters
         if a.animal_type != b.animal_type:
             return None
@@ -62,7 +60,14 @@ class Deduplicator:
 
         signals: dict[str, float] = {}
 
-        # ── Geo ──────────────────────────────────────────────────────────────
+        # ── Record-type hint ─────────────────────────────────────────────────
+        # Dedup: the same physical pet is typically posted with the same
+        # record_type on each platform (both "lost" or both "found"). A matching
+        # type is a weak positive signal; mismatched types are still possible
+        # (e.g. one site lists it as "found" while another has the original
+        # "lost" report) so we don't hard-filter on it.
+        if a.record_type == b.record_type:
+            signals["same_record_type"] = 0.04
         dist = geo_distance_miles(a.lat, a.lon, b.lat, b.lon)
         signals.update(score_geo_distance(dist))
         signals.update(score_zip_match(a.zip, b.zip))

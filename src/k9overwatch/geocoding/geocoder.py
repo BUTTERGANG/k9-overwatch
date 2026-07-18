@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from datetime import datetime
-from typing import Optional
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,12 +18,12 @@ class GeocodeResult:
     lon: float
     geocode_source: GeocodeSource
     geocode_confidence: GeocodeConfidence
-    raw_response: Optional[dict] = None
+    raw_response: dict | None = None
 
 
 class BaseGeocodeProvider(ABC):
     @abstractmethod
-    async def geocode(self, address: str) -> Optional[GeocodeResult]:
+    async def geocode(self, address: str) -> GeocodeResult | None:
         ...
 
 
@@ -150,8 +149,9 @@ class GeocodingService:
 
     # ── Cache helpers ─────────────────────────────────────────────────────────
 
-    async def _check_cache(self, address: str) -> Optional[GeocodeResult]:
+    async def _check_cache(self, address: str) -> GeocodeResult | None:
         from sqlalchemy import select, update
+
         from ..db.models import GeocodeCache
 
         key = _normalize_address(address)
@@ -185,7 +185,7 @@ class GeocodingService:
             lon=result.lon,
             geocode_source=str(result.geocode_source),
             geocode_confidence=str(result.geocode_confidence),
-            cached_at=datetime.utcnow(),
+            cached_at=datetime.now(UTC),
         )
         self.session.add(row)
         try:

@@ -127,12 +127,12 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
                                │
                                ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                       Application Layer  (planned)                  │
+│                       Application Layer  (built — see Phase 3)            │
 │   · Geographic map view (Leaflet / MapboxGL)                        │
 │   · Filters: type, species, color, size, date, radius               │
 │   · Pet detail pages with source attribution                        │
-│   · Lost ↔ Found match alerts                                       │
-│   · User accounts + saved search notifications                      │
+│   · Lost ↔ Found match alerts (HTMX partials)                       │
+│   · Admin dashboard + scraper health                                │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -149,7 +149,7 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 
 ```bash
 # Clone and enter the project
-cd "/Volumes/T5 EVO/REPLIT/NEW PROJECTS/K9-OVERWATCH"
+cd "/home/alex/code/BUTTERGANG/k9-overwatch"
 
 # Create virtual environment
 python3 -m venv .venv
@@ -161,6 +161,13 @@ pip install -e ".[dev]"
 # Install browser scraper dependencies (optional)
 pip install -e ".[browser]"
 playwright install chromium
+```
+
+To run the test suite:
+
+```bash
+source .venv/bin/activate
+pytest
 ```
 
 ### Configure
@@ -317,8 +324,9 @@ Geocoding cost:
 | PawBoost | every 35 min | Playwright required |
 | Pet FBI | every 40 min | Playwright required (WAF token capture) |
 | Lost My Doggie | every 45 min | Playwright required |
-| Matching pass | every 30 min | Dedup + lost→found on unmatched records |
+| Matching pass | every 30 min | Dedup + lost→found, both directions, on newly ingested records |
 | Staleness check | every 6 hours | Verifies IndyLostPetAlert records still active |
+| Re-match pass | daily 04:00 | Idempotent re-scan of recent records (last 120d) so matches improve as more data arrives (e.g. geocoding fills coordinates) |
 
 ---
 
@@ -345,18 +353,19 @@ Geocoding cost:
 - [x] Staleness checks (mark inactive listings)
 - [x] LostMyDoggie HTML structure confirmed (`.box_icon` cards, full-res image URLs)
 
-### Phase 2b — Finalization (In Progress)
-- [ ] Write test suite (`tests/`) — pytest + pytest-asyncio, normalizers + matching + geocoding
-- [ ] Populate `utils/` — `logging_config.py`, `http_client.py`, `text.py`
+### Phase 2b — Finalization (Mostly complete)
+- [x] Write test suite (`tests/`) — pytest + pytest-asyncio, normalizers + matching + geocoding
+- [x] Populate `utils/` — `logging_config.py`, `http_client.py`, `text.py`
 - [ ] Run batch geocoding on existing DB records (`scripts/geocode_batch.py`)
-- [ ] End-to-end integration test: run full scheduler cycle, verify DB state
+- [x] End-to-end integration test: run full scheduler cycle, verify DB state
 
-### Phase 3 — Application
-- [ ] REST API layer (FastAPI)
-- [ ] Map UI (interactive, cluster markers)
-- [ ] Filter panel (type, species, color, size, date range, radius)
-- [ ] Pet detail pages with source attribution
-- [ ] Match alert display
+### Phase 3 — Application ✅ Built
+- [x] REST API layer (FastAPI) — routers: map, pets, matches, admin
+- [x] Map UI (Leaflet, cluster markers, HTMX filter partials)
+- [x] Filter panel (type, species, color, size, date range, radius)
+- [x] Pet detail pages with source attribution
+- [x] Match alert display (HTMX partials on pet detail)
+- [x] Admin dashboard (scraper health, match stats)
 - [ ] Image proxy endpoint (resize + cache for large sources like IndyLostPetAlert)
 
 ### Phase 4 — Advanced Features
