@@ -1,6 +1,6 @@
-from fastapi import APIRouter, Request, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
 
 from k9overwatch.db.models import PetMatch, PetRow
 from k9overwatch.web.dependencies import get_db
@@ -37,9 +37,9 @@ async def matches_page(
             match_pairs.append({"match": m, "pet_a": pet_a, "pet_b": pet_b})
 
     return templates.TemplateResponse(
+        request,
         "matches/list.html",
         {
-            "request": request,
             "match_pairs": match_pairs,
             "active_tab": match_type,
             "confidence": confidence,

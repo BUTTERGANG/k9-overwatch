@@ -1,15 +1,14 @@
-{% if not is_partial %}
 {% extends "base.html" %}
 {% block title %}Pet Search | K9-Overwatch{% endblock %}
 {% block content %}
 <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 w-full">
   <div class="flex flex-col md:flex-row gap-8">
-    
+
     <!-- Filters Sidebar -->
     <aside class="w-full md:w-64 flex-shrink-0">
       <form id="pet-filters" hx-get="/pets/results" hx-target="#results-container" hx-trigger="change, submit" class="bg-white p-6 rounded-xl shadow-sm border border-gray-100 sticky top-6">
         <h2 class="text-xl font-bold mb-4 border-b pb-2 tracking-tight text-gray-800">Filters</h2>
-        
+
         <div class="space-y-6 text-sm">
           <div>
               <label class="font-semibold text-gray-700 block mb-2">Record Status</label>
@@ -37,43 +36,11 @@
       <div class="flex justify-between items-end mb-6 border-b pb-4 border-gray-200">
         <h1 class="text-3xl font-extrabold text-gray-900 tracking-tight">Pet Directory</h1>
       </div>
-      
+
       <div id="results-container">
-{% endif %}
-
-<!-- HTMX Target Content -->
-<div class="mb-4 text-sm text-gray-500 font-medium">
-  Found {{ total }} records matching your criteria.
-</div>
-
-<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-  {% for pet in pets %}
-    {% include 'pets/card.html' %}
-  {% else %}
-    <div class="col-span-full py-12 text-center text-gray-500 bg-white rounded-xl border border-dashed border-gray-300">
-      <p class="text-lg">No pets found matching these filters.</p>
-    </div>
-  {% endfor %}
-</div>
-
-{% if total_pages > 1 %}
-<div class="mt-8 flex justify-center gap-2">
-    {% if page > 1 %}
-    <button hx-get="/pets/results?page={{ page - 1 }}" hx-include="#pet-filters" hx-target="#results-container" class="px-4 py-2 border rounded shadow-sm bg-white hover:bg-gray-50">Previous</button>
-    {% endif %}
-    
-    <span class="px-4 py-2 text-gray-700">Page {{ page }} of {{ total_pages }}</span>
-    
-    {% if page < total_pages %}
-    <button hx-get="/pets/results?page={{ page + 1 }}" hx-include="#pet-filters" hx-target="#results-container" class="px-4 py-2 border rounded shadow-sm bg-white hover:bg-gray-50">Next</button>
-    {% endif %}
-</div>
-{% endif %}
-
-{% if not is_partial %}
+        {% include 'pets/_results.html' %}
       </div>
     </section>
   </div>
 </div>
 {% endblock %}
-{% endif %}

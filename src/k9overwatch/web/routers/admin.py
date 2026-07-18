@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Request, Depends
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, text
-from datetime import datetime
+from datetime import UTC, datetime
 
-from k9overwatch.db.models import PetRow, PetMatch, ScraperState
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from k9overwatch.db.models import PetMatch, PetRow, ScraperState
 from k9overwatch.web.dependencies import get_db
 from k9overwatch.web.templates_config import templates
 
@@ -16,7 +17,7 @@ async def admin_dashboard(
     db: AsyncSession = Depends(get_db),
 ):
     stats = await _get_stats(db)
-    return templates.TemplateResponse("admin/dashboard.html", {"request": request, "stats": stats})
+    return templates.TemplateResponse(request, "admin/dashboard.html", {"stats": stats})
 
 
 @router.get("/api/admin/stats")
@@ -63,5 +64,5 @@ async def _get_stats(db: AsyncSession) -> dict:
         "no_geocode": no_geo,
         "total_matches": total_matches,
         "reunification_matches": reunification_matches,
-        "generated_at": datetime.utcnow().isoformat(),
+        "generated_at": datetime.now(UTC).isoformat(),
     }

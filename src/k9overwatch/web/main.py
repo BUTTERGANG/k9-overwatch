@@ -1,17 +1,18 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
-from fastapi import FastAPI, Request
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import RedirectResponse, HTMLResponse
-from starlette.exceptions import HTTPException as StarletteHTTPException
+
 import uvicorn
+from fastapi import FastAPI, Request
+from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from k9overwatch.db.connection import init_db
 from k9overwatch.utils.logging_config import configure_logging
-from k9overwatch.web.routers import map as map_router
-from k9overwatch.web.routers import pets as pets_router
-from k9overwatch.web.routers import matches as matches_router
 from k9overwatch.web.routers import admin as admin_router
+from k9overwatch.web.routers import map as map_router
+from k9overwatch.web.routers import matches as matches_router
+from k9overwatch.web.routers import pets as pets_router
 
 
 @asynccontextmanager
@@ -39,9 +40,9 @@ app.include_router(admin_router.router)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     from k9overwatch.web.templates_config import templates
     if exc.status_code == 404:
-        return templates.TemplateResponse("errors/404.html", {"request": request}, status_code=404)
+        return templates.TemplateResponse(request, "errors/404.html", {}, status_code=404)
     return templates.TemplateResponse(
-        "errors/500.html", {"request": request, "detail": exc.detail}, status_code=exc.status_code
+        request, "errors/500.html", {"detail": exc.detail}, status_code=exc.status_code
     )
 
 

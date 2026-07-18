@@ -1,12 +1,12 @@
-from collections.abc import Sequence
-
-from fastapi import APIRouter, Request, Depends, Query, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, or_
-from datetime import datetime, timedelta
 import math
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 
-from k9overwatch.db.models import PetRow, PetMatch
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import desc, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from k9overwatch.db.models import PetMatch, PetRow
 from k9overwatch.web.dependencies import get_db
 from k9overwatch.web.templates_config import templates
 
@@ -28,7 +28,7 @@ async def search_pets(
     if animal_type:
         stmt = stmt.where(PetRow.animal_type.in_(animal_type))
         
-    cutoff_date = datetime.now() - timedelta(days=days)
+    cutoff_date = datetime.now(UTC) - timedelta(days=days)
     stmt = stmt.where(PetRow.date_event >= cutoff_date.date())
     
     # Get total count
@@ -58,14 +58,13 @@ async def pets_page(
     total_pages = math.ceil(total / PAGE_SIZE) if total > 0 else 1
     
     return templates.TemplateResponse(
+        request,
         "pets/list.html",
         {
-            "request": request,
             "pets": pets,
             "total": total,
             "page": page,
             "total_pages": total_pages,
-            "is_partial": False,
             "filters": {
                 "record_type": record_type,
                 "animal_type": animal_type,
@@ -85,16 +84,15 @@ async def pets_results(
 ):
     pets, total = await search_pets(db, record_type, animal_type, days, page)
     total_pages = math.ceil(total / PAGE_SIZE) if total > 0 else 1
-    
+
     return templates.TemplateResponse(
-        "pets/list.html",
+        request,
+        "pets/_results.html",
         {
-            "request": request,
             "pets": pets,
             "total": total,
             "page": page,
             "total_pages": total_pages,
-            "is_partial": True,
             "filters": {
                 "record_type": record_type,
                 "animal_type": animal_type,
@@ -116,8 +114,9 @@ async def pet_detail(
         raise HTTPException(status_code=404, detail="Pet not found")
 
     return templates.TemplateResponse(
+        request,
         "pets/detail.html",
-        {"request": request, "pet": pet},
+        {"pet": pet},
     )
 
 
@@ -143,6 +142,7 @@ async def pet_matches_partial(
             match_pairs.append({"match": m, "other": other})
 
     return templates.TemplateResponse(
+        request,
         "pets/matches_partial.html",
-        {"request": request, "match_pairs": match_pairs},
+        {"match_pairs": match_pairs},
     )
