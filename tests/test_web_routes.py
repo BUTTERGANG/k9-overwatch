@@ -115,6 +115,25 @@ class TestPetDetail:
 
 # ── Map GeoJSON ───────────────────────────────────────────────────────────────
 
+class TestMapPage:
+    @pytest.mark.asyncio
+    async def test_map_page_has_actionable_empty_state_and_report_cta(self, client: AsyncClient):
+        response = await client.get("/map")
+        assert response.status_code == 200
+        assert 'id="map-empty-state"' in response.text
+        assert 'href="/pets"' in response.text
+        assert 'href="/report"' in response.text
+        assert 'id="clear-map-filters-btn"' in response.text
+
+    @pytest.mark.asyncio
+    async def test_map_page_has_filter_summary_and_clear_all_control(self, client: AsyncClient):
+        response = await client.get("/map")
+        assert response.status_code == 200
+        assert 'id="map-filter-summary"' in response.text
+        assert 'id="clear-all-map-filters-btn"' in response.text
+        assert 'aria-live="polite"' in response.text
+
+
 class TestMapGeoJSON:
     @pytest.mark.asyncio
     async def test_geojson_returns_feature_collection(self, client: AsyncClient):

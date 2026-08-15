@@ -102,6 +102,18 @@ document.addEventListener("DOMContentLoaded", () => {
         return `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(imageUrl)}`;
     }
 
+    function updateFilterSummary() {
+        const form = document.getElementById('map-filters');
+        const statusCount = form.querySelectorAll('input[name="record_type"]:checked').length;
+        const speciesCount = form.querySelectorAll('input[name="animal_type"]:checked').length;
+        const days = form.querySelector('select[name="days"]').value;
+        const parts = [];
+        if (statusCount < form.querySelectorAll('input[name="record_type"]').length) parts.push(`${statusCount} statuses`);
+        if (speciesCount < form.querySelectorAll('input[name="animal_type"]').length) parts.push(`${speciesCount} species`);
+        if (days !== '365') parts.push(`${days}-day window`);
+        filterSummary.textContent = parts.length ? parts.join(' · ') : 'All filters active';
+    }
+
     function updateRecencyBar() {
         const form = document.getElementById('map-filters');
         const types = new FormData(form).getAll('record_type');
@@ -186,6 +198,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const searchAreaBtn = document.getElementById('search-this-area-btn');
     const resultCountEl = document.getElementById('map-result-count');
     const resultCountText = document.getElementById('map-result-count-text');
+    const emptyState = document.getElementById('map-empty-state');
+    const clearFiltersBtn = document.getElementById('clear-map-filters-btn');
+    const clearAllFiltersBtn = document.getElementById('clear-all-map-filters-btn');
+    const filterSummary = document.getElementById('map-filter-summary');
 
     // ── Spinner overlay ──────────────────────────────────────────────────
     const mapContainer = document.getElementById('map').parentElement;
@@ -264,9 +280,11 @@ document.addEventListener("DOMContentLoaded", () => {
         if (total == null) {
             resultCountEl.style.display = 'none';
             truncationBanner.classList.add('hidden');
+            emptyState.classList.add('hidden');
             return;
         }
         const label = total === 1 ? '1 pet' : `${total.toLocaleString()} pets`;
+        emptyState.classList.toggle('hidden', total !== 0);
         resultCountText.textContent = truncated
             ? `${returned.toLocaleString()} of ${label}`
             : label;
@@ -491,11 +509,29 @@ document.addEventListener("DOMContentLoaded", () => {
         loadPins();
     });
 
+    // Clear filters from the empty state and broaden the search.
+    function clearMapFilters() {
+        const form = document.getElementById('map-filters');
+        form.querySelectorAll('input[type="checkbox"]').forEach(input => { input.checked = true; });
+        document.getElementById('map-days-select').value = '365';
+        updateFilterSummary();
+        clearTimeout(moveDebounceTimer);
+        loadPins();
+    }
+
+    clearFiltersBtn.addEventListener('click', clearMapFilters);
+    clearAllFiltersBtn.addEventListener('click', clearMapFilters);
+    document.querySelectorAll('#map-filters input, #map-filters select').forEach(input => {
+        input.addEventListener('change', updateFilterSummary);
+    });
+
     // Filter apply: reload immediately and keep search button hidden
     document.getElementById('apply-filters-btn').addEventListener('click', () => {
+        updateFilterSummary();
         clearTimeout(moveDebounceTimer);
         loadPins();
     });
+    updateFilterSummary();
 
     // Initial load — wait until the map has a real viewport
     map.whenReady(() => loadPins());
