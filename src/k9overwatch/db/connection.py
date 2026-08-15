@@ -102,13 +102,14 @@ async def init_db():
 
 
 async def _migrate_existing_db():
-    """Idempotent schema migrations for SQLite dev DBs created before new columns."""
-    from sqlalchemy import text
+    """Idempotent schema migrations for dev/prod DBs created before new columns."""
+    from sqlalchemy import inspect, text
 
     async with get_engine().connect() as conn:
-        # owner_id column on pets (accounts feature)
+        # owner_id column on pets (accounts feature). Uses SQLAlchemy's reflection
+        # API rather than raw PRAGMA so this works on both SQLite and Postgres.
         existing_cols = await conn.run_sync(
-            lambda c: [r[1] for r in c.execute(text("PRAGMA table_info(pets)")).fetchall()]
+            lambda c: [col["name"] for col in inspect(c).get_columns("pets")]
         )
         if "owner_id" not in existing_cols:
             await conn.execute(text("ALTER TABLE pets ADD COLUMN owner_id TEXT"))
