@@ -38,7 +38,7 @@
 {% if total_pages > 1 %}
 <nav class="mt-8 flex justify-center items-center gap-2" aria-label="Pagination">
     {% if page > 1 %}
-    <button hx-get="/pets/results?page={{ page - 1 }}"
+    <button hx-get="/pets/results?page={{ page - 1 }}&q={{ filters.q|urlencode }}"
             hx-include="#pet-filters"
             hx-target="#results-container"
             hx-push-url="true"
@@ -61,7 +61,7 @@
     </span>
 
     {% if page < total_pages %}
-    <button hx-get="/pets/results?page={{ page + 1 }}"
+    <button hx-get="/pets/results?page={{ page + 1 }}&q={{ filters.q|urlencode }}"
             hx-include="#pet-filters"
             hx-target="#results-container"
             hx-push-url="true"

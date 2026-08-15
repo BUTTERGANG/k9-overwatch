@@ -1,6 +1,6 @@
 # K9-Overwatch — Product Roadmap
 
-_Last reviewed: 2026-07-18 · grounded in a full read of the codebase (src + templates + tests + README), not a generic template._
+_Last reviewed: 2026-08-15 · grounded in a full read of the codebase (src + templates + tests + README), not a generic template._
 
 The mission is simple and emotionally loaded: **help a stressed, often non-technical
 person find their lost animal faster.** Every item below is scored against that mission.
@@ -96,8 +96,9 @@ dataset grows. Listed roughly by impact on "find animals faster."
 12. **Matching is text-only; no visual signal.** Already deferred (Phase 4 / D1). "Brown
     mutt" vs "tan terrier" same-dog listings with mismatched text won't match. Perceptual
     hash is the lightweight first step (no torch); CLIP is the heavy step.
-13. **No search-by-text across descriptions / breeds** on the pet directory beyond filters.
-    A simple "describe your dog" free-text search would help owners who don't know breed names.
+13. **Text search is now available** on the pet directory across names, breeds, colors,
+    descriptions, distinctive features, and location fields. It is intentionally a simple
+    word-based SQL search, not a relevance-ranked search.
 14. **Date handling fragility.** `days_since_event` bucketing gracefully falls back when
     `date_event` is missing (good), but several sources parse dates inconsistently; the
     temporal signals in matching can be noisy. Worth a normalization pass + tests.
@@ -138,8 +139,8 @@ dataset grows. Listed roughly by impact on "find animals faster."
 
 | Item | Status | Why it's backlogged |
 |---|---|---|
-| User-submitted lost/found reports | Not started | Needs accounts + moderation |
-| Match notifications (email/SMS/push) | Not started | Needs accounts + provider |
+| User-submitted lost/found reports | In progress | Basic authenticated reports exist; moderation/editing remains |
+| Match notifications (email/SMS/push) | Email implemented | Instant/daily digest, confidence threshold, opt-out, unsubscribe; SMS/push remain |
 | Image proxy + cache | Planned, unchecked | Perf, not correctness |
 | Batch geocode existing DB | Planned, unchecked | One-off script exists, not run |
 | Visual similarity signal | Deferred (D1) | New dependency (imagehash/CLIP) |
@@ -161,7 +162,7 @@ dataset grows. Listed roughly by impact on "find animals faster."
 
 **Next (the reunion gap):**
 5. Owner-submitted reports + minimal accounts. (the big one)
-6. Match notifications (start with email) — closes flaw #1.
+6. Match notifications (email slice shipped) — closes flaw #1; add delivery tracking/provider hardening next.
 7. Surface + populate contact info so a match is actionable.
 
 **Then (scale + precision):**

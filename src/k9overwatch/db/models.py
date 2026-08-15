@@ -115,6 +115,7 @@ class PetRow(Base):
         Index("ix_pets_active_date_event", "active", "date_event"),
         Index("ix_pets_active_type_date", "active", "animal_type", "date_event"),
         Index("ix_pets_active_lat_lon", "active", "lat", "lon"),
+        Index("ix_pets_active_date_lat_lon", "active", "date_event", "lat", "lon"),
     )
 
     def __repr__(self) -> str:

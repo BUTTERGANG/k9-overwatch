@@ -141,3 +141,82 @@ async def test_pet_detail_renders_with_lens_button(client, db_session):
     assert resp.status_code == 200
     assert "See similar photos" in resp.text
     assert "lens.google.com" in resp.text
+
+
+@pytest.mark.asyncio
+async def test_pet_directory_supports_text_search_and_keeps_undated_records(client, db_session):
+    """Owners can search descriptive text without losing listings lacking parsed dates."""
+    repo = PetRepository(db_session)
+    await repo.upsert(make_indy_record(
+        source_id="search-match",
+        name="Mochi",
+        description="White dog with a blue collar",
+        date_event=None,
+        lat=39.77,
+        lon=-86.15,
+    ))
+    await repo.upsert(make_indy_record(
+        source_id="search-other",
+        name="Rex",
+        description="Black dog",
+        date_event=date.today(),
+        lat=39.77,
+        lon=-86.15,
+    ))
+    await db_session.flush()
+
+    async with client as c:
+        resp = await c.get("/pets/results", params={"q": "blue collar"})
+
+    assert resp.status_code == 200
+    assert "Mochi" in resp.text
+    assert "Rex" not in resp.text
+
+
+@pytest.mark.asyncio
+async def test_geojson_reports_truncation_truthfully(client, db_session):
+    repo = PetRepository(db_session)
+    for i in range(501):
+        await repo.upsert(make_indy_record(
+            source_id=f"cap-{i}", date_event=date.today(), lat=39.77, lon=-86.15,
+        ))
+    await db_session.flush()
+
+    async with client as c:
+        resp = await c.get("/api/map/geojson", params={
+            "sw_lat": 39.0, "sw_lng": -87.0, "ne_lat": 40.5, "ne_lng": -85.0,
+        })
+
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["total"] == 501
+    assert data["returned"] == 500
+    assert data["truncated"] is True
+
+
+@pytest.mark.asyncio
+async def test_geojson_accepts_antimeridian_crossing_bbox(client, db_session):
+    repo = PetRepository(db_session)
+    await repo.upsert(make_indy_record(
+        source_id="dateline", date_event=date.today(), lat=0.0, lon=-179.5,
+    ))
+    await db_session.flush()
+
+    async with client as c:
+        resp = await c.get("/api/map/geojson", params={
+            "sw_lat": -10, "sw_lng": 179, "ne_lat": 10, "ne_lng": -179,
+        })
+
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("params", [
+    {"sw_lat": -91, "sw_lng": -87, "ne_lat": 40, "ne_lng": -85},
+    {"sw_lat": 39, "sw_lng": -181, "ne_lat": 40, "ne_lng": -85},
+])
+async def test_geojson_rejects_out_of_range_coordinates(client, params):
+    async with client as c:
+        resp = await c.get("/api/map/geojson", params=params)
+    assert resp.status_code == 422

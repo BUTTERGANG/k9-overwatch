@@ -49,3 +49,5 @@ class GeoJSONCollection(BaseModel):
     type: Literal["FeatureCollection"] = "FeatureCollection"
     features: list[GeoJSONFeature]
     total: int
+    returned: int
+    truncated: bool = False

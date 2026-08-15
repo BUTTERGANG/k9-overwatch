@@ -1,7 +1,7 @@
 from datetime import UTC, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from k9overwatch.db.models import PetRow
@@ -45,21 +45,28 @@ async def get_active_buckets(
 
 @router.get("/api/map/geojson", response_model=GeoJSONCollection)
 async def get_map_geojson(
-    sw_lat: float, sw_lng: float, ne_lat: float, ne_lng: float,
+    sw_lat: float = Query(ge=-90, le=90),
+    sw_lng: float = Query(ge=-180, le=180),
+    ne_lat: float = Query(ge=-90, le=90),
+    ne_lng: float = Query(ge=-180, le=180),
     record_type: list[str] = Query(default=["lost", "found", "sighting", "adoptable"]),
     animal_type: list[str] = Query(default=[]),
     days: int = Query(default=90, ge=1, le=365),
     db: AsyncSession = Depends(get_db),
 ):
-    if sw_lat > ne_lat or sw_lng > ne_lng:
-        raise HTTPException(status_code=422, detail="Invalid bounding box")
+    if sw_lat > ne_lat:
+        raise HTTPException(status_code=422, detail="Invalid latitude bounds")
 
+    longitude_filter = (
+        PetRow.lon.between(sw_lng, ne_lng)
+        if sw_lng <= ne_lng
+        else or_(PetRow.lon >= sw_lng, PetRow.lon <= ne_lng)
+    )
     stmt = select(PetRow).where(
         PetRow.active == True,
         PetRow.lat >= sw_lat,
         PetRow.lat <= ne_lat,
-        PetRow.lon >= sw_lng,
-        PetRow.lon <= ne_lng,
+        longitude_filter,
     )
 
     if record_type:
@@ -90,7 +97,10 @@ async def get_map_geojson(
             or_(PetRow.date_event >= cutoff, PetRow.date_event.is_(None))
         )
 
-    # limit to roughly 500 features so browser doesn't choke
+    # Limit payload size, but count the full matching set so the client can
+    # tell users when the viewport contains more records than returned.
+    count_stmt = stmt.with_only_columns(func.count(PetRow.id)).order_by(None)
+    total = int((await db.execute(count_stmt)).scalar_one())
     stmt = stmt.order_by(PetRow.date_event.desc()).limit(500)
 
     result = await db.execute(stmt)
@@ -133,4 +143,10 @@ async def get_map_geojson(
         )
         features.append(feature)
 
-    return GeoJSONCollection(features=features, total=len(features))
+    returned = len(features)
+    return GeoJSONCollection(
+        features=features,
+        total=total,
+        returned=returned,
+        truncated=total > returned,
+    )

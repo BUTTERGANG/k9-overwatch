@@ -53,9 +53,6 @@ async def client(db_session):
     db_conn._session_factory = saved_factory
 
 
-def _login_headers(user_id: str) -> dict:
-    return {COOKIE_NAME: make_session_token(user_id)}
-
 
 async def test_register_login_logout_flow(client, db_session):
     # Register
@@ -77,8 +74,9 @@ async def test_register_login_logout_flow(client, db_session):
     cookie = resp.cookies.get(COOKIE_NAME)
     assert cookie
 
-    # Authenticated page shows account nav
-    resp = await client.get("/account", cookies={COOKIE_NAME: cookie})
+    # Authenticated page shows account nav. AsyncClient persists the Set-Cookie
+    # response, so no per-request cookies mapping is needed here.
+    resp = await client.get("/account")
     assert resp.status_code == 200
     assert "My account" in resp.text
 
@@ -112,7 +110,7 @@ async def test_submit_report_creates_user_row_and_geocodes(client, db_session):
             "contact_email": "pat@example.com",
         },
         files=files,
-        cookies=_login_headers(user.id),
+        headers={"Cookie": f"{COOKIE_NAME}={make_session_token(user.id)}"},
     )
     assert resp.status_code in (302, 303), resp.text
 
@@ -146,7 +144,10 @@ async def test_contact_info_gated_behind_login(client, db_session):
     users = UserRepository(db_session)
     user = await users.create("viewer@example.com", "password123")
     await db_session.commit()
-    resp = await client.get(f"/pets/{row.id}", cookies=_login_headers(user.id))
+    resp = await client.get(
+        f"/pets/{row.id}",
+        headers={"Cookie": f"{COOKIE_NAME}={make_session_token(user.id)}"},
+    )
     assert "secret@example.com" in resp.text
 
 

@@ -211,8 +211,16 @@ document.addEventListener("DOMContentLoaded", () => {
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
         </svg>
-        <span id="map-error-text">Failed to load map data. Please try again.</span>`;
+        <span id="map-error-text">Failed to load map data. Please try again.</span>
+        <button id="map-retry-btn" type="button" class="underline underline-offset-2 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">Retry</button>`;
     mapContainer.appendChild(errorBanner);
+    document.getElementById('map-retry-btn').addEventListener('click', () => loadPins());
+
+    const truncationBanner = document.createElement('div');
+    truncationBanner.id = 'map-truncation';
+    truncationBanner.className = 'absolute bottom-16 left-1/2 -translate-x-1/2 z-[1000] hidden bg-amber-100 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 text-xs font-semibold px-4 py-2 rounded-full shadow-lg border border-amber-200 dark:border-amber-700';
+    truncationBanner.setAttribute('role', 'status');
+    mapContainer.appendChild(truncationBanner);
 
     // ── Marker icons ─────────────────────────────────────────────────────
     const icons = {
@@ -248,19 +256,27 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('map-error-text').textContent =
             message || 'Failed to load map data. Please try again.';
         errorBanner.classList.remove('hidden');
-        // Auto-hide after 6s
-        setTimeout(() => errorBanner.classList.add('hidden'), 6000);
+        // Keep the error visible until the user retries or a later request succeeds.
     }
 
     // ── Result count badge ───────────────────────────────────────────────
-    function updateResultCount(total) {
+    function updateResultCount(total, returned, truncated) {
         if (total == null) {
             resultCountEl.style.display = 'none';
+            truncationBanner.classList.add('hidden');
             return;
         }
         const label = total === 1 ? '1 pet' : `${total.toLocaleString()} pets`;
-        resultCountText.textContent = label;
+        resultCountText.textContent = truncated
+            ? `${returned.toLocaleString()} of ${label}`
+            : label;
         resultCountEl.style.display = 'flex';
+        if (truncated) {
+            truncationBanner.textContent = `Showing ${returned.toLocaleString()} of ${total.toLocaleString()} pets in this area. Zoom in to see more.`;
+            truncationBanner.classList.remove('hidden');
+        } else {
+            truncationBanner.classList.add('hidden');
+        }
     }
 
     // ── Build popup HTML ─────────────────────────────────────────────────
@@ -385,6 +401,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const resp = await fetch(`/api/map/geojson?${params.toString()}`, { signal });
             if (!resp.ok) throw new Error(`Server error: ${resp.status} ${resp.statusText}`);
             const data = await resp.json();
+            errorBanner.classList.add('hidden');
 
             clusterGroup.clearLayers();
 
@@ -420,8 +437,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             // Update the result count badge using the `total` field from the
             // API response, falling back to the feature count if absent.
-            const total = (data.total != null) ? data.total : (data.features ? data.features.length : 0);
-            updateResultCount(total);
+            const returned = (data.returned != null) ? data.returned : (data.features ? data.features.length : 0);
+            const total = (data.total != null) ? data.total : returned;
+            updateResultCount(total, returned, data.truncated === true);
 
             // Auto-reload is now handling pan/zoom — keep the manual button
             // hidden until an explicit filter change triggers it to reappear.

@@ -199,6 +199,12 @@ Key `.env` settings:
 | `SMTP_FROM` | `k9-overwatch@localhost` | From address for match emails |
 | `APP_BASE_URL` | `http://localhost:8000` | Public base URL used for unsubscribe / detail links in emails |
 
+### Map operations
+
+The map uses Leaflet with OpenStreetMap light tiles and CARTO dark tiles. These public tile endpoints are suitable for development and low-volume use with attribution; production deployments should select a provider whose terms and rate limits match expected traffic, or operate a permitted/self-hosted tile service. Configure any provider changes in `map.html`/`map.js` and preserve required attribution.
+
+The map API returns at most 500 features per viewport. Responses include `total`, `returned`, and `truncated`; users are prompted to zoom in when the viewport contains more records than the payload cap.
+
 ### Run the Web App
 
 ```bash

@@ -19,7 +19,8 @@ async def search_pets(
     record_type: list[str],
     animal_type: list[str],
     days: int,
-    page: int
+    page: int,
+    query: str | None = None,
 ) -> tuple[Sequence[PetRow], int]:
     stmt = select(PetRow).where(PetRow.active == True)
     
@@ -27,9 +28,29 @@ async def search_pets(
         stmt = stmt.where(PetRow.record_type.in_(record_type))
     if animal_type:
         stmt = stmt.where(PetRow.animal_type.in_(animal_type))
-        
+
+    if query:
+        # Search each word independently so "blue collar" finds listings that
+        # contain both terms anywhere in the user-facing description fields.
+        search_columns = (
+            PetRow.name,
+            PetRow.breed,
+            PetRow.color_primary,
+            PetRow.color_secondary,
+            PetRow.description,
+            PetRow.distinctive_features,
+            PetRow.location_text,
+            PetRow.city,
+            PetRow.state,
+        )
+        for term in query.split():
+            pattern = f"%{term}%"
+            stmt = stmt.where(or_(*(column.ilike(pattern) for column in search_columns)))
+
     cutoff_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
-    stmt = stmt.where(PetRow.date_event >= cutoff_date.date())
+    # Keep listings with an unparsed event date visible; source data frequently
+    # omits or mangles dates.
+    stmt = stmt.where(or_(PetRow.date_event >= cutoff_date.date(), PetRow.date_event.is_(None)))
     
     # Get total count
     count_stmt = select(func.count()).select_from(stmt.subquery())
@@ -52,9 +73,10 @@ async def pets_page(
     animal_type: list[str] = Query(default=[]),
     days: int = Query(default=30, ge=1, le=365),
     page: int = Query(default=1, ge=1),
+    q: str | None = Query(default=None, max_length=200),
     db: AsyncSession = Depends(get_db)
 ):
-    pets, total = await search_pets(db, record_type, animal_type, days, page)
+    pets, total = await search_pets(db, record_type, animal_type, days, page, q)
     total_pages = math.ceil(total / PAGE_SIZE) if total > 0 else 1
 
     return templates.TemplateResponse(
@@ -68,7 +90,8 @@ async def pets_page(
             "filters": {
                 "record_type": record_type,
                 "animal_type": animal_type,
-                "days": days
+                "days": days,
+                "q": q or ""
             }
         }
     )
@@ -80,9 +103,10 @@ async def pets_results(
     animal_type: list[str] = Query(default=[]),
     days: int = Query(default=30, ge=1, le=365),
     page: int = Query(default=1, ge=1),
+    q: str | None = Query(default=None, max_length=200),
     db: AsyncSession = Depends(get_db)
 ):
-    pets, total = await search_pets(db, record_type, animal_type, days, page)
+    pets, total = await search_pets(db, record_type, animal_type, days, page, q)
     total_pages = math.ceil(total / PAGE_SIZE) if total > 0 else 1
 
     return templates.TemplateResponse(
@@ -96,7 +120,8 @@ async def pets_results(
             "filters": {
                 "record_type": record_type,
                 "animal_type": animal_type,
-                "days": days
+                "days": days,
+                "q": q or ""
             }
         }
     )
