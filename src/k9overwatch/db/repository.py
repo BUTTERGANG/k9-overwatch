@@ -2,14 +2,14 @@
 from __future__ import annotations
 
 import math
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
-from sqlalchemy import and_, exists, not_, or_, select, update
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..matching.breed_normalizer import normalize_breed
 from ..models.pet_record import PetRecord
-from .models import PetMatch, PetRow, ScraperState, User, UserSession
+from .models import PetMatch, PetRow, ScraperState
 
 
 class PetRepository:
@@ -20,10 +20,14 @@ class PetRepository:
 
     # ── Upsert ───────────────────────────────────────────────────────────────
 
-    async def upsert(self, record: PetRecord) -> tuple[PetRow, bool]:
+    async def upsert(
+        self, record: PetRecord, owner_id: str | None = None
+    ) -> tuple[PetRow, bool]:
         """
         INSERT or UPDATE a pet record.
         Returns (row, created) where created=True means new record.
+
+        owner_id links a record to the submitting user (source == "user").
         """
         # Check for existing row
         stmt = select(PetRow).where(
@@ -70,12 +74,8 @@ class PetRepository:
                 country=record.country,
                 lat=record.lat,
                 lon=record.lon,
-                geocode_source=(
-                    str(record.geocode_source) if record.geocode_source else None
-                ),
-                geocode_confidence=(
-                    str(record.geocode_confidence) if record.geocode_confidence else None
-                ),
+                geocode_source=str(record.geocode_source) if record.geocode_source else None,
+                geocode_confidence=str(record.geocode_confidence) if record.geocode_confidence else None,
                 shelter_name=record.shelter_name,
                 shelter_code=record.shelter_code,
                 shelter_id=record.shelter_id,
@@ -93,6 +93,7 @@ class PetRepository:
                 scraped_at=now,
                 last_checked_at=now,
                 raw=record.raw,
+                owner_id=owner_id,
             )
             self.session.add(row)
             await self.session.flush()
@@ -109,16 +110,15 @@ class PetRepository:
             existing.photos = record.photos or existing.photos
             existing.thumbnail_url = record.thumbnail_url or existing.thumbnail_url
             existing.last_checked_at = now
+            # Preserve ownership: only set owner_id on first creation, never clobber.
+            if owner_id and not existing.owner_id:
+                existing.owner_id = owner_id
             # Only update geo if we have new data
             if record.lat is not None:
                 existing.lat = record.lat
                 existing.lon = record.lon
-                existing.geocode_source = (
-                    str(record.geocode_source) if record.geocode_source else None
-                )
-                existing.geocode_confidence = (
-                    str(record.geocode_confidence) if record.geocode_confidence else None
-                )
+                existing.geocode_source = str(record.geocode_source) if record.geocode_source else None
+                existing.geocode_confidence = str(record.geocode_confidence) if record.geocode_confidence else None
             existing.raw = record.raw or existing.raw
             await self.session.flush()
             return existing, False
@@ -207,10 +207,7 @@ class PetRepository:
             phi1, phi2 = math.radians(lat), math.radians(r.lat)
             d_phi = math.radians(r.lat - lat)
             d_lam = math.radians(r.lon - lon)
-            a = (
-                math.sin(d_phi / 2) ** 2
-                + math.cos(phi1) * math.cos(phi2) * math.sin(d_lam / 2) ** 2
-            )
+            a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lam / 2) ** 2
             return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
         return [r for r in candidates if haversine(r) <= miles]
@@ -219,7 +216,8 @@ class PetRepository:
         self,
         record: PetRecord,
         search_radius_miles: float = 15.0,
-        date_window_days: int = 60,
+        date_window_before_days: int = 14,
+        date_window_after_days: int = 90,
         max_record_age_days: int = 365,
     ) -> list[PetRow]:
         """
@@ -227,25 +225,34 @@ class PetRepository:
         - Opposite or same record_type (for both dedup and lost→found)
         - Same animal_type
         - Within radius (if we have coordinates)
-        - Within date window (event-relative, or wall-clock fallback when date_event is None)
-        - Scraped within max_record_age_days (hard cap to prevent cross-year matches)
+        - Within date window
+
+        The window is asymmetric on purpose: LostFoundMatcher permits a found
+        report up to MAX_DAYS_AFTER_LOST (90) days after the lost date and up to
+        MAX_DAYS_BEFORE_LOST (3) days before, while dedup pairs are typically
+        within ~2 weeks. Using a symmetric ±window smaller than 90 would silently
+        exclude valid late found reports, so the after-window is kept wide and the
+        matcher's own hard filters enforce the precise constraints.
+
+        When `record.date_event` is missing, candidates are instead restricted to
+        those scraped within the after-window, and everything is additionally
+        capped at `max_record_age_days` since scrape time so we never silently
+        match against arbitrarily old data.
         """
         filters = [PetRow.active == True]
 
         if record.animal_type:
             filters.append(PetRow.animal_type == str(record.animal_type))
 
-        # Date window: event-relative when available, wall-clock fallback otherwise.
-        # When date_event is None we still restrict to recently-scraped records so
-        # we never silently match against arbitrarily old data.
+        # Date window (asymmetric to match the matcher's allowed range)
         if record.date_event:
-            lower = record.date_event - timedelta(days=date_window_days)
-            upper = record.date_event + timedelta(days=date_window_days)
+            lower = record.date_event - timedelta(days=date_window_before_days)
+            upper = record.date_event + timedelta(days=date_window_after_days)
             filters.append(PetRow.date_event.between(lower, upper))
         else:
             # No event date — only consider candidates scraped recently
             scraped_cutoff = (
-                datetime.now(UTC).replace(tzinfo=None) - timedelta(days=date_window_days)
+                datetime.now(UTC).replace(tzinfo=None) - timedelta(days=date_window_after_days)
             )
             filters.append(PetRow.scraped_at >= scraped_cutoff)
 
@@ -284,47 +291,48 @@ class PetRepository:
 
         return candidates
 
-    async def get_stale_records(
-        self, source: str, *, older_than_hours: int = 48
+    async def get_matchable_records(
+        self, limit: int = 1000, since_date: date | None = None
     ) -> list[PetRow]:
         """
-        Return active records from `source` whose `last_checked_at` is older
-        than `older_than_hours` hours (or NULL). Used by the staleness checker
-        to verify that records still exist on the source website.
+        Active records eligible for (re-)matching.
+
+        Unlike `get_unmatched_records`, this does NOT exclude records that already
+        participate in a match. Re-matching lets (a) new candidates surface for a
+        pet that already had a match and (b) scores refresh as more data arrives
+        (e.g. geocoding fills in coordinates → stronger geo signals).
+
+        `since_date` bounds the pool to recent records so the periodic full pass
+        stays roughly bounded instead of growing as O(records^2). 120 days covers
+        the 90-day lost→found window plus margin.
         """
-        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=older_than_hours)
-        stmt = select(PetRow).where(
-            and_(
-                PetRow.source == source,
-                PetRow.active == True,
-                or_(
-                    PetRow.last_checked_at.is_(None),
-                    PetRow.last_checked_at < cutoff,
-                ),
-            )
+        filters = [PetRow.active == True]
+        if since_date is not None:
+            filters.append(PetRow.date_event >= since_date)
+        stmt = (
+            select(PetRow)
+            .where(and_(*filters))
+            .order_by(PetRow.date_event.desc())
+            .limit(limit)
         )
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     async def get_unmatched_records(
         self, source: str | None = None, limit: int = 500
     ) -> list[PetRow]:
-        """Records not yet present in pet_matches — candidates for a matching pass."""
-        # Use NOT EXISTS correlated subquery — faster than NOT IN for large tables
-        # because NOT IN materializes the entire subquery result.
-        matched_subq = (
-            select(PetMatch.pet_a_id)
-            .where(PetMatch.pet_a_id == PetRow.id)
-            .union(
-                select(PetMatch.pet_b_id).where(PetMatch.pet_b_id == PetRow.id)
-            )
-        )
-        filters = [PetRow.active == True, not_(exists(matched_subq))]
+        """Deprecated: records with no match row yet.
+
+        Kept for backward compatibility. Prefer `get_matchable_records` so pets
+        that already have a match are still reconsidered when new data arrives.
+        """
+        matched_ids_stmt = select(PetMatch.pet_a_id).union(select(PetMatch.pet_b_id))
+        filters = [PetRow.active == True, PetRow.id.not_in(matched_ids_stmt)]
         if source:
             filters.append(PetRow.source == source)
         stmt = select(PetRow).where(and_(*filters)).limit(limit)
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return list(result.scalars().all())
 
     # ── Scraper state ─────────────────────────────────────────────────────────
 
@@ -361,20 +369,101 @@ class PetRepository:
             state.consecutive_errors = 0
         else:
             state.consecutive_errors = (state.consecutive_errors or 0) + 1
-            
+
         if last_record_at:
             state.last_record_at = last_record_at
         await self.session.flush()
 
-    # ── Match storage ─────────────────────────────────────────────────────────
+    # ── Staleness ─────────────────────────────────────────────────────────────
+
+    async def get_stale_records(
+        self, source: str, older_than_hours: int = 48
+    ) -> list[PetRow]:
+        """
+        Return active records from `source` that have not been re-checked by a
+        scrape in the last `older_than_hours`. Used by the staleness job to
+        verify (via check_active) whether a listing is still live.
+
+        Falls back to scraped_at when last_checked_at is null.
+        """
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=older_than_hours)
+        filters = [
+            PetRow.source == source,
+            PetRow.active == True,
+            or_(
+                PetRow.last_checked_at.is_(None),
+                PetRow.last_checked_at < cutoff,
+            ),
+        ]
+        stmt = select(PetRow).where(and_(*filters)).order_by(PetRow.date_posted.desc())
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
+    async def deactivate_stale_by_age(
+        self, max_age_days: int = 120, exclude_sources: list[str] | None = None
+    ) -> int:
+        """
+        Mark long-expired listings inactive across ALL sources.
+
+        The original staleness check only verified records against IndyLostPetAlert's
+        live endpoint; the other four sources had no expiry path, so resolved/found
+        pets stayed on the map forever. This is a safe, source-agnostic fallback: any
+        active record whose event date is older than `max_age_days` (and which has no
+        active match) is deactivated so the map and match pool stay fresh.
+
+        `exclude_sources` lets a source opt out (e.g. if it has its own verification).
+        """
+        from .models import PetMatch
+
+        cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=max_age_days)).date()
+        filters = [PetRow.active == True, PetRow.date_event < cutoff]
+        if exclude_sources:
+            filters.append(PetRow.source.not_in(exclude_sources))
+        stmt = select(PetRow).where(and_(*filters))
+        rows = list((await self.session.execute(stmt)).scalars().all())
+        if not rows:
+            return 0
+
+        # Don't expire a record that currently has a live (reviewed, un-rejected) match.
+        active_match_ids = set()
+        match_stmt = select(PetMatch).where(
+            PetMatch.pet_a_id.in_([r.id for r in rows])
+            | PetMatch.pet_b_id.in_([r.id for r in rows])
+        )
+        for m in (await self.session.execute(match_stmt)).scalars().all():
+            if m.confirmed is not False:
+                active_match_ids.add(m.pet_a_id)
+                active_match_ids.add(m.pet_b_id)
+
+        count = 0
+        for r in rows:
+            if r.id in active_match_ids:
+                continue
+            r.active = False
+            r.last_checked_at = datetime.now(UTC).replace(tzinfo=None)
+            count += 1
+        await self.session.flush()
+        return count
 
     async def save_match(self, match) -> bool:
         """
-        Save a MatchResult. Returns True if a new record was created.
-        If a match already exists and the new score is higher (and not yet
-        human-reviewed), updates the score, confidence, and signals in place.
+        Save (or update) a MatchResult.
+
+        Idempotent by (pet_a_id, pet_b_id, match_type): if a row already exists
+        for the pair, its score/confidence/signals are refreshed to the latest
+        computed values so matches improve as more data arrives. This is what
+        makes the periodic re-match pass safe to run repeatedly.
+
+        A row that a human has explicitly REJECTED (`confirmed=False`) is
+        preserved and not overwritten, so the pipeline respects human review.
+        A human CONFIRMED row (`confirmed=True`) is refreshed but keeps its
+        confirmed flag.
+
+        Returns True if a new row was created, False if an existing row was
+        updated (or left untouched because it was rejected).
         """
-        result = await self.session.execute(
+
+        existing = await self.session.execute(
             select(PetMatch).where(
                 or_(
                     and_(PetMatch.pet_a_id == match.pet_a_id, PetMatch.pet_b_id == match.pet_b_id),
@@ -382,104 +471,188 @@ class PetRepository:
                 )
             ).where(PetMatch.match_type == match.match_type)
         )
-        existing = result.scalar_one_or_none()
-        if existing:
-            if not existing.reviewed and match.score > existing.score:
-                existing.score = match.score
-                existing.confidence = match.confidence
-                existing.signals_fired = match.signals_fired
-                await self.session.flush()
+        row = existing.scalar_one_or_none()
+        if row is None:
+            row = PetMatch(
+                pet_a_id=match.pet_a_id,
+                pet_b_id=match.pet_b_id,
+                match_type=match.match_type,
+                score=match.score,
+                confidence=match.confidence,
+                signals_fired=match.signals_fired,
+            )
+            self.session.add(row)
+            await self.session.flush()
+            return True
+
+        # Preserve a human rejection — never auto-overwrite a dismissed match.
+        if row.confirmed is False:
             return False
-        row = PetMatch(
-            pet_a_id=match.pet_a_id,
-            pet_b_id=match.pet_b_id,
-            match_type=match.match_type,
-            score=match.score,
-            confidence=match.confidence,
-            signals_fired=match.signals_fired,
-        )
-        self.session.add(row)
-        # Increment the denormalized match_count on both pets so the map
-        # endpoint can skip the expensive UNION ALL subquery.
-        await self.session.execute(
-            update(PetRow)
-            .where(PetRow.id.in_([match.pet_a_id, match.pet_b_id]))
-            .values(match_count=PetRow.match_count + 1)
-        )
+
+        row.score = match.score
+        row.confidence = match.confidence
+        row.signals_fired = match.signals_fired
         await self.session.flush()
-        return True
+        return False
 
     async def get_matches_for_pet(self, pet_id: str) -> list[PetMatch]:
         stmt = select(PetMatch).where(
             or_(PetMatch.pet_a_id == pet_id, PetMatch.pet_b_id == pet_id)
         ).order_by(PetMatch.score.desc())
         result = await self.session.execute(stmt)
-        return result.scalars().all()
+        return list(result.scalars().all())
+
+    async def get_match_counts(self, pet_ids: list[str]) -> dict[str, int]:
+        """Return {pet_id: number_of_matches} for the given pets, in one query."""
+        if not pet_ids:
+            return {}
+        from sqlalchemy import func
+
+        stmt = (
+            select(
+                PetMatch.pet_a_id,
+                func.count().label("n"),
+            )
+            .where(PetMatch.pet_a_id.in_(pet_ids))
+            .group_by(PetMatch.pet_a_id)
+        )
+        a_counts = {
+            row.pet_a_id: row.n
+            for row in (await self.session.execute(stmt)).all()
+        }
+        stmt_b = (
+            select(PetMatch.pet_b_id, func.count().label("n"))
+            .where(PetMatch.pet_b_id.in_(pet_ids))
+            .group_by(PetMatch.pet_b_id)
+        )
+        b_counts = {
+            row.pet_b_id: row.n
+            for row in (await self.session.execute(stmt_b)).all()
+        }
+        return {
+            pid: a_counts.get(pid, 0) + b_counts.get(pid, 0) for pid in pet_ids
+        }
+
+    # ── Active-listing age buckets ─────────────────────────────────────────────
+
+    async def get_active_age_buckets(
+        self, record_type: str | None = None
+    ) -> dict[str, int]:
+        """
+        Count active records grouped by how long ago the event happened:
+        'week' (≤7d), 'fortnight' (8–14d), 'month' (15–30d), 'older' (>30d).
+
+        Robust to missing dates: effective age falls back
+        date_event → days_since_event(+scrape age) → scrape age, so a listing
+        with no parsed date still lands in a sensible bucket instead of vanishing.
+        """
+        filters = [PetRow.active == True]  # noqa: E712 — SQLAlchemy needs ==
+        if record_type:
+            filters.append(PetRow.record_type == record_type)
+        stmt = select(
+            PetRow.date_event, PetRow.days_since_event, PetRow.scraped_at
+        ).where(and_(*filters))
+        result = await self.session.execute(stmt)
+
+        counts: dict[str, int] = dict.fromkeys(AGE_BUCKETS, 0)
+        for date_event, days_since_event, scraped_at in result.all():
+            counts[age_bucket(effective_age_days(date_event, days_since_event, scraped_at))] += 1
+        return counts
+
+
+# ── Age-bucket helpers (module-level: reused by API + tests) ────────────────────
+
+AGE_BUCKETS = ("week", "fortnight", "month", "older")
+
+# Human-friendly labels for the UI — plain language for non-technical users.
+AGE_BUCKET_LABELS = {
+    "week": "Within the last week",
+    "fortnight": "1–2 weeks ago",
+    "month": "2 weeks – 1 month ago",
+    "older": "More than a month ago",
+}
+
+
+def effective_age_days(
+    date_event: date | None,
+    days_since_event: int | None,
+    scraped_at: datetime | None,
+) -> int:
+    """Best-estimate age in days, tolerant of missing fields."""
+    today = datetime.now(UTC).date()
+    if date_event is not None:
+        return max(0, (today - date_event).days)
+    scrape_age = 0
+    if scraped_at is not None:
+        sd = scraped_at.date() if isinstance(scraped_at, datetime) else scraped_at
+        scrape_age = max(0, (today - sd).days)
+    if days_since_event is not None:
+        return max(0, days_since_event) + scrape_age
+    return scrape_age
+
+
+def age_bucket(days: int) -> str:
+    """Map an age in days to a bucket key."""
+    if days <= 7:
+        return "week"
+    if days <= 14:
+        return "fortnight"
+    if days <= 30:
+        return "month"
+    return "older"
+
+
+# ── User accounts & notification prefs ──────────────────────────────────────────
+
+from .models import NotificationPrefs, User  # noqa: E402  (imported late to avoid cycle)
 
 
 class UserRepository:
-    """Data access layer for user accounts and sessions."""
+    """User accounts, registration, and notification preferences."""
 
     def __init__(self, session: AsyncSession):
         self.session = session
 
-    async def create_user(
-        self,
-        *,
-        email: str,
-        display_name: str,
-        password_hash: str | None = None,
-    ) -> User:
-        user = User(email=email, display_name=display_name, password_hash=password_hash)
+    async def get_by_email(self, email: str) -> User | None:
+        stmt = select(User).where(User.email == email.strip().lower())
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def get_by_id(self, user_id: str) -> User | None:
+        stmt = select(User).where(User.id == user_id)
+        return (await self.session.execute(stmt)).scalar_one_or_none()
+
+    async def create(self, email: str, password: str, display_name: str | None = None) -> User:
+        from k9overwatch.web.auth import hash_password, new_unsubscribe_token
+
+        user = User(
+            email=email.strip().lower(),
+            display_name=display_name or email.split("@")[0],
+            password_hash=hash_password(password),
+        )
         self.session.add(user)
+        await self.session.flush()
+        # Create default (low-spam) notification prefs alongside the user.
+        self.session.add(
+            NotificationPrefs(user_id=user.id, unsubscribe_token=new_unsubscribe_token())
+        )
         await self.session.flush()
         return user
 
-    async def get_user_by_email(self, email: str) -> User | None:
-        result = await self.session.execute(select(User).where(User.email == email))
-        return result.scalar_one_or_none()
+    async def get_prefs(self, user_id: str) -> NotificationPrefs | None:
+        stmt = select(NotificationPrefs).where(NotificationPrefs.user_id == user_id)
+        return (await self.session.execute(stmt)).scalar_one_or_none()
 
-    async def get_user_by_id(self, user_id: str) -> User | None:
-        result = await self.session.execute(select(User).where(User.id == user_id))
-        return result.scalar_one_or_none()
+    async def save_prefs(self, user_id: str, **fields) -> NotificationPrefs:
+        prefs = await self.get_prefs(user_id)
+        if prefs is None:
+            from k9overwatch.web.auth import new_unsubscribe_token
 
-    async def create_session(
-        self,
-        *,
-        user_id: str,
-        expires_at: datetime,
-        ip_address: str | None = None,
-        user_agent: str | None = None,
-    ) -> UserSession:
-        session = UserSession(
-            user_id=user_id,
-            expires_at=expires_at,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-        self.session.add(session)
-        await self.session.flush()
-        return session
-
-    async def get_session(self, session_id: str) -> UserSession | None:
-        """Return a valid (not revoked, not expired) session."""
-        result = await self.session.execute(
-            select(UserSession).where(
-                UserSession.id == session_id,
-                UserSession.revoked == False,
-                UserSession.expires_at > datetime.now(UTC).replace(tzinfo=None),
+            prefs = NotificationPrefs(
+                user_id=user_id, unsubscribe_token=new_unsubscribe_token()
             )
-        )
-        return result.scalar_one_or_none()
-
-    async def revoke_session(self, session_id: str) -> None:
-        await self.session.execute(
-            update(UserSession).where(UserSession.id == session_id).values(revoked=True)
-        )
-
-    async def update_last_login(self, user_id: str) -> None:
-        await self.session.execute(
-            update(User)
-            .where(User.id == user_id)
-            .values(last_login_at=datetime.now(UTC).replace(tzinfo=None))
-        )
+            self.session.add(prefs)
+        for key, value in fields.items():
+            if hasattr(prefs, key):
+                setattr(prefs, key, value)
+        await self.session.flush()
+        return prefs

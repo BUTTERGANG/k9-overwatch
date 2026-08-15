@@ -74,7 +74,7 @@
             <div class="bg-slate-100 dark:bg-slate-700 rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-700"
                  style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
                 {% if pet.thumbnail_url %}
-                    <img src="/proxy/image?url={{ pet.thumbnail_url | urlencode }}"
+                    <img src="{{ pet.thumbnail_url | proxied }}"
                          alt="{{ pet.name or 'Pet photo' }}"
                          class="w-full object-cover max-h-72"
                          loading="lazy"
@@ -93,9 +93,9 @@
                     {% for photo in pet.photos[1:9] %}
                     <button type="button"
                             class="gallery-thumb rounded-lg overflow-hidden border border-slate-100 dark:border-slate-700 cursor-zoom-in"
-                            onclick="window.open('/proxy/image?url={{ photo | urlencode }}','_blank')"
+                            onclick="window.open('{{ photo | proxied }}','_blank')"
                             aria-label="View photo {{ loop.index + 1 }}">
-                        <img src="/proxy/image?url={{ photo | urlencode }}"
+                        <img src="{{ photo | proxied }}"
                              alt="Photo {{ loop.index + 1 }}"
                              class="w-full h-14 object-cover"
                              loading="lazy"
@@ -108,12 +108,27 @@
                 {% endif %}
             </div>
 
+            {% if pet.thumbnail_url %}
+            <!-- Find similar photos elsewhere on the web (Google Lens reverse image search) -->
+            <a href="https://lens.google.com/uploadbyurl?url={{ pet.thumbnail_url | urlencode }}" target="_blank" rel="noopener"
+               class="flex items-center justify-center gap-2 text-sm font-semibold text-brand-600 hover:text-brand-800 border border-brand-200 dark:border-brand-700 dark:text-brand-400 rounded-xl py-2.5 hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors">
+                🔍 See similar photos on the web
+            </a>
+            {% endif %}
+
             <!-- Contact card -->
             <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-700"
                  style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
                 <h2 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-4 pb-2.5 border-b border-slate-100 dark:border-slate-700">
                     Contact Info
                 </h2>
+                {% if not is_logged_in %}
+                <p class="text-sm text-slate-500 dark:text-slate-400 mb-3">Log in to see the contact details for this pet.</p>
+                <a href="/login?next=/pets/{{ pet.id }}"
+                   class="block text-center text-sm font-semibold text-brand-600 hover:text-brand-800 border border-brand-200 dark:border-brand-700 dark:text-brand-400 rounded-xl py-2.5 hover:bg-brand-50 dark:hover:bg-brand-900/30 transition-colors">
+                    Log in to view
+                </a>
+                {% else %}
                 <div class="space-y-3">
                     {% if pet.contact_name %}
                     <div class="flex items-center gap-2.5 text-sm text-slate-700 dark:text-slate-300">
@@ -159,21 +174,22 @@
                     </div>
                     {% endif %}
 
+                    {% if pet.source_url %}
+                    <a href="{{ pet.source_url }}" target="_blank" rel="noopener noreferrer"
+                       class="mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-brand-600
+                              hover:text-brand-800 border border-brand-200 rounded-xl py-2.5
+                              hover:bg-brand-50 hover:border-brand-300 transition-colors">
+                        View on {{ pet.source }}
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
+                        </svg>
+                    </a>
+                    {% endif %}
+
                     {% if not pet.contact_phone and not pet.contact_email and not pet.source_url %}
                     <p class="text-sm text-slate-400 dark:text-slate-500 italic">No contact info available.</p>
                     {% endif %}
                 </div>
-
-                {% if pet.source_url %}
-                <a href="{{ pet.source_url }}" target="_blank" rel="noopener noreferrer"
-                   class="mt-4 flex items-center justify-center gap-1.5 text-sm font-semibold text-brand-600
-                          hover:text-brand-800 border border-brand-200 rounded-xl py-2.5
-                          hover:bg-brand-50 hover:border-brand-300 transition-colors">
-                    View on {{ pet.source }}
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
-                    </svg>
-                </a>
                 {% endif %}
             </div>
         </div>

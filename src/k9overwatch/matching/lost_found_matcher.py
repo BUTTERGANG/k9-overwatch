@@ -62,6 +62,34 @@ class LostFoundMatcher:
 
         return sorted(results, key=lambda r: r.score, reverse=True)
 
+    def find_reverse_matches(
+        self,
+        found_record: PetRow,
+        candidates: list[PetRow],
+    ) -> list[MatchResult]:
+        """
+        Reverse direction: compare a newly-ingested FOUND/SIGHTING record against a
+        pool of LOST records, to surface reunifications where the lost pet was
+        already in the DB before this found report arrived.
+
+        Delegates to the same `_compare` used by `find_matches` with the roles
+        swapped (the candidate LOST record becomes the "lost" side). The scoring
+        signals are symmetric, so the score is identical regardless of direction.
+        """
+        if found_record.record_type not in ("found", "sighting"):
+            return []
+
+        results = []
+        for candidate in candidates:
+            if candidate.record_type != "lost":
+                continue
+            # _compare expects (lost, found); pass the LOST candidate as lost.
+            result = self._compare(candidate, found_record)
+            if result and result.score >= LOST_FOUND_MIN_SCORE:
+                results.append(result)
+
+        return sorted(results, key=lambda r: r.score, reverse=True)
+
     def _compare(self, lost: PetRow, found: PetRow) -> MatchResult | None:
         # Hard filters
         if lost.animal_type != found.animal_type:

@@ -95,6 +95,33 @@ document.addEventListener("DOMContentLoaded", () => {
         },
     };
 
+    // "See similar photos" — opens Google Lens reverse image search for the
+    // pet's photo. Lets a user visually confirm a match without any ML on our
+    // side, and is a familiar interaction ("search by image").
+    function lensUrl(imageUrl) {
+        return `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(imageUrl)}`;
+    }
+
+    function updateRecencyBar() {
+        const form = document.getElementById('map-filters');
+        const types = new FormData(form).getAll('record_type');
+        const params = new URLSearchParams();
+        // If exactly one record type is selected, scope the counts to it.
+        if (types.length === 1) params.append('record_type', types[0]);
+        fetch(`/api/map/buckets?${params.toString()}`)
+            .then(r => r.ok ? r.json() : null)
+            .then(data => {
+                if (!data) return;
+                const byKey = Object.fromEntries(data.buckets.map(b => [b.key, b.count]));
+                document.querySelectorAll('#recency-bar [data-bucket]').forEach(el => {
+                    const key = el.getAttribute('data-bucket');
+                    const label = { week: 'this week', fortnight: '1–2 wks', month: 'this month', older: 'older' }[key];
+                    el.textContent = `${byKey[key] ?? 0} ${label}`;
+                });
+            })
+            .catch(() => { /* non-critical: leave placeholder text */ });
+    }
+
     function makeTileLayer(dark) {
         var cfg = dark ? _TILES.dark : _TILES.light;
         return L.tileLayer(cfg.url, { attribution: cfg.attribution, maxZoom: 19 });
@@ -257,13 +284,22 @@ document.addEventListener("DOMContentLoaded", () => {
         const cameraPlaceholder = getCameraPlaceholder();
 
         const imgHtml = safeThumbnail
-            ? `<img src="/proxy/image?url=${encodeURIComponent(p.thumbnail_url)}"
+            ? `<img src="/img?url=${encodeURIComponent(p.thumbnail_url)}"
                     class="w-full object-cover"
                     style="height:120px;"
                     alt="${safeName}"
                     loading="lazy"
                     onerror="this.onerror=null;this.src='/static/img/pet-placeholder.svg';">`
             : cameraPlaceholder;
+
+        // Optional "see similar photos" button, only when a photo exists.
+        const lensHtml = safeThumbnail
+            ? `<a href="${lensUrl(p.thumbnail_url)}" target="_blank" rel="noopener"
+                  style="display:block;text-align:center;margin-bottom:6px;font-size:11px;font-weight:600;
+                         color:#4f46e5;text-decoration:none;">
+                 &#128269; See similar photos
+               </a>`
+            : '';
 
         return `
             <div style="width:210px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;background:${wrapperBg};">
@@ -304,6 +340,7 @@ document.addEventListener("DOMContentLoaded", () => {
                             ${p.match_count} potential match${p.match_count > 1 ? 'es' : ''}
                         </a>
                     </div>` : ''}
+                    ${lensHtml}
                     <a href="/pets/${safeId}"
                        style="display:block;text-align:center;background:#2540eb;color:white;
                               text-decoration:none;font-weight:600;font-size:12px;
@@ -389,6 +426,7 @@ document.addEventListener("DOMContentLoaded", () => {
             // Auto-reload is now handling pan/zoom — keep the manual button
             // hidden until an explicit filter change triggers it to reappear.
             searchAreaBtn.classList.add('hidden');
+            updateRecencyBar();
         } catch (err) {
             if (err.name === 'AbortError') {
                 // A newer request superseded this one — swallow silently

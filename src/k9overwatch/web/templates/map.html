@@ -328,6 +328,18 @@
             <span id="map-result-count-text">0 pets</span>
         </div>
 
+        <!-- Recency summary bar — plain-language counts, updates with the map -->
+        <div id="recency-bar" class="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-white/95 dark:bg-slate-800/95 backdrop-blur rounded-full shadow-lg border border-gray-100 dark:border-slate-700 px-4 py-2 flex items-center gap-3 text-xs sm:text-sm text-gray-700 dark:text-slate-300 max-w-[95%] overflow-x-auto">
+            <span class="font-semibold text-gray-500 dark:text-slate-400 whitespace-nowrap">Active reports:</span>
+            <span class="whitespace-nowrap" data-bucket="week">— this week</span>
+            <span class="text-gray-300 dark:text-slate-600">|</span>
+            <span class="whitespace-nowrap" data-bucket="fortnight">— 1–2 wks</span>
+            <span class="text-gray-300 dark:text-slate-600">|</span>
+            <span class="whitespace-nowrap" data-bucket="month">— this month</span>
+            <span class="text-gray-300 dark:text-slate-600">|</span>
+            <span class="whitespace-nowrap" data-bucket="older">— older</span>
+        </div>
+
         <div id="map"></div>
     </div>
 </div>

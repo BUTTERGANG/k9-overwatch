@@ -23,6 +23,7 @@ class PetSummary(BaseModel):
     thumbnail_url: str | None = None
     active: bool
     match_count: int = 0
+    age_bucket: str | None = None   # week | fortnight | month | older
 
 class PetDetail(PetSummary):
     breed_secondary: str | None = None

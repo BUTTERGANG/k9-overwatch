@@ -27,7 +27,7 @@
                class="flex-shrink-0 rounded-xl overflow-hidden border border-slate-200 hover:opacity-90 transition block"
                aria-label="View {{ other.name or 'this pet' }}'s profile">
                 {% if other.thumbnail_url %}
-                <img src="/proxy/image?url={{ other.thumbnail_url | urlencode }}" alt="{{ other.name or 'Pet photo' }}"
+                <img src="{{ other.thumbnail_url | proxied }}" alt="{{ other.name or 'Pet photo' }}"
                      class="w-16 h-16 object-cover" loading="lazy" width="64" height="64"
                      onerror="this.onerror=null;this.src='/static/img/pet-placeholder.svg'">
                 {% else %}

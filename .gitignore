@@ -6,6 +6,8 @@
 data/*.db
 data/*.db-shm
 data/*.db-wal
+# Ignore the whole local data dir (dev DB + uploaded owner photos are local artifacts)
+data/
 
 # Python
 __pycache__/

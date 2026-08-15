@@ -16,7 +16,13 @@ from dotenv import load_dotenv
 
 from ..db.connection import init_db
 from ..scrapers.base import ScraperConfig
-from .jobs import check_stale_records, run_matching_pass, run_scraper
+from .jobs import (
+    check_stale_records,
+    expire_stale_listings,
+    flush_digest_notifications,
+    run_matching_pass,
+    run_scraper,
+)
 
 load_dotenv()
 logger = logging.getLogger(__name__)
@@ -126,11 +132,43 @@ class ScraperScheduler:
             coalesce=True,
         )
 
-        # ── Staleness check — once per day, 6 hours after midnight run ────────
+        # ── Full re-match — refreshes scores / surfaces late candidates ───────
+        # Idempotent: save_match upserts in place (unless a human rejected it).
+        # Bounded to the last 120 days so it stays roughly O(records^2)-bounded.
+        scheduler.add_job(
+            run_matching_pass,
+            "cron", hour=4, minute=0,
+            id="rematch_pass",
+            kwargs={"rematch": True, "rematch_window_days": 120},
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # ── Staleness check — marks old records inactive ───────────────────────
         scheduler.add_job(
             check_stale_records,
             "cron", hour="6,18", minute="0",
             id="staleness_check",
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # ── Age-based expiry — source-agnostic fallback so resolved/found pets
+        #    eventually leave the map (the per-source check only covers Indy). ──
+        scheduler.add_job(
+            expire_stale_listings,
+            "interval", hours=24,
+            id="expire_stale_listings",
+            kwargs={"max_age_days": 120},
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # ── Match digest — coalesced daily email (respects per-user prefs) ────
+        scheduler.add_job(
+            flush_digest_notifications,
+            "cron", hour=19, minute=0,
+            id="match_digest",
             max_instances=1,
             coalesce=True,
         )

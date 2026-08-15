@@ -106,7 +106,7 @@
                 <a href="/pets/{{ a.id }}"
                    class="flex flex-1 gap-3 items-start group min-w-0 hover:opacity-90 transition-opacity rounded-xl p-1 -m-1">
                     {% if a.thumbnail_url %}
-                    <img src="/proxy/image?url={{ a.thumbnail_url | urlencode }}" alt="{{ a.name or 'Pet photo' }}"
+                    <img src="{{ a.thumbnail_url | proxied }}" alt="{{ a.name or 'Pet photo' }}"
                          class="w-16 h-16 object-cover rounded-xl border border-slate-100 flex-shrink-0 group-hover:ring-2 group-hover:ring-brand-300 transition"
                          loading="lazy" width="64" height="64"
                          onerror="this.onerror=null;this.src='/static/img/pet-placeholder.svg'">
@@ -143,7 +143,7 @@
                 <a href="/pets/{{ b.id }}"
                    class="flex flex-1 gap-3 items-start group min-w-0 sm:flex-row-reverse hover:opacity-90 transition-opacity rounded-xl p-1 -m-1">
                     {% if b.thumbnail_url %}
-                    <img src="/proxy/image?url={{ b.thumbnail_url | urlencode }}" alt="{{ b.name or 'Pet photo' }}"
+                    <img src="{{ b.thumbnail_url | proxied }}" alt="{{ b.name or 'Pet photo' }}"
                          class="w-16 h-16 object-cover rounded-xl border border-slate-100 flex-shrink-0 group-hover:ring-2 group-hover:ring-brand-300 transition"
                          loading="lazy" width="64" height="64"
                          onerror="this.onerror=null;this.src='/static/img/pet-placeholder.svg'">

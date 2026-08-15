@@ -18,12 +18,14 @@ load_dotenv()
 
 from k9overwatch.db.connection import get_engine, init_db
 from k9overwatch.utils.logging_config import configure_logging
+from k9overwatch.web.routers import accounts as accounts_router
 from k9overwatch.web.routers import admin as admin_router
-from k9overwatch.web.routers import auth as auth_router
-from k9overwatch.web.routers import image_proxy as image_proxy_router
+from k9overwatch.web.routers import images as images_router
 from k9overwatch.web.routers import map as map_router
 from k9overwatch.web.routers import matches as matches_router
 from k9overwatch.web.routers import pets as pets_router
+from k9overwatch.web.routers import reports as reports_router
+from k9overwatch.web.templates_config import templates
 
 logger = logging.getLogger(__name__)
 
@@ -66,30 +68,6 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
-class UserContextMiddleware(BaseHTTPMiddleware):
-    """Resolve the session cookie and set request.state.current_user on every request."""
-
-    _SKIP_PREFIXES = ("/static", "/proxy", "/api/")
-
-    async def dispatch(self, request: Request, call_next):
-        request.state.current_user = None
-        path = request.url.path
-        if not any(path.startswith(p) for p in self._SKIP_PREFIXES):
-            session_id = request.cookies.get("session_id")
-            if session_id:
-                try:
-                    from k9overwatch.db.connection import get_session
-                    from k9overwatch.db.repository import UserRepository
-                    async with get_session() as db:
-                        repo = UserRepository(db)
-                        session = await repo.get_session(session_id)
-                        if session is not None:
-                            request.state.current_user = await repo.get_user_by_id(session.user_id)
-                except Exception:
-                    pass  # session lookup failure is non-fatal
-        return await call_next(request)
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     configure_logging()
@@ -115,27 +93,61 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="K9-Overwatch", lifespan=lifespan)
 app.add_middleware(SecurityHeadersMiddleware)
-app.add_middleware(UserContextMiddleware)
 
 _WEB_DIR = Path(__file__).parent
 
+
+@app.middleware("http")
+async def auth_context(request: Request, call_next):
+    """Resolve login state once per request and expose it on request.state."""
+    from k9overwatch.db.repository import UserRepository
+    from k9overwatch.web.auth import COOKIE_NAME, read_session_token
+
+    user_id = read_session_token(request.cookies.get(COOKIE_NAME))
+    request.state.is_logged_in = bool(user_id)
+    request.state.current_user_name = None
+    if user_id:
+        from k9overwatch.db.connection import get_session_factory
+
+        factory = get_session_factory()
+        async with factory() as session:
+            user = await UserRepository(session).get_by_id(user_id)
+            if user:
+                request.state.current_user_name = user.display_name
+    return await call_next(request)
+
+
+def _inject_user_state(request: Request):
+    """Expose login state to every template via request.state (set by middleware)."""
+    is_logged_in = bool(getattr(getattr(request, "state", None), "is_logged_in", False))
+    name = getattr(getattr(request, "state", None), "current_user_name", None)
+    return {"is_logged_in": is_logged_in, "current_user_name": name}
+
+
+templates.context_processors.append(_inject_user_state)
+
 # Static files
 app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
+# Uploaded owner photos (served as-is; gated by being unguessable UUID filenames)
+_uploads_dir = _WEB_DIR.parent.parent.parent / "data" / "uploads"
+os.makedirs(_uploads_dir, exist_ok=True)
+app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
 
 # Routers
+app.include_router(accounts_router.router)
+app.include_router(reports_router.router)
+app.include_router(images_router.router)
 app.include_router(map_router.router)
 app.include_router(pets_router.router)
 app.include_router(matches_router.router)
 app.include_router(admin_router.router)
-app.include_router(image_proxy_router.router)
-app.include_router(auth_router.router)
 
 
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     from k9overwatch.web.templates_config import templates
     if exc.status_code == 404:
-        return templates.TemplateResponse(request, "errors/404.html", status_code=404)
+        return templates.TemplateResponse(request, "errors/404.html", {}, status_code=404)
     return templates.TemplateResponse(
         request, "errors/500.html", {"detail": exc.detail}, status_code=exc.status_code
     )

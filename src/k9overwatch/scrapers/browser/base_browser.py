@@ -30,11 +30,11 @@ class BrowserBaseScraper(BaseScraper):
         """Wrap _scrape_with_page in browser lifecycle management."""
         try:
             from playwright.async_api import async_playwright
-        except ImportError:
+        except ImportError as err:
             raise ImportError(
                 "playwright is required for browser scrapers. "
                 "Install with: pip install 'k9overwatch[browser]'"
-            )
+            ) from err
 
         headless = os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() != "false"
 

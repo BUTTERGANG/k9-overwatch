@@ -5,6 +5,13 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from k9overwatch.db.models import PetRow
+from k9overwatch.db.repository import (
+    AGE_BUCKET_LABELS,
+    AGE_BUCKETS,
+    PetRepository,
+    age_bucket,
+    effective_age_days,
+)
 from k9overwatch.web.dependencies import get_db
 from k9overwatch.web.schemas.pet import GeoJSONCollection, GeoJSONFeature, PetSummary
 from k9overwatch.web.templates_config import templates
@@ -17,7 +24,24 @@ _OTHER_ANIMAL_TYPES = {"bird", "rabbit", "other"}
 
 @router.get("/map")
 async def map_page(request: Request):
-    return templates.TemplateResponse(request, "map.html")
+    return templates.TemplateResponse(request, "map.html", {})
+
+
+@router.get("/api/map/buckets")
+async def get_active_buckets(
+    record_type: str | None = Query(default=None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Active-listing counts by recency, with plain-language labels for the UI."""
+    repo = PetRepository(db)
+    counts = await repo.get_active_age_buckets(record_type=record_type)
+    return {
+        "buckets": [
+            {"key": k, "label": AGE_BUCKET_LABELS[k], "count": counts[k]}
+            for k in AGE_BUCKETS
+        ],
+        "total": sum(counts.values()),
+    }
 
 @router.get("/api/map/geojson", response_model=GeoJSONCollection)
 async def get_map_geojson(
@@ -58,16 +82,23 @@ async def get_map_geojson(
             stmt = stmt.where(PetRow.animal_type.in_(animal_type))
 
     if days:
-        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
-        stmt = stmt.where(PetRow.date_event >= cutoff.date())
+        # Include records whose effective age is within `days`. Records with no
+        # parsed date_event are kept (they fall back to scrape age) so a listing
+        # is never hidden just because its date didn't parse — matching bucket logic.
+        cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)).date()
+        stmt = stmt.where(
+            or_(PetRow.date_event >= cutoff, PetRow.date_event.is_(None))
+        )
 
     # limit to roughly 500 features so browser doesn't choke
     stmt = stmt.order_by(PetRow.date_event.desc()).limit(500)
-    
+
     result = await db.execute(stmt)
     pets = result.scalars().all()
 
     features = []
+    # One bulk query for match counts (instead of N per-pin lookups).
+    match_counts = await PetRepository(db).get_match_counts([str(p.id) for p in pets])
     for pet in pets:
         if pet.lat is None or pet.lon is None:
             continue
@@ -90,7 +121,10 @@ async def get_map_geojson(
             lon=pet.lon,
             thumbnail_url=pet.thumbnail_url,
             active=pet.active,
-            match_count=pet.match_count or 0,
+            match_count=match_counts.get(str(pet.id), 0),
+            age_bucket=age_bucket(
+                effective_age_days(pet.date_event, pet.days_since_event, pet.scraped_at)
+            ),
         )
 
         feature = GeoJSONFeature(

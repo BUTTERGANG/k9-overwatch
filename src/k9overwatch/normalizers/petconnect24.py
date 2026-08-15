@@ -40,7 +40,7 @@ _DOG_BREED_FRAGMENTS = {
     "pointer", "setter", "hound", "schnauzer", "akita", "samoyed",
     "weimaraner", "vizsla", "plott", "coonhound", "bloodhound",
     "griffon", "basenji", "affenpinscher", "bichon", "bolognese",
-    "mastiff", "rottweiler", "pinscher", "spitz", "chow", "dingo",
+    "mastiff", "pinscher", "spitz", "chow", "dingo",
     "papillon", "pekinese", "pekingese", "whippet", "greyhound",
 }
 

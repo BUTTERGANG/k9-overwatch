@@ -78,6 +78,9 @@ class PetRow(Base):
     geocode_source = Column(Text)
     geocode_confidence = Column(Text)
 
+    # Ownership: links a record to the user who submitted it (source == "user")
+    owner_id = Column(String(36), index=True)
+
     # Shelter
     shelter_name = Column(Text)
     shelter_code = Column(Text)
@@ -99,17 +102,6 @@ class PetRow(Base):
     facebook_post_url = Column(Text)
     nextdoor_url = Column(Text)
     alert_number = Column(Text)
-
-    # Matching performance cache — incremented by save_match()
-    match_count = Column(Integer, default=0, nullable=False, server_default="0")
-
-    # User-submitted listing fields
-    user_id = Column(String(36))          # FK → users.id (no constraint for portability)
-    user_submitted = Column(Boolean, default=False)
-    moderation_status = Column(Text, default="approved")  # pending|approved|rejected|flagged
-    resolved = Column(Boolean, default=False)
-    resolved_at = Column(DateTime)
-    resolved_reason = Column(Text)         # reunited|found_deceased|other|cancelled
 
     # Audit
     scraped_at = Column(DateTime, default=_now)
@@ -183,49 +175,36 @@ class GeocodeCache(Base):
 
 
 class User(Base):
-    """Registered user accounts."""
+    """A person with an account (submits reports, receives match alerts)."""
     __tablename__ = "users"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    email = Column(Text, nullable=False, unique=True)
-    email_verified = Column(Boolean, default=False)
-    password_hash = Column(Text)              # None for OAuth-only accounts
-    display_name = Column(Text, nullable=False)
-    phone = Column(Text)
-    phone_verified = Column(Boolean, default=False)
-
-    # Role & status
-    role = Column(Text, default="user")       # "user" | "moderator" | "admin"
-    active = Column(Boolean, default=True)
-    banned = Column(Boolean, default=False)
-    ban_reason = Column(Text)
-
-    # Profile
-    city = Column(Text)
-    state = Column(String(2))
-    zip = Column(String(10))
-
-    # Timestamps
-    created_at = Column(DateTime, nullable=False, default=_now)
-    last_login_at = Column(DateTime)
-    updated_at = Column(DateTime)
-
-    __table_args__ = (
-        Index("ix_users_email", "email"),
-    )
-
-    def __repr__(self) -> str:
-        return f"<User {self.email} role={self.role}>"
+    email = Column(Text, nullable=False, unique=True, index=True)
+    display_name = Column(Text)
+    # Scrypt-hashed password (modern, no external dep): "scrypt$<params>$<salt>$<hash>"
+    password_hash = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=_now)
+    is_active = Column(Boolean, default=True, nullable=False)
 
 
-class UserSession(Base):
-    """Server-side session tokens for authenticated users."""
-    __tablename__ = "user_sessions"
+class NotificationPrefs(Base):
+    """Per-user alert preferences. Defaults are low-spam: email digest only."""
+    __tablename__ = "notification_prefs"
 
-    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String(36), nullable=False, index=True)  # → users.id
-    ip_address = Column(Text)
-    user_agent = Column(Text)
-    created_at = Column(DateTime, nullable=False, default=_now)
-    expires_at = Column(DateTime, nullable=False)
-    revoked = Column(Boolean, default=False)
+    user_id = Column(String(36), primary_key=True)
+
+    # Channel + frequency. "off" = no alerts at all.
+    # "digest" sends at most one email per day (coalesced). "instant" sends per match.
+    email_enabled = Column(Boolean, default=True, nullable=False)
+    frequency = Column(Text, default="digest", nullable=False)  # off | digest | instant
+
+    # Only alert on matches at/above this confidence (never "low" by default => no false hope)
+    min_confidence = Column(Text, default="medium", nullable=False)  # low | medium | high
+
+    # Also alert when someone submits a FOUND/SIGHTING that may match this user's LOST pet
+    notify_on_found_match = Column(Boolean, default=True, nullable=False)
+
+    # Unsubscribe token (opaque) so email footers can disable without login
+    unsubscribe_token = Column(Text, nullable=False, unique=True)
+
+    updated_at = Column(DateTime, default=_now)

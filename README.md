@@ -134,6 +134,7 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 │   · Pet detail pages — full info, gallery, mini-map, match cards    │
 │   · Lost ↔ Found match list — scored pairs with confidence tiers    │
 │   · Admin dashboard — scraper health, live stats (auth-protected)   │
+│   · User accounts — owner reports, contact gating, opt-in alerts    │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -161,6 +162,13 @@ pip install -e ".[browser]"
 playwright install chromium
 ```
 
+To run the test suite:
+
+```bash
+source .venv/bin/activate
+pytest
+```
+
 ### Configure
 
 ```bash
@@ -183,6 +191,13 @@ Key `.env` settings:
 | `ADMIN_PASSWORD` | `changeme` | HTTP Basic password — **change in production** |
 | `RUN_SCHEDULER` | `false` | Set `true` to run scrapers inside the web process |
 | `LOG_FORMAT` | `pretty` | `pretty` (dev) or `json` (production) |
+| `SESSION_SECRET` | dev default | Signs user session cookies — **set to a long random value in production** |
+| `SMTP_HOST` | — | SMTP server for match emails. If unset, emails are logged (no-op) so dev is never blocked |
+| `SMTP_PORT` | `587` | SMTP port |
+| `SMTP_USER` | — | SMTP username |
+| `SMTP_PASSWORD` | — | SMTP password |
+| `SMTP_FROM` | `k9-overwatch@localhost` | From address for match emails |
+| `APP_BASE_URL` | `http://localhost:8000` | Public base URL used for unsubscribe / detail links in emails |
 
 ### Run the Web App
 
@@ -446,10 +461,13 @@ Geocoding cost:
 | PawBoost | every 35 min | Playwright required |
 | Pet FBI | every 40 min | Playwright required (WAF token capture) |
 | Lost My Doggie | every 45 min | Playwright required |
-| Matching pass | every 30 min | Full pass on unmatched active records (batch catch-up) |
-| Staleness check | every 6 hours | Marks IndyLostPetAlert records inactive when removed |
+| Matching pass | every 30 min | Dedup + lost→found, both directions, on newly ingested records |
+| Staleness check | every 6 hours | Verifies IndyLostPetAlert records still active |
+| Re-match pass | daily 04:00 | Idempotent re-scan of recent records (last 120d) so matches improve as more data arrives (e.g. geocoding fills coordinates) |
 
-All 5 scrapers also trigger an immediate targeted matching pass on their newly ingested records (`run_matching=True`), so new pets are matched against the existing pool without waiting for the 30-minute batch job.
+All scrapers also trigger an immediate targeted matching pass on their newly ingested records (`run_matching=True`), so new pets are matched against the existing pool without waiting for the batch job.
+
+> Note: `ScraperScheduler` (`scheduler/runner.py`) currently runs each scraper on a twice-daily cron (00:00 and 12:00 UTC, staggered by source) rather than the per-source minute intervals in the table above — the table describes the original design intent; the schedule has since been tightened for production load. Update one to match the other next time this area is touched.
 
 ---
 
@@ -459,8 +477,10 @@ The app is configured for Replit with NeonDB as the production database.
 
 1. Add your NeonDB connection string as a Replit secret named `neondb`
 2. Add `ADMIN_USER` and `ADMIN_PASSWORD` secrets for the admin dashboard
-3. Optionally add `RUN_SCHEDULER=true` to run scrapers inside the web process
-4. Hit **Run** — the workflow installs dependencies, then starts uvicorn on port 5000
+3. Add a random `SESSION_SECRET` secret to sign user session cookies
+4. Optionally add SMTP secrets (`SMTP_HOST`, etc.) to enable match-alert emails
+5. Optionally add `RUN_SCHEDULER=true` to run scrapers inside the web process
+6. Hit **Run** — the workflow installs dependencies, then starts uvicorn on port 5000
 
 The `DATABASE_URL` environment variable is automatically set to `$neondb` by the workflow. The app normalizes `postgres://` URLs to `postgresql+asyncpg://` and handles NeonDB's `sslmode=require` automatically.
 
@@ -491,7 +511,7 @@ The `DATABASE_URL` environment variable is automatically set to `$neondb` by the
 
 ### Phase 3 — Web Application ✅ Complete
 - [x] FastAPI + Jinja2 web application
-- [x] Interactive Leaflet map with bounding-box search and type filters
+- [x] Interactive Leaflet map with bounding-box search, clustering, and type filters
 - [x] Filterable pet card grid (HTMX partials, URL-reflected filter state)
 - [x] Pet detail pages with gallery, mini-map, and match cards
 - [x] Lost ↔ Found match list with confidence scoring
@@ -503,28 +523,62 @@ The `DATABASE_URL` environment variable is automatically set to `$neondb` by the
 - [x] Accessibility improvements — ARIA attributes, keyboard-navigable gallery, screen reader support
 - [x] Map popup redesign — branded badges, styled action buttons, auto-dismiss error banners
 - [x] **Dark mode** — full site dark theme with toggle button, localStorage + `prefers-color-scheme` persistence, no flash on load
+- [x] Image proxy endpoint (`/img?url=`) — serves remote listing/owner photos through our own
+      origin so browsers never block them; validates scheme and resolved IP (SSRF-safe) and
+      caches results on disk.
 
 ### Phase 4 — Matching & Review Improvements ✅ Complete
 - [x] Contact phone signal added to both dedup and lost→found matching (0.35 / 0.15)
 - [x] Secondary color signal added to deduplication
 - [x] Description overlap removed from dedup (inflated cross-platform scores artificially)
 - [x] ZIP weight corrected (0.20 → 0.08 — ZIP is coarser than geo distance)
-- [x] `MAX_DAYS_AFTER_LOST` extended from 90 → 180 days
-- [x] Candidate date window extended from ±60 → ±180 days
+- [x] `MAX_DAYS_AFTER_LOST` tuned to 60 days (most reunifications happen within 2 weeks; the
+      candidate query window stays wider, at +90/-14 days, so the matcher's own hard filter
+      is the precise gate)
 - [x] Match scores update in place when re-scored higher (unreviewed matches only)
 - [x] All scrapers now trigger immediate matching on new records (`run_matching=True`)
-- [x] `match_count` wired on map GeoJSON — pins with matches show an amber badge dot
+- [x] `match_count` computed dynamically from `pet_matches` (no denormalized column) and wired
+      on map GeoJSON + pet detail — pins with matches show an amber badge dot
 - [x] Match review UI — Confirm / Dismiss buttons on match cards (HTMX, no page reload)
 - [x] `POST /api/matches/{id}/review` endpoint for human review workflow
+- [x] Bidirectional lost↔found matching (`find_reverse_matches`) — a newly ingested found
+      report is also checked against existing lost records, not just the reverse
+- [x] Idempotent re-match pass (daily) — rescans recent records so scores improve as more
+      data arrives (e.g. geocoding fills in coordinates), without disturbing human review
+- [x] Recency buckets (`week`/`fortnight`/`month`/`older`) — map recency bar + per-pin aging
 
-### Phase 5 — Advanced Features
-- [ ] User accounts + saved searches
-- [ ] Email/push alerts for new matches
-- [ ] **Visual similarity matching** — CLIP/MobileNet image embeddings as an additional matching signal (catches same-pet listings with mismatched text, e.g. "brown mutt" vs "tan terrier")
+### Phase 5 — Accounts & Owner Reports ✅ Built
+- [x] **User accounts** — register / log in / log out (signed-cookie sessions,
+      scrypt password hashing, no external dependency). Nav shows Sign up /
+      Log in when anonymous and My Account / Log out once signed in.
+- [x] **Owner-submitted reports** — `/report` lets a logged-in person post a
+      lost/found/sighting with photo upload (stored in `data/uploads/`) and
+      contact info. Submitted reports are geocoded from the entered location and
+      appear on the map as `source="user"` listings.
+- [x] **Contact mechanism** — contact info (name/email/phone) is captured on
+      reports and **revealed only to logged-in users** on the pet detail page
+      (anonymous viewers see a "Log in to view" prompt). This protects submitters
+      from scrapers while still making reunification possible.
+- [x] **Opt-in match notifications** (non-spammy by design):
+  - Per-user `NotificationPrefs`: frequency (`off` / `daily` / `immediate`),
+    minimum confidence (`high` / `medium` / `any`), and an opt-out checkbox.
+  - Defaults: **daily digest, medium+ confidence, never spam.**
+  - Only user-submitted LOST pets trigger an email; only when a match clears the
+    user's threshold; `immediate` emails are coalesced into the next daily digest
+    so a person is never blasted. Every email carries a one-click unsubscribe link.
+  - Email is sent via SMTP only if `SMTP_HOST` is configured; otherwise it logs
+    (safe no-op) so the dev environment is never blocked.
+  - Digest job runs daily at 19:00 via the scheduler.
+
+### Phase 6 — Advanced Features
+- [ ] Saved searches
+- [ ] **Visual similarity matching** — generate CLIP/MobileNet embedding vectors per image,
+      store in DB, use cosine similarity as an additional matching signal to catch
+      same-dog listings with mismatched text descriptions (e.g. "brown mutt" vs "tan terrier")
 - [ ] PostGIS migration for `ST_DWithin()` geo queries at scale
 - [ ] Staleness checks for browser-based scrapers (PawBoost, PetFBI, LostMyDoggie)
-- [ ] Image proxy endpoint (resize + cache thumbnails)
-- [ ] Additional sources: Petfinder API, Petco Love Lost, Finding Rover
+- [ ] Adoption listings integration
+- [ ] Additional sources: Petfinder (official API), Petco Love Lost (facial recognition), Finding Rover
 
 ### Planned Sources (Phase 4)
 | Source | Notes |

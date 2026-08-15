@@ -2,13 +2,12 @@ import os
 import secrets
 from collections.abc import AsyncGenerator
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from k9overwatch.db.connection import get_session_factory
-from k9overwatch.db.models import User
-from k9overwatch.db.repository import UserRepository
+from k9overwatch.web.auth import COOKIE_NAME, read_session_token
 
 _basic_security = HTTPBasic()
 
@@ -38,25 +37,7 @@ def verify_admin(credentials: HTTPBasicCredentials = Depends(_basic_security)) -
         )
 
 
-async def get_current_user(
-    request: Request,
-    db: AsyncSession = Depends(get_db),
-) -> User | None:
-    """Return the authenticated User from the session cookie, or None."""
-    session_id = request.cookies.get("session_id")
-    if not session_id:
-        return None
-    repo = UserRepository(db)
-    session = await repo.get_session(session_id)
-    if session is None:
-        return None
-    return await repo.get_user_by_id(session.user_id)
-
-
-async def require_user(
-    user: User | None = Depends(get_current_user),
-) -> User:
-    """Like get_current_user but raises 401 if not authenticated."""
-    if user is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Login required")
-    return user
+async def get_current_user_id(request) -> str | None:
+    """Return the logged-in user's id from the signed session cookie, or None."""
+    token = request.cookies.get(COOKIE_NAME)
+    return read_session_token(token)

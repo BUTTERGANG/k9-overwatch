@@ -12,7 +12,7 @@
     <!-- Image area -->
     <div class="h-48 bg-slate-100 dark:bg-slate-700 flex-shrink-0 relative overflow-hidden">
         {% if pet.thumbnail_url %}
-            <img src="/proxy/image?url={{ pet.thumbnail_url | urlencode }}"
+            <img src="{{ pet.thumbnail_url | proxied }}"
                  alt="{{ pet.name or 'Pet photo' }}"
                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                  loading="lazy"

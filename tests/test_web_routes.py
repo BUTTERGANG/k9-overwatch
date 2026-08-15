@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import base64
 from collections.abc import AsyncGenerator
+from datetime import date, timedelta
 
 import pytest
 import pytest_asyncio
@@ -142,7 +143,7 @@ class TestMapGeoJSON:
         """A pet with coordinates should appear in the GeoJSON response."""
         from k9overwatch.db.repository import PetRepository
         repo = PetRepository(web_db_session)
-        record = make_petfbi_record()  # has lat=39.8689, lon=-86.1397
+        record = make_petfbi_record(date_event=date.today() - timedelta(days=10))  # has lat=39.8689, lon=-86.1397
         await repo.upsert(record)
         await web_db_session.commit()
 

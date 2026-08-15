@@ -149,11 +149,29 @@ async def run_scraper(
     }
 
 
-async def run_matching_pass(new_row_ids: list[str] | None = None) -> dict:
+async def run_matching_pass(
+    new_row_ids: list[str] | None = None,
+    *,
+    rematch: bool = False,
+    rematch_window_days: int = 120,
+) -> dict:
     """
     Run deduplication and lost→found matching.
-    If new_row_ids is provided, only check those records against existing records.
-    Otherwise, runs a full pass on unmatched active records.
+
+    Modes:
+    - Incremental (new_row_ids given, rematch=False): only check the freshly
+      ingested records. For each new record we compare it against ALL existing
+      candidates in BOTH directions:
+        * a new LOST record is compared against existing FOUND records
+          (lost→found reunification), and
+        * a new FOUND record is compared against existing LOST records
+          (found→lost reunification — the reverse direction, so newly arriving
+          found reports can surface a match for an already-known lost pet),
+      plus dedup in both directions.
+    - Full re-match (rematch=True): scan recent active records
+      (`get_matchable_records`, optionally bounded by `rematch_window_days`) so
+      matches improve as more data arrives (e.g. coordinates filled in by
+      geocoding). Idempotent — `save_match` refreshes scores in place.
     """
     dedup_found = 0
     matches_found = 0
@@ -168,23 +186,33 @@ async def run_matching_pass(new_row_ids: list[str] | None = None) -> dict:
             from sqlalchemy import select
 
             from ..db.models import PetRow
+
             result = await session.execute(
                 select(PetRow).where(PetRow.id.in_(new_row_ids))
             )
             records_to_check = result.scalars().all()
+        elif rematch:
+            from datetime import date as _date
+
+            since = None
+            if rematch_window_days:
+                since = _date.today() - timedelta(days=rematch_window_days)
+            records_to_check = await repo.get_matchable_records(since_date=since)
         else:
+            # Legacy default — only never-matched records. Prefer rematch=True.
             records_to_check = await repo.get_unmatched_records(limit=500)
 
         for record in records_to_check:
-            # Find candidates for both dedup and lost→found
+            # Candidates are the same regardless of which side is "new".
             candidates = await repo.find_match_candidates(
                 _row_to_fingerprint(record),
                 search_radius_miles=15.0,
-                date_window_days=60,
+                date_window_before_days=14,
+                date_window_after_days=90,
                 max_record_age_days=365,
             )
 
-            # Deduplication
+            # Deduplication (symmetric — direction doesn't matter)
             dedup_results = deduplicator.find_duplicates(record, candidates)
             for result in dedup_results:
                 saved = await repo.save_match(result)
@@ -195,17 +223,27 @@ async def run_matching_pass(new_row_ids: list[str] | None = None) -> dict:
                         f"signals={list(result.signals_fired.keys())}"
                     )
 
-            # Lost→Found matching
+            # Lost→Found matching — run in BOTH directions so newly ingested
+            # records of either type can surface a reunification:
+            #   * record is LOST  → compare against FOUND/SIGHTING candidates
+            #   * record is FOUND → compare against LOST candidates (reverse)
             if record.record_type == "lost":
                 lf_results = matcher.find_matches(record, candidates)
-                for result in lf_results:
-                    saved = await repo.save_match(result)
-                    if saved:
-                        matches_found += 1
-                        logger.info(
-                            f"LOST→FOUND [{result.confidence}] score={result.score:.2f} "
-                            f"signals={list(result.signals_fired.keys())}"
-                        )
+            elif record.record_type in ("found", "sighting"):
+                lf_results = matcher.find_reverse_matches(record, candidates)
+            else:
+                lf_results = []
+
+            for result in lf_results:
+                saved = await repo.save_match(result)
+                if saved:
+                    matches_found += 1
+                    logger.info(
+                        f"LOST→FOUND [{result.confidence}] score={result.score:.2f} "
+                        f"signals={list(result.signals_fired.keys())}"
+                    )
+                    # Notify the owner of the lost pet (user-submitted) if prefs allow.
+                    await _maybe_notify(session, record, result, candidates)
 
     logger.info(f"Matching pass: {dedup_found} dedup, {matches_found} lost→found")
     return {"dedup_found": dedup_found, "matches_found": matches_found}
@@ -262,3 +300,46 @@ async def check_stale_records(stale_hours: int = 48) -> dict:
 
     logger.info(f"Staleness check: {deactivated} records deactivated")
     return {"deactivated": deactivated}
+
+
+async def expire_stale_listings(max_age_days: int = 120) -> dict:
+    """
+    Source-agnostic fallback so resolved/found pets eventually leave the map.
+
+    The per-source check_active() path (above) only covers IndyLostPetAlert.
+    This expires any active listing whose event date is older than `max_age_days`
+    and that has no live match — kept independent of a source's own verification.
+    """
+    async with get_session() as session:
+        repo = PetRepository(session)
+        count = await repo.deactivate_stale_by_age(max_age_days=max_age_days)
+    logger.info(f"Age-based expiry: {count} records deactivated")
+    return {"deactivated": count}
+
+
+async def _maybe_notify(session, record, result, candidates) -> None:
+    """If this new match involves a user-submitted lost pet, notify its owner."""
+    from sqlalchemy import select
+
+    from k9overwatch.db.models import PetRow as _PetRow
+    from k9overwatch.notifications import MatchEvent, notify_new_match
+
+    # Identify the other pet in the pair.
+    other_id = result.pet_b_id if result.pet_a_id == str(record.id) else result.pet_b_id
+    other = next((c for c in candidates if str(c.id) == other_id), None)
+    if other is None:
+        stmt = select(_PetRow).where(_PetRow.id == other_id)
+        other = (await session.execute(stmt)).scalar_one_or_none()
+    if other is None:
+        return
+    # `record` is the lost side in lost_found matching.
+    await notify_new_match(session, MatchEvent(lost_pet=record, other_pet=other, match=result))
+
+
+async def flush_digest_notifications() -> dict:
+    """Scheduler entry point: send the per-day match digest emails."""
+    from k9overwatch.notifications import flush_digest
+
+    sent = await flush_digest()
+    logger.info(f"Match digest: {sent} email(s) sent")
+    return {"sent": sent}
