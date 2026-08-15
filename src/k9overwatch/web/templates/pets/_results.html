@@ -1,10 +1,10 @@
 <!-- HTMX swap target: result count + pet cards + pagination -->
 <div class="mb-4 flex items-center gap-2" aria-live="polite" aria-atomic="true">
-    <span class="text-sm text-slate-500 font-medium">
+    <span class="text-sm text-slate-500 dark:text-slate-400 font-medium">
         {% if total == 1 %}
-            <strong class="text-slate-700 font-bold">1</strong> record matching your criteria
+            <strong class="text-slate-700 dark:text-slate-200 font-bold">1</strong> record matching your criteria
         {% else %}
-            <strong class="text-slate-700 font-bold">{{ total }}</strong> records matching your criteria
+            <strong class="text-slate-700 dark:text-slate-200 font-bold">{{ total }}</strong> records matching your criteria
         {% endif %}
     </span>
 </div>
@@ -14,8 +14,8 @@
         {% include 'pets/card.html' %}
     {% else %}
         <!-- Empty state -->
-        <div class="col-span-full py-16 text-center bg-white rounded-2xl border border-dashed border-slate-200 flex flex-col items-center gap-4 animate-fade-in">
-            <div class="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center" aria-hidden="true">
+        <div class="col-span-full py-16 text-center bg-white dark:bg-slate-800 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 flex flex-col items-center gap-4 animate-fade-in">
+            <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-700 flex items-center justify-center" aria-hidden="true">
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none" class="w-14 h-14 text-slate-200">
                     <circle cx="33" cy="33" r="20" stroke="currentColor" stroke-width="5"/>
                     <path d="M47 47L65 65" stroke="currentColor" stroke-width="5" stroke-linecap="round"/>
@@ -28,8 +28,8 @@
                 </svg>
             </div>
             <div>
-                <p class="text-base font-semibold text-slate-700">No pets found</p>
-                <p class="text-sm text-slate-400 mt-1">Try adjusting your filters or expanding the timeframe.</p>
+                <p class="text-base font-semibold text-slate-700 dark:text-slate-200">No pets found</p>
+                <p class="text-sm text-slate-400 dark:text-slate-500 mt-1">Try adjusting your filters or expanding the timeframe.</p>
             </div>
         </div>
     {% endfor %}
@@ -43,8 +43,10 @@
             hx-target="#results-container"
             hx-push-url="true"
             hx-indicator="#filter-indicator"
-            class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 bg-white text-slate-700
-                   hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition shadow-sm
+            class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl
+                   border border-slate-200 dark:border-slate-700
+                   bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200
+                   hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 active:scale-95 transition shadow-sm
                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
             aria-label="Previous page">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
@@ -54,8 +56,8 @@
     </button>
     {% endif %}
 
-    <span class="px-4 py-2 text-sm text-slate-500 font-medium tabular-nums">
-        Page <strong class="text-slate-800">{{ page }}</strong> of <strong class="text-slate-800">{{ total_pages }}</strong>
+    <span class="px-4 py-2 text-sm text-slate-500 dark:text-slate-400 font-medium tabular-nums">
+        Page <strong class="text-slate-800 dark:text-slate-100">{{ page }}</strong> of <strong class="text-slate-800 dark:text-slate-100">{{ total_pages }}</strong>
     </span>
 
     {% if page < total_pages %}
@@ -64,8 +66,10 @@
             hx-target="#results-container"
             hx-push-url="true"
             hx-indicator="#filter-indicator"
-            class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl border border-slate-200 bg-white text-slate-700
-                   hover:bg-slate-50 hover:border-slate-300 active:scale-95 transition shadow-sm
+            class="inline-flex items-center gap-1.5 px-4 py-2 text-sm font-medium rounded-xl
+                   border border-slate-200 dark:border-slate-700
+                   bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200
+                   hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 active:scale-95 transition shadow-sm
                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500"
             aria-label="Next page">
         Next

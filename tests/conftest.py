@@ -2,8 +2,8 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import date, datetime
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+from datetime import date
 
 import pytest
 import pytest_asyncio
@@ -12,7 +12,6 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from k9overwatch.db.models import Base
 from k9overwatch.models.enums import AnimalType, Gender, RecordType
 from k9overwatch.models.pet_record import PetRecord
-
 
 # ── Event loop ────────────────────────────────────────────────────────────────
 

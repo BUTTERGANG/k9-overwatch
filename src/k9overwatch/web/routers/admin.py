@@ -1,33 +1,14 @@
-import os
-import secrets
+from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
-from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from fastapi import APIRouter, Depends, Request
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import and_, case, select, func, text
-from datetime import datetime, timezone
 
-from k9overwatch.db.models import PetRow, PetMatch, ScraperState
-from k9overwatch.web.dependencies import get_db
+from k9overwatch.db.models import PetMatch, PetRow, ScraperState
+from k9overwatch.web.dependencies import get_db, verify_admin
 from k9overwatch.web.templates_config import templates
 
 router = APIRouter()
-
-_basic_security = HTTPBasic()
-
-
-def verify_admin(credentials: HTTPBasicCredentials = Depends(_basic_security)) -> None:
-    """Verify HTTP Basic credentials against ADMIN_USER / ADMIN_PASSWORD env vars."""
-    expected_user = os.getenv("ADMIN_USER", "admin")
-    expected_password = os.getenv("ADMIN_PASSWORD", "changeme")
-    user_ok = secrets.compare_digest(credentials.username.encode(), expected_user.encode())
-    pass_ok = secrets.compare_digest(credentials.password.encode(), expected_password.encode())
-    if not (user_ok and pass_ok):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid admin credentials",
-            headers={"WWW-Authenticate": "Basic"},
-        )
 
 
 @router.get("/admin", dependencies=[Depends(verify_admin)])
@@ -74,7 +55,8 @@ async def _get_stats(db: AsyncSession) -> dict:
     match_stats_result = await db.execute(
         select(
             func.count().label("total_matches"),
-            func.count(case((PetMatch.match_type == "lost_found", 1))).label("reunification_matches"),
+            func.count(case((PetMatch.match_type == "lost_found", 1)))
+                .label("reunification_matches"),
         ).select_from(PetMatch)
     )
     match_row = match_stats_result.one()
@@ -98,5 +80,5 @@ async def _get_stats(db: AsyncSession) -> dict:
         "no_geocode": pet_row.no_geocode,
         "total_matches": match_row.total_matches,
         "reunification_matches": match_row.reunification_matches,
-        "generated_at": datetime.now(timezone.utc).replace(tzinfo=None).isoformat(),
+        "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
     }

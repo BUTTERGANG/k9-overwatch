@@ -2,8 +2,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
-from typing import Optional
+from datetime import date, timedelta
 
 from bs4 import Tag
 
@@ -46,7 +45,7 @@ _DOG_BREED_FRAGMENTS = {
 }
 
 
-def _infer_animal_type_from_breed(breed: Optional[str]) -> Optional[AnimalType]:
+def _infer_animal_type_from_breed(breed: str | None) -> AnimalType | None:
     """Infer animal type from breed name when the API doesn't provide one."""
     if not breed:
         return None
@@ -71,7 +70,7 @@ SIZE_MAP = {
 }
 
 
-def _field(card: Tag, label: str) -> Optional[str]:
+def _field(card: Tag, label: str) -> str | None:
     """Extract a labeled field value from a 24petconnect listing card.
     Cards contain spans like: <span>Name : Chase</span>
     """
@@ -84,7 +83,7 @@ def _field(card: Tag, label: str) -> Optional[str]:
     return None
 
 
-def _extract_onclick(card: Tag) -> tuple[Optional[str], Optional[str]]:
+def _extract_onclick(card: Tag) -> tuple[str | None, str | None]:
     """Extract ShelterCode and AnimalId from the onclick handler.
     The onclick is on the card div itself, not a descendant.
     """
@@ -104,7 +103,7 @@ def _extract_onclick(card: Tag) -> tuple[Optional[str], Optional[str]]:
     return None, None
 
 
-def _parse_gender(value: Optional[str]) -> Optional[Gender]:
+def _parse_gender(value: str | None) -> Gender | None:
     if not value:
         return None
     v = value.upper().strip()
@@ -145,12 +144,14 @@ class PetConnect24Normalizer:
             if "/image/" in src:
                 photo_url = f"https://24petconnect.com{src}" if src.startswith("/") else src
 
-        # Days since event
+        # Days since event → compute date_event
         days_str = _field(card, "Days Since Lost") or _field(card, "Days Since Found")
         days_since = None
+        date_event = None
         if days_str:
             try:
                 days_since = int(re.search(r"\d+", days_str).group())
+                date_event = date.today() - timedelta(days=days_since)
             except (AttributeError, ValueError):
                 pass
 
@@ -172,6 +173,7 @@ class PetConnect24Normalizer:
             age=_field(card, "Age"),
             size=size,
             status=_field(card, "Status"),
+            date_event=date_event,
             days_since_event=days_since,
             location_text=_field(card, "Location Lost") or _field(card, "Location Found"),
             shelter_name=_field(card, "Located at"),

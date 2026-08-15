@@ -2,14 +2,20 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import AsyncIterator, Optional
 
 import aiohttp
 
-from ..base import BaseScraper, ScraperConfig
 from ...models.pet_record import PetRecord
 from ...normalizers.indy_lost_pet_alert import IndyNormalizer
+from ..base import BaseScraper, ScraperConfig
+
+_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/122.0.0.0 Safari/537.36"
+)
 
 
 class IndyLostPetAlertScraper(BaseScraper):
@@ -23,7 +29,10 @@ class IndyLostPetAlertScraper(BaseScraper):
     ALL_TYPE_CATEGORIES = "19,20,21"  # lost, found, sighting
 
     # Fields to request (reduces response payload)
-    FIELDS = "id,date,date_gmt,modified,slug,title,content,excerpt,link,categories,tags,jetpack_featured_media_url"
+    FIELDS = (
+        "id,date,date_gmt,modified,slug,title,content,excerpt,link,categories,tags,"
+        "jetpack_featured_media_url"
+    )
 
     def __init__(self, config: ScraperConfig):
         super().__init__(config)
@@ -31,7 +40,7 @@ class IndyLostPetAlertScraper(BaseScraper):
 
     async def scrape(
         self,
-        after: Optional[datetime] = None,
+        after: datetime | None = None,
     ) -> AsyncIterator[PetRecord]:
         """Yield PetRecords from IndyLostPetAlert, newest first."""
         params = {
@@ -95,7 +104,7 @@ class IndyLostPetAlertScraper(BaseScraper):
         """Check if a WP post still exists and is published."""
         url = f"{self.BASE_URL}/{source_id}"
         try:
-            headers = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"}
+            headers = {"User-Agent": _USER_AGENT}
             async with aiohttp.ClientSession(headers=headers) as session:
                 async with session.get(url, timeout=aiohttp.ClientTimeout(total=10)) as resp:
                     if resp.status == 404:

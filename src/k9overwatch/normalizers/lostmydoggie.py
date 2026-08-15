@@ -3,13 +3,12 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
-from typing import Optional
 
 from ..models.enums import AnimalType, Gender, RecordType
 from ..models.pet_record import PetRecord
 
 
-def _parse_date(date_str: str) -> Optional[object]:
+def _parse_date(date_str: str) -> object | None:
     """Parse 'YYYY-MM-DD' or 'MM/DD/YYYY' date strings."""
     for fmt in ("%Y-%m-%d", "%m/%d/%Y", "%m-%d-%Y"):
         try:
@@ -25,7 +24,7 @@ class LostMyDoggieNormalizer:
         data: dict,
         animal_type_str: str,
         record_type_str: str,
-    ) -> Optional[PetRecord]:
+    ) -> PetRecord | None:
         pet_id = data.get("pet_id")
         if not pet_id:
             return None

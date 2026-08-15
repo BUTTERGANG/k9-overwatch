@@ -6,8 +6,6 @@ on the same day, same ZIP, same breed → probable duplicate.
 """
 from __future__ import annotations
 
-from typing import Optional
-
 from ..db.models import PetRow
 from .breed_normalizer import normalize_breed
 from .signals import (
@@ -15,8 +13,8 @@ from .signals import (
     geo_distance_miles,
     score_breed_match,
     score_color_match,
+    score_contact_phone,
     score_date_proximity,
-    score_description_overlap,
     score_geo_distance,
     score_microchip,
     score_name_match,
@@ -50,7 +48,7 @@ class Deduplicator:
 
         return sorted(results, key=lambda r: r.score, reverse=True)
 
-    def _compare(self, a: PetRow, b: PetRow) -> Optional[MatchResult]:
+    def _compare(self, a: PetRow, b: PetRow) -> MatchResult | None:
         # Hard filters
         if a.animal_type != b.animal_type:
             return None
@@ -75,6 +73,7 @@ class Deduplicator:
         breed_b = normalize_breed(b.breed)
         signals.update(score_breed_match(breed_a, breed_b))
         signals.update(score_color_match(a.color_primary, b.color_primary, weight=0.10))
+        signals.update(score_color_match(a.color_secondary, b.color_secondary, weight=0.06))
         signals.update(score_name_match(a.name, b.name))
 
         # ── Gender ───────────────────────────────────────────────────────────
@@ -88,8 +87,8 @@ class Deduplicator:
         # ── Microchip ────────────────────────────────────────────────────────
         signals.update(score_microchip(a.microchip_number, b.microchip_number))
 
-        # ── Description ──────────────────────────────────────────────────────
-        signals.update(score_description_overlap(a.description, b.description))
+        # ── Contact phone ─────────────────────────────────────────────────────
+        signals.update(score_contact_phone(a.contact_phone, b.contact_phone))
 
         # ── Cross-source bonus ────────────────────────────────────────────────
         if a.source != b.source:

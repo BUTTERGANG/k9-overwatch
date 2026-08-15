@@ -4,6 +4,8 @@
 
 {% block extra_head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <style>
     /* ── Full-bleed map layout ─────────────────────────────────── */
     #map-layout {
@@ -30,6 +32,8 @@
     .pin-found    { background-color: #16a34a; box-shadow: 0 1px 6px rgba(22,163,74,0.55); }
     .pin-sighting { background-color: #2563eb; box-shadow: 0 1px 6px rgba(37,99,235,0.55); }
     .pin-adoptable{ background-color: #d97706; box-shadow: 0 1px 6px rgba(217,119,6,0.55); }
+    /* Pins with potential matches get an amber badge dot */
+    .leaflet-marker-icon .pin-base { position: relative; }
 
     /* ── Popup styles ──────────────────────────────────────────── */
     .leaflet-popup-content-wrapper {
@@ -47,6 +51,15 @@
         padding: 6px 8px !important;
     }
     .leaflet-popup-close-button:hover { color: #1e293b !important; background: #f1f5f9; border-radius: 6px; }
+
+    /* ── Dark mode popup overrides ─────────────────────────────── */
+    .dark .leaflet-popup-content-wrapper {
+        background: #0f172a;
+        border-color: #334155;
+    }
+    .dark .leaflet-popup-tip { background: #0f172a; }
+    .dark .leaflet-popup-close-button { color: #94a3b8 !important; }
+    .dark .leaflet-popup-close-button:hover { color: #f1f5f9 !important; background: #1e293b; border-radius: 6px; }
 
     /* ── Mobile filter sidebar drawer ─────────────────────────── */
     #filter-sidebar {
@@ -73,6 +86,83 @@
         }
         #sidebar-backdrop.visible { display: block; }
     }
+
+    /* ── Cluster icon base styles ──────────────────────────────── */
+    /*
+     * Override MarkerCluster.Default.css entirely so clusters match the
+     * app color palette and work in both light and dark mode.
+     * The iconCreateFunction in map.js writes a data-cluster-type attribute
+     * ("lost", "found", "mixed") on the outer div so we can color-code here.
+     */
+    .marker-cluster {
+        border-radius: 50%;
+        display: flex !important;
+        align-items: center;
+        justify-content: center;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-weight: 700;
+        font-size: 11px;
+        border: 2.5px solid white;
+        box-shadow: 0 2px 10px rgb(0 0 0 / 0.2);
+        transition: transform 0.15s ease, box-shadow 0.15s ease;
+        cursor: pointer;
+    }
+    .marker-cluster:hover {
+        transform: scale(1.12);
+        box-shadow: 0 4px 16px rgb(0 0 0 / 0.28);
+    }
+    /* type-specific fill colors */
+    .marker-cluster[data-cluster-type="lost"]  { background: #dc2626; color: white; }
+    .marker-cluster[data-cluster-type="found"] { background: #16a34a; color: white; }
+    .marker-cluster[data-cluster-type="mixed"] { background: #2540eb; color: white; }
+
+    /* dark mode: slightly lighter borders */
+    .dark .marker-cluster { border-color: rgba(255,255,255,0.35); }
+    .dark .marker-cluster[data-cluster-type="lost"]  { background: #ef4444; }
+    .dark .marker-cluster[data-cluster-type="found"] { background: #22c55e; }
+    .dark .marker-cluster[data-cluster-type="mixed"] { background: #4f6ef7; }
+
+    /* suppress the default circle/pie-chart divs inside MarkerCluster */
+    .marker-cluster div { display: none !important; }
+
+    /* ── Result count badge ────────────────────────────────────── */
+    #map-result-count {
+        position: absolute;
+        bottom: 28px;    /* above the Leaflet attribution bar */
+        left: 12px;
+        z-index: 1000;
+        display: none;   /* shown by JS after load */
+        align-items: center;
+        gap: 5px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        background: rgba(255,255,255,0.92);
+        color: #334155;
+        border: 1px solid #e2e8f0;
+        box-shadow: 0 2px 8px rgb(0 0 0 / 0.10);
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+        pointer-events: none;
+        user-select: none;
+    }
+    .dark #map-result-count {
+        background: rgba(15,23,42,0.88);
+        color: #cbd5e1;
+        border-color: #334155;
+        box-shadow: 0 2px 8px rgb(0 0 0 / 0.40);
+    }
+    #map-result-count .count-dot {
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background: #2540eb;
+        flex-shrink: 0;
+        display: inline-block;
+    }
+    .dark #map-result-count .count-dot { background: #4f6ef7; }
 </style>
 {% endblock %}
 
@@ -84,22 +174,23 @@
 
     <!-- ── Filter sidebar ──────────────────────────────────────── -->
     <aside id="filter-sidebar"
-           class="w-64 bg-white flex flex-col z-20 overflow-y-auto flex-shrink-0"
+           class="w-64 bg-white dark:bg-slate-900 flex flex-col z-20 overflow-y-auto flex-shrink-0
+                  border-r border-transparent dark:border-slate-800"
            style="box-shadow: 1px 0 0 0 #f1f5f9, 2px 0 8px -2px rgb(0 0 0 / 0.05);"
            aria-label="Map filters">
 
         <div class="p-5 flex flex-col gap-5 flex-1">
             <!-- Header -->
-            <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
                 <div class="flex items-center gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
                          class="w-4 h-4 text-brand-500 flex-shrink-0" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
                     </svg>
-                    <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Map Filters</h2>
+                    <h2 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">Map Filters</h2>
                 </div>
                 <!-- Mobile close button -->
-                <button id="close-sidebar-btn" class="sm:hidden p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                <button id="close-sidebar-btn" class="sm:hidden p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                         aria-label="Close filters">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
                         <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -112,7 +203,7 @@
 
                 <!-- Status -->
                 <fieldset>
-                    <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5">Status</legend>
+                    <legend class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2.5">Status</legend>
                     <div class="flex flex-col gap-2">
                         {% for val, label, color in [
                             ('lost',     'Lost',     'red'),
@@ -123,7 +214,7 @@
                         <label class="flex items-center gap-2.5 cursor-pointer group select-none">
                             <input type="checkbox" name="record_type" value="{{ val }}" checked
                                    class="w-4 h-4 rounded border-slate-300 text-{{ color }}-500 focus:ring-{{ color }}-400 cursor-pointer">
-                            <span class="flex items-center gap-1.5 text-slate-700 group-hover:text-slate-900 transition-colors">
+                            <span class="flex items-center gap-1.5 text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
                                 <span class="w-2.5 h-2.5 rounded-full bg-{{ color }}-500 flex-shrink-0"></span>
                                 {{ label }}
                             </span>
@@ -133,31 +224,44 @@
                 </fieldset>
 
                 <!-- Species -->
-                <fieldset class="pt-4 border-t border-slate-100">
-                    <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5">Species</legend>
+                <fieldset class="pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <legend class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2.5">Species</legend>
                     <div class="flex flex-col gap-2">
                         {% for val, label in [('dog','🐕 Dog'), ('cat','🐈 Cat'), ('other','🐾 Other')] %}
                         <label class="flex items-center gap-2.5 cursor-pointer group select-none">
                             <input type="checkbox" name="animal_type" value="{{ val }}" checked
                                    class="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer">
-                            <span class="text-slate-700 group-hover:text-slate-900 transition-colors">{{ label }}</span>
+                            <span class="text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{{ label }}</span>
                         </label>
                         {% endfor %}
                     </div>
                 </fieldset>
 
                 <!-- Timeframe -->
-                <div class="pt-4 border-t border-slate-100">
-                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5"
-                           for="map-days-select">Timeframe</label>
+                <div class="pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <div class="flex items-center justify-between mb-2.5">
+                        <label class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider"
+                               for="map-days-select">Reported Within</label>
+                        <span id="days-freshness-badge"
+                              class="text-[10px] font-semibold px-1.5 py-0.5 rounded-full bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400">
+                            Recent
+                        </span>
+                    </div>
                     <select id="map-days-select" name="days"
-                            class="w-full border border-slate-200 rounded-lg py-2 px-3 bg-white text-sm text-slate-700
+                            class="w-full border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3
+                                   bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-200
                                    cursor-pointer transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none">
                         <option value="7">Last 7 days</option>
+                        <option value="14">Last 2 weeks</option>
                         <option value="30" selected>Last 30 days</option>
-                        <option value="90">Last 90 days</option>
+                        <option value="60">Last 2 months</option>
+                        <option value="90">Last 3 months</option>
+                        <option value="180">Last 6 months</option>
                         <option value="365">Last year</option>
                     </select>
+                    <p class="mt-1.5 text-[11px] text-slate-400 dark:text-slate-500 leading-snug">
+                        Older listings fade on the map. Animals missing &gt;90 days are less likely to be actively monitored.
+                    </p>
                 </div>
 
                 <!-- Apply button -->
@@ -174,11 +278,11 @@
             </form>
 
             <!-- Legend -->
-            <div class="pt-4 border-t border-slate-100">
-                <p class="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2.5">Legend</p>
+            <div class="pt-4 border-t border-slate-100 dark:border-slate-700">
+                <p class="text-xs font-bold text-slate-400 dark:text-slate-400 uppercase tracking-wider mb-2.5">Legend</p>
                 <div class="grid grid-cols-2 gap-x-4 gap-y-1.5">
                     {% for color, label in [('#dc2626','Lost'), ('#16a34a','Found'), ('#2563eb','Sighting'), ('#d97706','Adoptable')] %}
-                    <div class="flex items-center gap-1.5 text-xs text-slate-600">
+                    <div class="flex items-center gap-1.5 text-xs text-slate-600 dark:text-slate-400">
                         <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:{{ color }};"></span>
                         {{ label }}
                     </div>
@@ -193,8 +297,8 @@
         <!-- Mobile "open filters" FAB -->
         <button id="open-sidebar-btn"
                 class="sm:hidden absolute top-3 left-3 z-[1000]
-                       bg-white text-slate-700 px-3 py-2 rounded-xl font-medium text-xs
-                       border border-slate-200 shadow-md hover:shadow-lg hover:bg-slate-50
+                       bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 px-3 py-2 rounded-xl font-medium text-xs
+                       border border-slate-200 dark:border-slate-700 shadow-md hover:shadow-lg hover:bg-slate-50 dark:hover:bg-slate-700
                        active:scale-95 transition-all flex items-center gap-1.5"
                 aria-label="Open map filters"
                 aria-expanded="false"
@@ -208,14 +312,21 @@
         <!-- Floating "Search this area" pill -->
         <button id="search-this-area-btn"
                 class="absolute top-3 left-1/2 -translate-x-1/2 z-[1000] hidden
-                       bg-white text-brand-700 px-5 py-2.5 rounded-full font-semibold text-sm
-                       border border-slate-200 shadow-lg hover:shadow-xl hover:bg-brand-50 hover:border-brand-300
+                       bg-white dark:bg-slate-800 text-brand-700 dark:text-brand-400 px-5 py-2.5 rounded-full font-semibold text-sm
+                       border border-slate-200 dark:border-slate-700 shadow-lg hover:shadow-xl
+                       hover:bg-brand-50 dark:hover:bg-slate-700 hover:border-brand-300 dark:hover:border-slate-600
                        active:scale-95 transition-all flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99"/>
             </svg>
             Search this area
         </button>
+
+        <!-- Result count badge (bottom-left of map, populated by JS) -->
+        <div id="map-result-count" role="status" aria-live="polite" aria-atomic="true">
+            <span class="count-dot" aria-hidden="true"></span>
+            <span id="map-result-count-text">0 pets</span>
+        </div>
 
         <div id="map"></div>
     </div>
@@ -224,6 +335,7 @@
 
 {% block extra_scripts %}
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script src="/static/js/map.js"></script>
 <script>
     // ── Mobile sidebar toggle ───────────────────────────────────
@@ -254,6 +366,34 @@
         document.addEventListener('keydown', function (e) {
             if (e.key === 'Escape' && sidebar.classList.contains('mobile-open')) closeSidebar();
         });
+    })();
+
+    // ── Freshness badge on timeframe select ─────────────────────────────
+    (function () {
+        var sel   = document.getElementById('map-days-select');
+        var badge = document.getElementById('days-freshness-badge');
+        if (!sel || !badge) return;
+
+        function updateBadge() {
+            var days = parseInt(sel.value, 10);
+            badge.className = 'text-[10px] font-semibold px-1.5 py-0.5 rounded-full';
+            if (days <= 14) {
+                badge.textContent = 'Very recent';
+                badge.className += ' bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400';
+            } else if (days <= 30) {
+                badge.textContent = 'Recent';
+                badge.className += ' bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400';
+            } else if (days <= 90) {
+                badge.textContent = 'Moderate';
+                badge.className += ' bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400';
+            } else {
+                badge.textContent = 'Older data';
+                badge.className += ' bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-400';
+            }
+        }
+
+        sel.addEventListener('change', updateBadge);
+        updateBadge();
     })();
 </script>
 {% endblock %}

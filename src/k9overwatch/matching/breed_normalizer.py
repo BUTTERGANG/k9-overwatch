@@ -8,13 +8,14 @@ from __future__ import annotations
 
 import re
 from functools import lru_cache
-from typing import Optional
 
 # Canonical name → list of aliases (all lowercase)
 _BREED_ALIASES: dict[str, list[str]] = {
     "yorkshire terrier": ["yorkie", "york terrier"],
     "labrador retriever": ["lab", "labrador", "labrador retriever mix", "lab mix"],
-    "pit bull terrier": ["pit bull", "pitbull", "pit", "bully", "amstaff", "american staffordshire terrier"],
+    "pit bull terrier": [
+        "pit bull", "pitbull", "pit", "bully", "amstaff", "american staffordshire terrier",
+    ],
     "german shepherd": ["gsd", "german shepherd dog", "german shepard"],
     "golden retriever": ["golden", "gold retriever"],
     "chihuahua": ["chi", "chi mix"],
@@ -71,7 +72,7 @@ def _preprocess(breed: str) -> str:
 
 
 @lru_cache(maxsize=2048)
-def normalize_breed(breed: Optional[str]) -> Optional[str]:
+def normalize_breed(breed: str | None) -> str | None:
     """
     Normalize a breed string to its canonical form.
     Returns None for missing/unknown breeds (not useful for matching).

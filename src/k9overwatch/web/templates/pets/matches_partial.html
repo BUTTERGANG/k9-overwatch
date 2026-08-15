@@ -2,12 +2,12 @@
 
 {% if match_pairs %}
 <!-- Header -->
-<div class="flex items-center gap-2 mb-5 pb-3 border-b border-slate-100">
+<div class="flex items-center gap-2 mb-5 pb-3 border-b border-slate-100 dark:border-slate-700">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
          class="w-4 h-4 text-brand-500 flex-shrink-0" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
     </svg>
-    <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Possible Matches</h2>
+    <h2 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">Possible Matches</h2>
     <span class="ml-auto inline-flex items-center justify-center min-w-[20px] h-5 px-1.5 text-xs font-bold
                  text-brand-700 bg-brand-100 border border-brand-200 rounded-full tabular-nums">
         {{ match_pairs|length }}
@@ -18,8 +18,7 @@
     {% for item in match_pairs %}
     {% set m = item.match %}
     {% set other = item.other %}
-    <div class="rounded-xl p-4 border transition-all hover:shadow-sm"
-         style="background:#f8faff;border-color:#e0eaff;"
+    <div class="rounded-xl p-4 border transition-all hover:shadow-sm bg-[#f8faff] dark:bg-slate-700/40 border-[#e0eaff] dark:border-slate-600"
          role="listitem">
         <div class="flex items-start gap-3">
 
@@ -28,10 +27,11 @@
                class="flex-shrink-0 rounded-xl overflow-hidden border border-slate-200 hover:opacity-90 transition block"
                aria-label="View {{ other.name or 'this pet' }}'s profile">
                 {% if other.thumbnail_url %}
-                <img src="{{ other.thumbnail_url }}" alt="{{ other.name or 'Pet photo' }}"
-                     class="w-16 h-16 object-cover" loading="lazy" width="64" height="64">
+                <img src="/proxy/image?url={{ other.thumbnail_url | urlencode }}" alt="{{ other.name or 'Pet photo' }}"
+                     class="w-16 h-16 object-cover" loading="lazy" width="64" height="64"
+                     onerror="this.onerror=null;this.src='/static/img/pet-placeholder.svg'">
                 {% else %}
-                <div class="w-16 h-16 bg-slate-100 flex items-center justify-center text-slate-300">
+                <div class="w-16 h-16 bg-slate-100 dark:bg-slate-700 flex items-center justify-center text-slate-300 dark:text-slate-500">
                     {{ camera_placeholder("w-7 h-7") }}
                 </div>
                 {% endif %}
@@ -42,7 +42,7 @@
                 <!-- Name + badges row -->
                 <div class="flex items-center gap-2 flex-wrap mb-1">
                     <a href="/pets/{{ other.id }}"
-                       class="font-bold text-slate-900 hover:text-brand-700 transition-colors truncate text-sm">
+                       class="font-bold text-slate-900 dark:text-slate-100 hover:text-brand-700 dark:hover:text-brand-400 transition-colors truncate text-sm">
                         {{ other.name or "Unknown" }}
                     </a>
 
@@ -63,7 +63,7 @@
                     {% endif %}
                 </div>
 
-                <p class="text-xs text-slate-500 capitalize mb-1.5">
+                <p class="text-xs text-slate-500 dark:text-slate-400 capitalize mb-1.5">
                     {{ other.breed or "Unknown breed" }} &bull; {{ other.animal_type or "" }} &bull;
                     <span class="font-medium
                         {% if other.record_type == 'lost' %}text-red-600
@@ -78,14 +78,14 @@
                     <span class="text-base font-black text-brand-600 tabular-nums leading-none">
                         {{ "%.0f"|format(m.score * 100) }}%
                     </span>
-                    <span class="text-xs text-slate-400 font-mono">{{ other.date_event }}</span>
+                    <span class="text-xs text-slate-400 dark:text-slate-500 font-mono">{{ other.date_event }}</span>
                 </div>
 
                 <!-- Signal pills -->
                 {% if m.signals_fired %}
                 <div class="mt-2 flex flex-wrap gap-1">
                     {% for signal, weight in m.signals_fired.items() %}
-                    <span class="text-xs bg-white border border-slate-200 text-slate-500 px-2 py-0.5 rounded-full leading-tight">
+                    <span class="text-xs bg-white dark:bg-slate-700 border border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 px-2 py-0.5 rounded-full leading-tight">
                         {{ signal.replace('_', ' ') }}
                     </span>
                     {% endfor %}
@@ -99,25 +99,25 @@
 
 {% else %}
 <!-- Header -->
-<div class="flex items-center gap-2 mb-4 pb-2.5 border-b border-slate-100">
+<div class="flex items-center gap-2 mb-4 pb-2.5 border-b border-slate-100 dark:border-slate-700">
     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
          class="w-4 h-4 text-brand-500 flex-shrink-0" aria-hidden="true">
         <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
     </svg>
-    <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Possible Matches</h2>
+    <h2 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">Possible Matches</h2>
 </div>
 
 <!-- Empty state -->
 <div class="py-8 flex flex-col items-center gap-3 text-center">
-    <div class="w-12 h-12 rounded-full bg-slate-50 flex items-center justify-center" aria-hidden="true">
+    <div class="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-700 flex items-center justify-center" aria-hidden="true">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
              class="w-6 h-6 text-slate-300">
             <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
         </svg>
     </div>
     <div>
-        <p class="text-sm font-medium text-slate-600">No matches found</p>
-        <p class="text-xs text-slate-400 mt-0.5">No similar pets were detected in the system.</p>
+        <p class="text-sm font-medium text-slate-600 dark:text-slate-300">No matches found</p>
+        <p class="text-xs text-slate-400 dark:text-slate-500 mt-0.5">No similar pets were detected in the system.</p>
     </div>
 </div>
 {% endif %}

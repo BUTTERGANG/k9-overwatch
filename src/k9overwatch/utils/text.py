@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import re
 from html import unescape
-from typing import Optional
 
 
 def strip_html(html: str) -> str:
@@ -21,13 +20,13 @@ def strip_html(html: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 
-def extract(pattern: str, text: str, group: int = 1) -> Optional[str]:
+def extract(pattern: str, text: str, group: int = 1) -> str | None:
     """Return the first capturing group of a pattern match, or None."""
     m = re.search(pattern, text, re.IGNORECASE | re.DOTALL)
     return m.group(group).strip() if m else None
 
 
-def normalize_phone(phone: Optional[str]) -> Optional[str]:
+def normalize_phone(phone: str | None) -> str | None:
     """Strip formatting from a phone number, return digits only (10 or 11)."""
     if not phone:
         return None
@@ -47,7 +46,7 @@ def slugify(text: str) -> str:
     return text.strip("-")
 
 
-def truncate(text: Optional[str], max_length: int = 500) -> Optional[str]:
+def truncate(text: str | None, max_length: int = 500) -> str | None:
     """Truncate text to max_length characters, appending '…' if cut."""
     if not text:
         return text
@@ -56,7 +55,7 @@ def truncate(text: Optional[str], max_length: int = 500) -> Optional[str]:
     return text[: max_length - 1] + "…"
 
 
-def parse_city_state(location: Optional[str]) -> tuple[Optional[str], Optional[str]]:
+def parse_city_state(location: str | None) -> tuple[str | None, str | None]:
     """
     Parse 'City, ST' or 'City, State' into (city, state_code).
     Returns (None, None) if pattern does not match.

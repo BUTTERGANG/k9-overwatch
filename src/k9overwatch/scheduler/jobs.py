@@ -4,11 +4,9 @@ Each job: scrape → geocode → upsert → run matching pass.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import os
 from datetime import datetime, timedelta
-from typing import Optional, Type
 
 from ..db.connection import get_session
 from ..db.repository import PetRepository
@@ -35,7 +33,7 @@ def _make_geocoder_from_env(session) -> GeocodingService:
 
 
 async def run_scraper(
-    scraper_class: Type[BaseScraper],
+    scraper_class: type[BaseScraper],
     config: ScraperConfig,
     *,
     run_matching: bool = True,
@@ -62,7 +60,7 @@ async def run_scraper(
 
         # Get high-water mark for incremental polling
         state = await repo.get_scraper_state(source)
-        after: Optional[datetime] = None
+        after: datetime | None = None
         if state and state.last_record_at and scraper_class.SUPPORTS_INCREMENTAL:
             # Look back a bit to catch records that arrived late
             after = state.last_record_at - timedelta(hours=2)
@@ -70,11 +68,14 @@ async def run_scraper(
         else:
             logger.info(f"[{source}] Full scrape")
 
-        highest_date: Optional[datetime] = None
+        highest_date: datetime | None = None
+        # Track every source_id returned by this scrape run for staleness sweep
+        seen_source_ids: set[str] = set()
 
         try:
             async for record in scraper.scrape(after=after):
                 records_fetched += 1
+                seen_source_ids.add(record.source_id)
                 try:
                     # Geocode if needed (skips PetFBI which provides native coords)
                     if record.needs_geocoding():
@@ -99,15 +100,28 @@ async def run_scraper(
             await repo.update_scraper_state(
                 source, success=False, error_message=str(exc)
             )
-            # Re-fetch state to check consecutive errors
+            # Re-fetch state to check consecutive errors and fire webhook if needed
             state = await repo.get_scraper_state(source)
             if state and state.consecutive_errors >= 3:
-                logger.critical(
-                    f"[{source}] ALERT: Scraper has failed {state.consecutive_errors} "
-                    f"times in a row! Target website structure may have changed. "
-                    f"Error: {exc}"
+                from ..utils.alerts import send_scraper_alert
+                await send_scraper_alert(
+                    source=source,
+                    consecutive_errors=state.consecutive_errors,
+                    error_message=str(exc),
                 )
             raise
+
+        # Staleness sweep: for full scrapes (no date filter), any record from this
+        # source that was NOT returned by the scraper is gone from the source site.
+        # This catches deactivated/reunited listings for browser-based scrapers that
+        # don't expose a single-record lookup endpoint.
+        records_deactivated = 0
+        if after is None and seen_source_ids:
+            records_deactivated = await repo.mark_inactive_bulk(source, seen_source_ids)
+            if records_deactivated:
+                logger.info(
+                    f"[{source}] Staleness sweep: {records_deactivated} records deactivated"
+                )
 
         # Update scraper state
         await repo.update_scraper_state(
@@ -119,7 +133,8 @@ async def run_scraper(
         )
 
         logger.info(
-            f"[{source}] Done: {records_fetched} fetched, {records_new} new, {errors} errors"
+            f"[{source}] Done: {records_fetched} fetched, {records_new} new, "
+            f"{errors} errors, {records_deactivated} deactivated"
         )
 
     # Run matching on newly ingested records
@@ -134,7 +149,7 @@ async def run_scraper(
     }
 
 
-async def run_matching_pass(new_row_ids: Optional[list[str]] = None) -> dict:
+async def run_matching_pass(new_row_ids: list[str] | None = None) -> dict:
     """
     Run deduplication and lost→found matching.
     If new_row_ids is provided, only check those records against existing records.
@@ -151,6 +166,7 @@ async def run_matching_pass(new_row_ids: Optional[list[str]] = None) -> dict:
         # Get records to process
         if new_row_ids:
             from sqlalchemy import select
+
             from ..db.models import PetRow
             result = await session.execute(
                 select(PetRow).where(PetRow.id.in_(new_row_ids))
@@ -165,6 +181,7 @@ async def run_matching_pass(new_row_ids: Optional[list[str]] = None) -> dict:
                 _row_to_fingerprint(record),
                 search_radius_miles=15.0,
                 date_window_days=60,
+                max_record_age_days=365,
             )
 
             # Deduplication
@@ -194,11 +211,10 @@ async def run_matching_pass(new_row_ids: Optional[list[str]] = None) -> dict:
     return {"dedup_found": dedup_found, "matches_found": matches_found}
 
 
-def _row_to_fingerprint(row) -> "PetRecord":
+def _row_to_fingerprint(row) -> PetRecord:
     """Convert a PetRow to a minimal PetRecord for candidate queries."""
+
     from ..models.pet_record import PetRecord
-    from ..models.enums import RecordType, AnimalType
-    from datetime import date as date_type
     return PetRecord(
         source=row.source,
         source_id=row.source_id,
@@ -223,9 +239,10 @@ async def check_stale_records(stale_hours: int = 48) -> dict:
     seen recently and mark them inactive if they're gone.
     Only runs against IndyLostPetAlert (has direct WP REST endpoint).
     """
-    from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
-    from ..scrapers.base import ScraperConfig
     import os
+
+    from ..scrapers.base import ScraperConfig
+    from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
 
     config = ScraperConfig(
         search_lat=float(os.getenv("SEARCH_LAT", "39.7684")),

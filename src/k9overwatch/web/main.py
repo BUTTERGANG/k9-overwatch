@@ -1,22 +1,93 @@
 import logging
 import os
+import uuid
 from contextlib import asynccontextmanager
 from pathlib import Path
+
+import uvicorn
+from dotenv import load_dotenv
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import JSONResponse, RedirectResponse, HTMLResponse, Response
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
-import uvicorn
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
+
+load_dotenv()
 
 from k9overwatch.db.connection import get_engine, init_db
 from k9overwatch.utils.logging_config import configure_logging
-from k9overwatch.web.routers import map as map_router
-from k9overwatch.web.routers import pets as pets_router
-from k9overwatch.web.routers import matches as matches_router
 from k9overwatch.web.routers import admin as admin_router
+from k9overwatch.web.routers import auth as auth_router
+from k9overwatch.web.routers import image_proxy as image_proxy_router
+from k9overwatch.web.routers import map as map_router
+from k9overwatch.web.routers import matches as matches_router
+from k9overwatch.web.routers import pets as pets_router
 
 logger = logging.getLogger(__name__)
+
+_CSP = (
+    "default-src 'self'; "
+    "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
+    "https://cdn.tailwindcss.com https://unpkg.com; "
+    "style-src 'self' 'unsafe-inline' "
+    "https://cdn.tailwindcss.com https://unpkg.com; "
+    "img-src 'self' data: blob: "
+    "https://tile.openstreetmap.org https://*.tile.openstreetmap.org "
+    "https://*.basemaps.cartocdn.com; "
+    "font-src 'self' https://unpkg.com; "
+    "connect-src 'self'; "
+    "frame-ancestors 'none';"
+)
+
+_SECURITY_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "X-XSS-Protection": "1; mode=block",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Content-Security-Policy": _CSP,
+}
+
+
+class SecurityHeadersMiddleware(BaseHTTPMiddleware):
+    """Attach security headers and a request-ID to every response."""
+
+    def __init__(self, app: ASGIApp) -> None:
+        super().__init__(app)
+
+    async def dispatch(self, request: Request, call_next):
+        request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        for header, value in _SECURITY_HEADERS.items():
+            response.headers[header] = value
+        return response
+
+
+class UserContextMiddleware(BaseHTTPMiddleware):
+    """Resolve the session cookie and set request.state.current_user on every request."""
+
+    _SKIP_PREFIXES = ("/static", "/proxy", "/api/")
+
+    async def dispatch(self, request: Request, call_next):
+        request.state.current_user = None
+        path = request.url.path
+        if not any(path.startswith(p) for p in self._SKIP_PREFIXES):
+            session_id = request.cookies.get("session_id")
+            if session_id:
+                try:
+                    from k9overwatch.db.connection import get_session
+                    from k9overwatch.db.repository import UserRepository
+                    async with get_session() as db:
+                        repo = UserRepository(db)
+                        session = await repo.get_session(session_id)
+                        if session is not None:
+                            request.state.current_user = await repo.get_user_by_id(session.user_id)
+                except Exception:
+                    pass  # session lookup failure is non-fatal
+        return await call_next(request)
 
 
 @asynccontextmanager
@@ -43,6 +114,8 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="K9-Overwatch", lifespan=lifespan)
+app.add_middleware(SecurityHeadersMiddleware)
+app.add_middleware(UserContextMiddleware)
 
 _WEB_DIR = Path(__file__).parent
 
@@ -54,6 +127,8 @@ app.include_router(map_router.router)
 app.include_router(pets_router.router)
 app.include_router(matches_router.router)
 app.include_router(admin_router.router)
+app.include_router(image_proxy_router.router)
+app.include_router(auth_router.router)
 
 
 @app.exception_handler(StarletteHTTPException)

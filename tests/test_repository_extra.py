@@ -6,18 +6,17 @@ Additional repository tests covering previously untested code paths:
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
 
 from k9overwatch.db.models import GeocodeCache
 from k9overwatch.db.repository import PetRepository
-from k9overwatch.geocoding.geocoder import GeocodingService, GeocodeResult
+from k9overwatch.geocoding.geocoder import GeocodeResult, GeocodingService
 from k9overwatch.models.enums import GeocodeConfidence, GeocodeSource
 
 from .conftest import make_indy_record
-
 
 # ── mark_inactive_bulk ────────────────────────────────────────────────────────
 
@@ -75,7 +74,11 @@ class TestGeocodeCache:
         address key. The savepoint should absorb the IntegrityError without
         propagating it or corrupting the outer transaction.
         """
-        # Seed an existing cache entry
+        # Seed an existing cache entry, then expunge it from the session so we
+        # mimic the real production scenario where the duplicate insert comes
+        # from a session that doesn't already have the row in its identity map.
+        # (Without expunge, SQLA emits an identity-key-conflict SAWarning before
+        # the DB-level IntegrityError that _save_cache is meant to handle.)
         original = GeocodeCache(
             address_key="4521 n keystone ave indianapolis in",
             lat=39.82,
@@ -85,6 +88,7 @@ class TestGeocodeCache:
         )
         db_session.add(original)
         await db_session.flush()
+        db_session.expunge(original)
 
         # Build a GeocodingService and try to save a duplicate
         service = GeocodingService(session=db_session, providers=[])
@@ -156,7 +160,7 @@ class TestGetStaleRecords:
         """
         repo = PetRepository(db_session)
 
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
 
         # Fresh record (checked just now)
         fresh_rec = make_indy_record(source_id="FRESH001")
@@ -187,7 +191,7 @@ class TestGetStaleRecords:
     async def test_returns_empty_when_all_fresh(self, db_session):
         """No stale records returned when everything was checked recently."""
         repo = PetRepository(db_session)
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
 
         rec = make_indy_record(source_id="FRESH002")
         row, _ = await repo.upsert(rec)

@@ -3,16 +3,21 @@ from __future__ import annotations
 
 from datetime import date
 
-import pytest
 from bs4 import BeautifulSoup
 
-from k9overwatch.models.enums import AnimalType, Gender, RecordType
-from k9overwatch.normalizers.indy_lost_pet_alert import IndyNormalizer, _strip_html, _parse_date
-from k9overwatch.normalizers.petconnect24 import PetConnect24Normalizer, _infer_animal_type_from_breed
-from k9overwatch.normalizers.pawboost import PawBoostNormalizer, _parse_city_state_zip
-from k9overwatch.normalizers.petfbi import PetFBINormalizer, _normalize_animal_type, _normalize_record_type
+from k9overwatch.models.enums import AnimalType, RecordType
+from k9overwatch.normalizers.indy_lost_pet_alert import IndyNormalizer, _parse_date, _strip_html
 from k9overwatch.normalizers.lostmydoggie import LostMyDoggieNormalizer
-
+from k9overwatch.normalizers.pawboost import PawBoostNormalizer, _parse_city_state_zip
+from k9overwatch.normalizers.petconnect24 import (
+    PetConnect24Normalizer,
+    _infer_animal_type_from_breed,
+)
+from k9overwatch.normalizers.petfbi import (
+    PetFBINormalizer,
+    _normalize_animal_type,
+    _normalize_record_type,
+)
 
 # ── IndyLostPetAlert ──────────────────────────────────────────────────────────
 

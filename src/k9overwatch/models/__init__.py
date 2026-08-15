@@ -1,4 +1,4 @@
-from .enums import RecordType, AnimalType, Gender, Size, GeocodeSource, GeocodeConfidence
+from .enums import AnimalType, Gender, GeocodeConfidence, GeocodeSource, RecordType, Size
 from .pet_record import PetRecord
 
 __all__ = [

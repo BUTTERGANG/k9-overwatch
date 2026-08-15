@@ -1,6 +1,8 @@
-from fastapi import APIRouter, HTTPException, Request, Depends, Query
+from datetime import UTC, datetime, timedelta
+
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
 
 from k9overwatch.db.models import PetRow
 from k9overwatch.web.dependencies import get_db
@@ -8,6 +10,10 @@ from k9overwatch.web.schemas.pet import GeoJSONCollection, GeoJSONFeature, PetSu
 from k9overwatch.web.templates_config import templates
 
 router = APIRouter()
+
+# Animal types that are NOT explicitly "dog" or "cat" — these all map to the
+# "Other" checkbox in the map UI so users don't need to know internal enum values.
+_OTHER_ANIMAL_TYPES = {"bird", "rabbit", "other"}
 
 @router.get("/map")
 async def map_page(request: Request):
@@ -31,16 +37,28 @@ async def get_map_geojson(
         PetRow.lon >= sw_lng,
         PetRow.lon <= ne_lng,
     )
-    
+
     if record_type:
         stmt = stmt.where(PetRow.record_type.in_(record_type))
-    
+
     if animal_type:
-        stmt = stmt.where(PetRow.animal_type.in_(animal_type))
-        
-    from datetime import datetime, timedelta, timezone
+        # "other" is a catch-all for every animal that isn't explicitly dog or cat.
+        # Expand it to include bird, rabbit, and records with no animal_type set so
+        # that sources storing those values still appear when "Other" is checked.
+        if "other" in animal_type:
+            exact = [t for t in animal_type if t not in _OTHER_ANIMAL_TYPES]
+            other_types = list(_OTHER_ANIMAL_TYPES)
+            stmt = stmt.where(
+                or_(
+                    PetRow.animal_type.in_(exact + other_types),
+                    PetRow.animal_type == None,  # noqa: E711 — SQLAlchemy IS NULL
+                )
+            )
+        else:
+            stmt = stmt.where(PetRow.animal_type.in_(animal_type))
+
     if days:
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
         stmt = stmt.where(PetRow.date_event >= cutoff.date())
 
     # limit to roughly 500 features so browser doesn't choke
@@ -48,12 +66,12 @@ async def get_map_geojson(
     
     result = await db.execute(stmt)
     pets = result.scalars().all()
-    
+
     features = []
     for pet in pets:
         if pet.lat is None or pet.lon is None:
             continue
-            
+
         summary = PetSummary(
             id=str(pet.id),
             source=pet.source,
@@ -72,13 +90,13 @@ async def get_map_geojson(
             lon=pet.lon,
             thumbnail_url=pet.thumbnail_url,
             active=pet.active,
-            match_count=0  # Could query matching table for this later
+            match_count=pet.match_count or 0,
         )
-        
+
         feature = GeoJSONFeature(
             geometry={"type": "Point", "coordinates": [pet.lon, pet.lat]},
             properties=summary
         )
         features.append(feature)
-        
+
     return GeoJSONCollection(features=features, total=len(features))

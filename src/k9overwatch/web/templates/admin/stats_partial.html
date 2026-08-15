@@ -2,7 +2,7 @@
 <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
 
     <!-- Active listings -->
-    <div class="bg-white rounded-2xl p-5 flex items-start gap-4 border border-slate-100 transition hover:border-slate-200"
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 flex items-start gap-4 border border-slate-100 dark:border-slate-700 transition hover:border-slate-200 dark:hover:border-slate-600"
          style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
         <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-brand-50 text-brand-600 flex-shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
@@ -11,13 +11,13 @@
             </svg>
         </div>
         <div>
-            <div class="text-2xl font-black text-slate-900 leading-none tabular-nums">{{ stats.active_pets }}</div>
-            <div class="text-xs font-medium text-slate-500 mt-1">Active Listings</div>
+            <div class="text-2xl font-black text-slate-900 dark:text-slate-100 leading-none tabular-nums">{{ stats.active_pets }}</div>
+            <div class="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Active Listings</div>
         </div>
     </div>
 
     <!-- Lost -->
-    <div class="bg-white rounded-2xl p-5 flex items-start gap-4 border border-slate-100 transition hover:border-slate-200"
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 flex items-start gap-4 border border-slate-100 dark:border-slate-700 transition hover:border-slate-200 dark:hover:border-slate-600"
          style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
         <div class="flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0" style="background:#fef2f2;">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
@@ -27,12 +27,12 @@
         </div>
         <div>
             <div class="text-2xl font-black leading-none tabular-nums" style="color:#dc2626;">{{ stats.lost_count }}</div>
-            <div class="text-xs font-medium text-slate-500 mt-1">Lost</div>
+            <div class="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Lost</div>
         </div>
     </div>
 
     <!-- Found -->
-    <div class="bg-white rounded-2xl p-5 flex items-start gap-4 border border-slate-100 transition hover:border-slate-200"
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 flex items-start gap-4 border border-slate-100 dark:border-slate-700 transition hover:border-slate-200 dark:hover:border-slate-600"
          style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
         <div class="flex items-center justify-center w-10 h-10 rounded-xl flex-shrink-0" style="background:#f0fdf4;">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
@@ -42,12 +42,12 @@
         </div>
         <div>
             <div class="text-2xl font-black leading-none tabular-nums" style="color:#16a34a;">{{ stats.found_count }}</div>
-            <div class="text-xs font-medium text-slate-500 mt-1">Found</div>
+            <div class="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Found</div>
         </div>
     </div>
 
     <!-- Reunification matches -->
-    <div class="bg-white rounded-2xl p-5 flex items-start gap-4 border border-slate-100 transition hover:border-slate-200"
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 flex items-start gap-4 border border-slate-100 dark:border-slate-700 transition hover:border-slate-200 dark:hover:border-slate-600"
          style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
         <div class="flex items-center justify-center w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex-shrink-0">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
@@ -57,28 +57,28 @@
         </div>
         <div>
             <div class="text-2xl font-black text-purple-600 leading-none tabular-nums">{{ stats.reunification_matches }}</div>
-            <div class="text-xs font-medium text-slate-500 mt-1">Reunification Candidates</div>
+            <div class="text-xs font-medium text-slate-500 dark:text-slate-400 mt-1">Reunification Candidates</div>
         </div>
     </div>
 </div>
 
 <!-- ── Scraper Status Table ──────────────────────────────────── -->
-<div class="bg-white rounded-2xl overflow-hidden mb-6 border border-slate-100"
+<div class="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden mb-6 border border-slate-100 dark:border-slate-700"
      style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
-    <div class="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+    <div class="px-6 py-4 border-b border-slate-100 dark:border-slate-700 flex items-center justify-between">
         <div class="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
                  class="w-4 h-4 text-slate-400" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z"/>
             </svg>
-            <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Scraper Status</h2>
+            <h2 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">Scraper Status</h2>
         </div>
-        <span class="text-xs text-slate-400 font-medium">{{ stats.scrapers|length }} source{% if stats.scrapers|length != 1 %}s{% endif %}</span>
+        <span class="text-xs text-slate-400 dark:text-slate-500 font-medium">{{ stats.scrapers|length }} source{% if stats.scrapers|length != 1 %}s{% endif %}</span>
     </div>
     <div class="overflow-x-auto">
         <table class="w-full text-sm" role="table" aria-label="Scraper status">
             <thead>
-                <tr class="bg-slate-50 text-xs font-bold text-slate-500 uppercase tracking-wider">
+                <tr class="bg-slate-50 dark:bg-slate-900/40 text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
                     <th scope="col" class="px-6 py-3 text-left">Source</th>
                     <th scope="col" class="px-6 py-3 text-left">Last Run</th>
                     <th scope="col" class="px-6 py-3 text-left">Status</th>
@@ -89,8 +89,8 @@
             </thead>
             <tbody>
                 {% for s in stats.scrapers %}
-                <tr class="border-t border-slate-100 transition-colors hover:bg-brand-50/20
-                           {% if loop.index is even %}bg-slate-50/30{% else %}bg-white{% endif %}">
+                <tr class="border-t border-slate-100 dark:border-slate-700 transition-colors hover:bg-brand-50/20 dark:hover:bg-slate-700/30
+                           {% if loop.index is even %}bg-slate-50/30 dark:bg-slate-900/20{% else %}bg-white dark:bg-transparent{% endif %}">
                     <td class="px-6 py-4">
                         <div class="flex items-center gap-2.5">
                             {% if s.last_run_success %}
@@ -107,10 +107,10 @@
                                       title="Pending"
                                       aria-label="Status: pending"></span>
                             {% endif %}
-                            <span class="font-semibold text-slate-800">{{ s.source }}</span>
+                            <span class="font-semibold text-slate-800 dark:text-slate-200">{{ s.source }}</span>
                         </div>
                     </td>
-                    <td class="px-6 py-4 text-slate-500 font-mono text-xs js-relative-time"
+                    <td class="px-6 py-4 text-slate-500 dark:text-slate-400 font-mono text-xs js-relative-time"
                         data-iso="{{ s.last_run_at or '' }}">
                         {{ s.last_run_at or "Never" }}
                     </td>
@@ -135,7 +135,7 @@
                             </span>
                         {% endif %}
                     </td>
-                    <td class="px-6 py-4 text-right text-slate-700 font-mono font-medium tabular-nums">
+                    <td class="px-6 py-4 text-right text-slate-700 dark:text-slate-300 font-mono font-medium tabular-nums">
                         {{ s.records_fetched or 0 }}
                     </td>
                     <td class="px-6 py-4 text-right font-mono font-medium tabular-nums">
@@ -154,7 +154,7 @@
                 {% else %}
                 <tr>
                     <td colspan="6" class="px-6 py-12 text-center">
-                        <p class="text-slate-400 text-sm">No scraper state records found. Run the scrapers first.</p>
+                        <p class="text-slate-400 dark:text-slate-500 text-sm">No scraper state records found. Run the scrapers first.</p>
                     </td>
                 </tr>
                 {% endfor %}
@@ -167,46 +167,46 @@
 <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
 
     <!-- DB Summary -->
-    <div class="bg-white rounded-2xl p-6 border border-slate-100"
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700"
          style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
-        <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-700">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
                  class="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375m16.5 0c0-2.278-3.694-4.125-8.25-4.125S3.75 4.097 3.75 6.375m16.5 0v11.25c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125V6.375m16.5 2.625c0 2.278-3.694 4.125-8.25 4.125s-8.25-1.847-8.25-4.125m0 5.25c0 2.278 3.694 4.125 8.25 4.125s8.25-1.847 8.25-4.125"/>
             </svg>
-            <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Database Summary</h3>
+            <h3 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">Database Summary</h3>
         </div>
         <dl class="space-y-3">
             <div class="flex justify-between items-center">
-                <dt class="text-sm text-slate-500">Total records</dt>
-                <dd class="text-sm font-bold text-slate-900 tabular-nums">{{ stats.total_pets }}</dd>
+                <dt class="text-sm text-slate-500 dark:text-slate-400">Total records</dt>
+                <dd class="text-sm font-bold text-slate-900 dark:text-slate-100 tabular-nums">{{ stats.total_pets }}</dd>
             </div>
             <div class="flex justify-between items-center">
-                <dt class="text-sm text-slate-500">Active records</dt>
+                <dt class="text-sm text-slate-500 dark:text-slate-400">Active records</dt>
                 <dd class="text-sm font-bold text-green-600 tabular-nums">{{ stats.active_pets }}</dd>
             </div>
             <div class="flex justify-between items-center">
-                <dt class="text-sm text-slate-500">Missing geocode</dt>
+                <dt class="text-sm text-slate-500 dark:text-slate-400">Missing geocode</dt>
                 <dd class="text-sm font-bold tabular-nums {% if stats.no_geocode > 0 %}text-amber-600{% else %}text-slate-400{% endif %}">
                     {{ stats.no_geocode }}
                 </dd>
             </div>
             <div class="flex justify-between items-center">
-                <dt class="text-sm text-slate-500">Total matches</dt>
+                <dt class="text-sm text-slate-500 dark:text-slate-400">Total matches</dt>
                 <dd class="text-sm font-bold text-purple-600 tabular-nums">{{ stats.total_matches }}</dd>
             </div>
         </dl>
     </div>
 
     <!-- Quick Links -->
-    <div class="bg-white rounded-2xl p-6 border border-slate-100"
+    <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700"
          style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
-        <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100">
+        <div class="flex items-center gap-2 mb-4 pb-3 border-b border-slate-100 dark:border-slate-700">
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
                  class="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true">
                 <path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25"/>
             </svg>
-            <h3 class="text-xs font-bold text-slate-700 uppercase tracking-wider">Quick Links</h3>
+            <h3 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider">Quick Links</h3>
         </div>
         <nav class="flex flex-col gap-0.5" aria-label="Admin quick links">
             {% for href, label in [

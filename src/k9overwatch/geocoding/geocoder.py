@@ -3,9 +3,8 @@ from __future__ import annotations
 
 import re
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Optional
+from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,52 +18,43 @@ class GeocodeResult:
     lon: float
     geocode_source: GeocodeSource
     geocode_confidence: GeocodeConfidence
-    raw_response: Optional[dict] = None
+    raw_response: dict | None = None
 
 
 class BaseGeocodeProvider(ABC):
     @abstractmethod
-    async def geocode(self, address: str) -> Optional[GeocodeResult]:
+    async def geocode(self, address: str) -> GeocodeResult | None:
         ...
 
 
-# ZIP code centroids for fallback (top 1000 US ZIPs by population)
-# Full dataset loaded from zip_centroids.csv if available; these are common Indianapolis ZIPs
-_ZIP_CENTROIDS: dict[str, tuple[float, float]] = {
-    "46201": (39.7725, -86.1074),
-    "46202": (39.7862, -86.1551),
-    "46203": (39.7477, -86.1074),
-    "46204": (39.7684, -86.1581),
-    "46205": (39.8195, -86.1312),
-    "46208": (39.8085, -86.1790),
-    "46218": (39.8071, -86.0851),
-    "46219": (39.7674, -86.0437),
-    "46220": (39.8680, -86.1082),
-    "46221": (39.7271, -86.2214),
-    "46222": (39.7893, -86.2227),
-    "46224": (39.7895, -86.2688),
-    "46225": (39.7289, -86.1581),
-    "46226": (39.8264, -86.0655),
-    "46227": (39.6881, -86.1581),
-    "46228": (39.8459, -86.2163),
-    "46229": (39.7694, -85.9984),
-    "46231": (39.7326, -86.3177),
-    "46234": (39.8254, -86.3093),
-    "46235": (39.8264, -85.9813),
-    "46236": (39.8754, -85.9642),
-    "46237": (39.6672, -86.1004),
-    "46239": (39.7085, -86.0173),
-    "46240": (39.9025, -86.1262),
-    "46241": (39.7325, -86.2688),
-    "46250": (39.9040, -86.0567),
-    "46254": (39.8544, -86.2688),
-    "46256": (39.9025, -85.9897),
-    "46259": (39.6587, -86.0100),
-    "46260": (39.9023, -86.1754),
-    "46268": (39.9106, -86.2258),
-    "46278": (39.8795, -86.3215),
-    "46280": (39.9528, -86.1159),
-}
+# Session-level cache so zipcodes lookups are only done once per ZIP per process.
+_ZIP_CENTROIDS: dict[str, tuple[float, float]] = {}
+
+
+def _get_zip_centroid(zip_code: str) -> tuple[float, float] | None:
+    """
+    Return (lat, lon) for a US ZIP code.
+    Uses a process-level cache backed by the `zipcodes` package which ships
+    with a complete US dataset — no network calls, no external downloads.
+    Falls back to None if the ZIP is unknown.
+    """
+    if zip_code in _ZIP_CENTROIDS:
+        return _ZIP_CENTROIDS[zip_code]
+
+    try:
+        import zipcodes  # lightweight package, data bundled at install time
+        matches = zipcodes.matching(zip_code)
+        if matches:
+            z = matches[0]
+            lat = float(z["lat"])
+            lon = float(z["long"])
+            _ZIP_CENTROIDS[zip_code] = (lat, lon)
+            return (lat, lon)
+    except Exception:
+        pass
+
+    _ZIP_CENTROIDS[zip_code] = None  # type: ignore[assignment]  # negative cache
+    return None
 
 
 def _normalize_address(address: str) -> str:
@@ -115,9 +105,9 @@ class GeocodingService:
                     await self._save_cache(address, result)
                     break
 
-        # 3. ZIP centroid fallback
+        # 3. ZIP centroid fallback (nationwide via `zipcodes` package)
         if result is None and record.zip:
-            coords = _ZIP_CENTROIDS.get(record.zip)
+            coords = _get_zip_centroid(record.zip)
             if coords:
                 result = GeocodeResult(
                     lat=coords[0],
@@ -150,8 +140,9 @@ class GeocodingService:
 
     # ── Cache helpers ─────────────────────────────────────────────────────────
 
-    async def _check_cache(self, address: str) -> Optional[GeocodeResult]:
+    async def _check_cache(self, address: str) -> GeocodeResult | None:
         from sqlalchemy import select, update
+
         from ..db.models import GeocodeCache
 
         key = _normalize_address(address)
@@ -177,6 +168,7 @@ class GeocodingService:
 
     async def _save_cache(self, address: str, result: GeocodeResult) -> None:
         from sqlalchemy.exc import IntegrityError
+
         from ..db.models import GeocodeCache
 
         key = _normalize_address(address)
@@ -186,7 +178,7 @@ class GeocodingService:
             lon=result.lon,
             geocode_source=str(result.geocode_source),
             geocode_confidence=str(result.geocode_confidence),
-            cached_at=datetime.now(timezone.utc).replace(tzinfo=None),
+            cached_at=datetime.now(UTC).replace(tzinfo=None),
         )
         try:
             async with self.session.begin_nested():  # SAVEPOINT

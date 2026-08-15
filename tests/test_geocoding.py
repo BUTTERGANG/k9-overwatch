@@ -1,23 +1,20 @@
 """Tests for the geocoding service: providers, cache, and ZIP fallback."""
 from __future__ import annotations
 
-from datetime import datetime
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock
 
 import pytest
-import pytest_asyncio
 
 from k9overwatch.geocoding.geocoder import (
-    GeocodingService,
-    GeocodeResult,
-    _normalize_address,
     _ZIP_CENTROIDS,
+    GeocodeResult,
+    GeocodingService,
+    _get_zip_centroid,
+    _normalize_address,
 )
 from k9overwatch.models.enums import GeocodeConfidence, GeocodeSource
-from k9overwatch.models.pet_record import PetRecord
 
 from .conftest import make_indy_record, make_petfbi_record
-
 
 # ── _normalize_address ────────────────────────────────────────────────────────
 
@@ -43,15 +40,26 @@ class TestNormalizeAddress:
 
 class TestZipCentroids:
     def test_known_indianapolis_zip(self):
-        assert "46201" in _ZIP_CENTROIDS
-        lat, lon = _ZIP_CENTROIDS["46201"]
+        # Lazy-loaded via the `zipcodes` package on first lookup.
+        coords = _get_zip_centroid("46201")
+        assert coords is not None
+        lat, lon = coords
         assert 39.0 < lat < 40.5
         assert -87.0 < lon < -85.0
+        # And cached for future lookups.
+        assert _ZIP_CENTROIDS.get("46201") == (lat, lon)
 
     def test_centroid_coordinates_reasonable(self):
-        for zip_code, (lat, lon) in _ZIP_CENTROIDS.items():
-            assert 24.0 < lat < 50.0, f"Lat out of US range for {zip_code}"
-            assert -130.0 < lon < -65.0, f"Lon out of US range for {zip_code}"
+        for sample_zip in ("46201", "10001", "90210", "60601"):
+            coords = _get_zip_centroid(sample_zip)
+            assert coords is not None, f"Could not resolve {sample_zip}"
+            lat, lon = coords
+            assert 24.0 < lat < 50.0, f"Lat out of US range for {sample_zip}"
+            assert -130.0 < lon < -65.0, f"Lon out of US range for {sample_zip}"
+
+    def test_unknown_zip_returns_none(self):
+        # Negative cache: unknown ZIPs should return None without raising.
+        assert _get_zip_centroid("00000") is None
 
 
 # ── PetRecord.needs_geocoding ─────────────────────────────────────────────────

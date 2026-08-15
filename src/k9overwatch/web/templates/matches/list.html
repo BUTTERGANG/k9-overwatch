@@ -13,18 +13,18 @@
                     <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
                 </svg>
             </div>
-            <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Matches</h1>
+            <h1 class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Matches</h1>
         </div>
-        <p class="text-slate-500 text-sm">Potential reunifications and cross-source duplicates detected by the matching engine.</p>
+        <p class="text-slate-500 dark:text-slate-400 text-sm">Potential reunifications and cross-source duplicates detected by the matching engine.</p>
     </div>
 
     <!-- Tabs ────────────────────────────────────────────────────── -->
-    <div class="flex gap-1 mb-8 border-b border-slate-200" role="tablist" aria-label="Match type tabs">
+    <div class="flex gap-1 mb-8 border-b border-slate-200 dark:border-slate-700" role="tablist" aria-label="Match type tabs">
         <a href="/matches?match_type=lost_found&confidence=high&confidence=medium"
            role="tab"
            aria-selected="{{ 'true' if active_tab == 'lost_found' else 'false' }}"
            class="relative px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-colors
-                  {% if active_tab == 'lost_found' %}text-brand-600 bg-white border border-b-white border-slate-200 -mb-px{% else %}text-slate-500 hover:text-slate-700 hover:bg-slate-50{% endif %}">
+                  {% if active_tab == 'lost_found' %}text-brand-600 bg-white dark:bg-slate-900 border border-b-white dark:border-b-slate-900 border-slate-200 dark:border-slate-700 -mb-px{% else %}text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}">
             <span class="flex items-center gap-1.5">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
                      class="w-4 h-4" aria-hidden="true">
@@ -37,7 +37,7 @@
            role="tab"
            aria-selected="{{ 'true' if active_tab == 'dedup' else 'false' }}"
            class="relative px-5 py-2.5 text-sm font-semibold rounded-t-lg transition-colors
-                  {% if active_tab == 'dedup' %}text-brand-600 bg-white border border-b-white border-slate-200 -mb-px{% else %}text-slate-500 hover:text-slate-700 hover:bg-slate-50{% endif %}">
+                  {% if active_tab == 'dedup' %}text-brand-600 bg-white dark:bg-slate-900 border border-b-white dark:border-b-slate-900 border-slate-200 dark:border-slate-700 -mb-px{% else %}text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}">
             <span class="flex items-center gap-1.5">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
                      class="w-4 h-4" aria-hidden="true">
@@ -56,14 +56,14 @@
         {% set a = item.pet_a %}
         {% set b = item.pet_b %}
 
-        <article class="bg-white rounded-2xl overflow-hidden transition-all duration-200
+        <article class="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden transition-all duration-200
                         hover:shadow-card-hover hover:-translate-y-0.5
-                        border border-slate-100"
+                        border border-slate-100 dark:border-slate-700"
                  style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06),0 1px 2px -1px rgb(0 0 0 / 0.06);"
                  role="listitem">
 
             <!-- Top bar: confidence + match type -->
-            <div class="flex items-center justify-between px-5 py-2.5 border-b border-slate-100 bg-slate-50/60">
+            <div class="flex items-center justify-between px-5 py-2.5 border-b border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40">
                 <div class="flex items-center gap-2 flex-wrap">
                     {% if m.confidence == 'high' %}
                         <span class="inline-flex items-center gap-1 text-xs font-bold px-2.5 py-1 bg-green-100 text-green-700 rounded-full border border-green-200">
@@ -106,11 +106,12 @@
                 <a href="/pets/{{ a.id }}"
                    class="flex flex-1 gap-3 items-start group min-w-0 hover:opacity-90 transition-opacity rounded-xl p-1 -m-1">
                     {% if a.thumbnail_url %}
-                    <img src="{{ a.thumbnail_url }}" alt="{{ a.name or 'Pet photo' }}"
+                    <img src="/proxy/image?url={{ a.thumbnail_url | urlencode }}" alt="{{ a.name or 'Pet photo' }}"
                          class="w-16 h-16 object-cover rounded-xl border border-slate-100 flex-shrink-0 group-hover:ring-2 group-hover:ring-brand-300 transition"
-                         loading="lazy" width="64" height="64">
+                         loading="lazy" width="64" height="64"
+                         onerror="this.onerror=null;this.src='/static/img/pet-placeholder.svg'">
                     {% else %}
-                    <div class="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center text-xl flex-shrink-0 border border-slate-100"
+                    <div class="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-xl flex items-center justify-center text-xl flex-shrink-0 border border-slate-100 dark:border-slate-600"
                          aria-hidden="true">🐾</div>
                     {% endif %}
                     <div class="min-w-0">
@@ -118,35 +119,36 @@
                             {% if a.record_type == 'lost' %}text-red-500{% elif a.record_type == 'found' %}text-green-500{% elif a.record_type == 'sighting' %}text-blue-500{% else %}text-amber-500{% endif %}">
                             {{ a.record_type }}
                         </span>
-                        <p class="font-bold text-slate-900 group-hover:text-brand-700 transition-colors truncate text-sm leading-snug">
+                        <p class="font-bold text-slate-900 dark:text-slate-100 group-hover:text-brand-700 dark:group-hover:text-brand-400 transition-colors truncate text-sm leading-snug">
                             {{ a.name or "Unknown" }}
                         </p>
-                        <p class="text-xs text-slate-500 capitalize truncate mt-0.5">
+                        <p class="text-xs text-slate-500 dark:text-slate-400 capitalize truncate mt-0.5">
                             {{ a.breed or "?" }} &bull; {{ a.source }}
                         </p>
-                        <p class="text-xs text-slate-400 font-mono mt-1 tabular-nums">{{ a.date_event }}</p>
+                        <p class="text-xs text-slate-400 dark:text-slate-500 font-mono mt-1 tabular-nums">{{ a.date_event }}</p>
                     </div>
                 </a>
 
                 <!-- Center divider with score -->
                 <div class="flex flex-row sm:flex-col items-center justify-center flex-shrink-0
                             px-5 py-2 sm:py-0 gap-2 sm:gap-1 my-0 sm:my-1
-                            border-t sm:border-t-0 sm:border-x border-slate-100">
+                            border-t sm:border-t-0 sm:border-x border-slate-100 dark:border-slate-700">
                     <div class="text-2xl font-black text-brand-600 tabular-nums leading-none">
                         {{ "%.0f"|format(m.score * 100) }}%
                     </div>
-                    <div class="text-xs text-slate-400 font-semibold uppercase tracking-wider">match</div>
+                    <div class="text-xs text-slate-400 dark:text-slate-500 font-semibold uppercase tracking-wider">match</div>
                 </div>
 
                 <!-- Pet B -->
                 <a href="/pets/{{ b.id }}"
                    class="flex flex-1 gap-3 items-start group min-w-0 sm:flex-row-reverse hover:opacity-90 transition-opacity rounded-xl p-1 -m-1">
                     {% if b.thumbnail_url %}
-                    <img src="{{ b.thumbnail_url }}" alt="{{ b.name or 'Pet photo' }}"
+                    <img src="/proxy/image?url={{ b.thumbnail_url | urlencode }}" alt="{{ b.name or 'Pet photo' }}"
                          class="w-16 h-16 object-cover rounded-xl border border-slate-100 flex-shrink-0 group-hover:ring-2 group-hover:ring-brand-300 transition"
-                         loading="lazy" width="64" height="64">
+                         loading="lazy" width="64" height="64"
+                         onerror="this.onerror=null;this.src='/static/img/pet-placeholder.svg'">
                     {% else %}
-                    <div class="w-16 h-16 bg-slate-100 rounded-xl flex items-center justify-center text-xl flex-shrink-0 border border-slate-100"
+                    <div class="w-16 h-16 bg-slate-100 dark:bg-slate-700 rounded-xl flex items-center justify-center text-xl flex-shrink-0 border border-slate-100 dark:border-slate-600"
                          aria-hidden="true">🐾</div>
                     {% endif %}
                     <div class="min-w-0 sm:text-right">
@@ -154,27 +156,73 @@
                             {% if b.record_type == 'lost' %}text-red-500{% elif b.record_type == 'found' %}text-green-500{% elif b.record_type == 'sighting' %}text-blue-500{% else %}text-amber-500{% endif %}">
                             {{ b.record_type }}
                         </span>
-                        <p class="font-bold text-slate-900 group-hover:text-brand-700 transition-colors truncate text-sm leading-snug">
+                        <p class="font-bold text-slate-900 dark:text-slate-100 group-hover:text-brand-700 dark:group-hover:text-brand-400 transition-colors truncate text-sm leading-snug">
                             {{ b.name or "Unknown" }}
                         </p>
-                        <p class="text-xs text-slate-500 capitalize truncate mt-0.5">
+                        <p class="text-xs text-slate-500 dark:text-slate-400 capitalize truncate mt-0.5">
                             {{ b.breed or "?" }} &bull; {{ b.source }}
                         </p>
-                        <p class="text-xs text-slate-400 font-mono mt-1 tabular-nums">{{ b.date_event }}</p>
+                        <p class="text-xs text-slate-400 dark:text-slate-500 font-mono mt-1 tabular-nums">{{ b.date_event }}</p>
                     </div>
                 </a>
             </div>
 
-            <!-- Signal pills -->
-            {% if m.signals_fired %}
-            <div class="px-5 pb-4 flex flex-wrap gap-1.5">
-                {% for signal, weight in m.signals_fired.items() %}
-                <span class="text-xs bg-brand-50 text-brand-700 border border-brand-100 px-2.5 py-0.5 rounded-full font-medium">
-                    {{ signal.replace('_', ' ') }}
-                </span>
-                {% endfor %}
+            <!-- Signal pills + review actions -->
+            <div class="px-5 pb-4 flex flex-wrap items-center justify-between gap-3">
+                <div class="flex flex-wrap gap-1.5">
+                    {% if m.signals_fired %}
+                    {% for signal, weight in m.signals_fired.items() %}
+                    <span class="text-xs bg-brand-50 dark:bg-brand-900/30 text-brand-700 dark:text-brand-400 border border-brand-100 dark:border-brand-800 px-2.5 py-0.5 rounded-full font-medium">
+                        {{ signal.replace('_', ' ') }}
+                    </span>
+                    {% endfor %}
+                    {% endif %}
+                </div>
+
+                <!-- Review actions -->
+                <div id="review-{{ m.id }}" class="flex items-center gap-2 flex-shrink-0">
+                    {% if m.reviewed %}
+                        {% if m.confirmed %}
+                        <span class="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400 bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-800 px-2.5 py-1 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3"><path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd"/></svg>
+                            Confirmed
+                        </span>
+                        {% else %}
+                        <span class="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 px-2.5 py-1 rounded-full">
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"/></svg>
+                            Dismissed
+                        </span>
+                        {% endif %}
+                    {% else %}
+                    <button
+                        hx-post="/api/matches/{{ m.id }}/review?confirmed=true"
+                        hx-target="#review-{{ m.id }}"
+                        hx-swap="outerHTML"
+                        hx-indicator="#review-{{ m.id }}"
+                        hx-on::after-request="if (event.detail.successful) window.showToast('Match confirmed', 'success'); else if (event.detail.xhr.status === 401) window.showToast('Admin login required to review matches', 'warning');"
+                        class="inline-flex items-center gap-1 text-xs font-semibold text-green-700 dark:text-green-400
+                               bg-green-50 dark:bg-green-900/30 border border-green-200 dark:border-green-700
+                               hover:bg-green-100 dark:hover:bg-green-900/50 active:scale-95
+                               px-2.5 py-1 rounded-full transition-all cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path fill-rule="evenodd" d="M12.416 3.376a.75.75 0 0 1 .208 1.04l-5 7.5a.75.75 0 0 1-1.154.114l-3-3a.75.75 0 0 1 1.06-1.06l2.353 2.353 4.493-6.74a.75.75 0 0 1 1.04-.207Z" clip-rule="evenodd"/></svg>
+                        Confirm
+                    </button>
+                    <button
+                        hx-post="/api/matches/{{ m.id }}/review?confirmed=false"
+                        hx-target="#review-{{ m.id }}"
+                        hx-swap="outerHTML"
+                        hx-indicator="#review-{{ m.id }}"
+                        hx-on::after-request="if (event.detail.successful) window.showToast('Match dismissed', 'info'); else if (event.detail.xhr.status === 401) window.showToast('Admin login required to review matches', 'warning');"
+                        class="inline-flex items-center gap-1 text-xs font-semibold text-slate-500 dark:text-slate-400
+                               bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600
+                               hover:bg-slate-200 dark:hover:bg-slate-600 active:scale-95
+                               px-2.5 py-1 rounded-full transition-all cursor-pointer">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="currentColor" class="w-3 h-3" aria-hidden="true"><path d="M5.28 4.22a.75.75 0 0 0-1.06 1.06L6.94 8l-2.72 2.72a.75.75 0 1 0 1.06 1.06L8 9.06l2.72 2.72a.75.75 0 1 0 1.06-1.06L9.06 8l2.72-2.72a.75.75 0 0 0-1.06-1.06L8 6.94 5.28 4.22Z"/></svg>
+                        Dismiss
+                    </button>
+                    {% endif %}
+                </div>
             </div>
-            {% endif %}
 
         </article>
         {% endfor %}
@@ -182,17 +230,17 @@
 
     {% else %}
     <!-- Empty state -->
-    <div class="py-20 text-center bg-white rounded-2xl flex flex-col items-center gap-5 border border-dashed border-slate-200"
+    <div class="py-20 text-center bg-white dark:bg-slate-800 rounded-2xl flex flex-col items-center gap-5 border border-dashed border-slate-200 dark:border-slate-700"
          role="status" aria-live="polite">
-        <div class="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center" aria-hidden="true">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none" class="w-12 h-12 text-slate-200">
+        <div class="w-20 h-20 rounded-full bg-slate-50 dark:bg-slate-700 flex items-center justify-center" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" fill="none" class="w-12 h-12 text-slate-200 dark:text-slate-600">
                 <circle cx="33" cy="33" r="20" stroke="currentColor" stroke-width="4"/>
                 <path d="M47 47L65 65" stroke="currentColor" stroke-width="4" stroke-linecap="round"/>
             </svg>
         </div>
         <div>
-            <p class="text-base font-semibold text-slate-700">No matches found</p>
-            <p class="text-sm text-slate-400 mt-1">No matches for this filter combination. Try the other tab.</p>
+            <p class="text-base font-semibold text-slate-700 dark:text-slate-200">No matches found</p>
+            <p class="text-sm text-slate-400 dark:text-slate-500 mt-1">No matches for this filter combination. Try the other tab.</p>
         </div>
         <a href="/matches?match_type={{ 'dedup' if active_tab == 'lost_found' else 'lost_found' }}&confidence=high&confidence=medium"
            class="text-sm font-semibold text-brand-600 hover:text-brand-800 transition-colors">

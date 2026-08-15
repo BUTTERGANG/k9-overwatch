@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 300" fill="none">
+  <rect width="400" height="300" fill="#f1f5f9"/>
+  <!-- Paw print icon -->
+  <g transform="translate(200,150)">
+    <!-- Main pad -->
+    <ellipse cx="0" cy="20" rx="30" ry="22" fill="#cbd5e1"/>
+    <!-- Toe pads -->
+    <ellipse cx="-28" cy="-5" rx="13" ry="11" fill="#cbd5e1"/>
+    <ellipse cx="-10" cy="-22" rx="11" ry="9" fill="#cbd5e1"/>
+    <ellipse cx="10" cy="-22" rx="11" ry="9" fill="#cbd5e1"/>
+    <ellipse cx="28" cy="-5" rx="13" ry="11" fill="#cbd5e1"/>
+  </g>
+  <text x="200" y="230" text-anchor="middle" font-family="system-ui,sans-serif"
+        font-size="14" fill="#94a3b8">No photo available</text>
+</svg>

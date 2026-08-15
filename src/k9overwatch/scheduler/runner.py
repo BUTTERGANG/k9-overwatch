@@ -9,6 +9,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from datetime import UTC, datetime, timedelta
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from dotenv import load_dotenv
@@ -34,77 +35,101 @@ def _config() -> ScraperConfig:
 class ScraperScheduler:
 
     def build(self) -> AsyncIOScheduler:
-        from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
-        from ..scrapers.http.petconnect24 import PetConnect24Scraper
+        from ..scrapers.browser.lostmydoggie import LostMyDoggieScraper
         from ..scrapers.browser.pawboost import PawBoostScraper
         from ..scrapers.browser.petfbi import PetFBIScraper
-        from ..scrapers.browser.lostmydoggie import LostMyDoggieScraper
+        from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
+        from ..scrapers.http.petconnect24 import PetConnect24Scraper
 
         scheduler = AsyncIOScheduler(timezone="UTC")
         cfg = _config()
+        now = datetime.now(UTC)
 
-        # ── Phase 1: HTTP scrapers (fast, cheap) ──────────────────────────────
+        # ── Schedule: twice-daily at midnight and noon UTC ────────────────────
+        #
+        # Scrapers fire at HH:MM where HH ∈ {0, 12}.  HTTP scrapers go first
+        # (fast, no browser overhead).  Playwright scrapers are staggered 3 min
+        # apart so only one headless browser runs at a time.
+        #
+        # Stagger map (minutes past the hour):
+        #   :00 — IndyLostPetAlert  (HTTP, fast)
+        #   :01 — 24PetConnect      (HTTP, fast)
+        #   :04 — PawBoost          (Playwright)
+        #   :07 — PetFBI            (Playwright)
+        #   :10 — LostMyDoggie      (Playwright)
+        #   :20 — Matching pass     (after all scrapers have had time to finish)
+        #
+        # Each job fires its initial run immediately on startup (next_run_time=now
+        # + small offset) so fresh data is loaded without waiting for the next
+        # scheduled window.
+
+        # ── Phase 1: HTTP scrapers ─────────────────────────────────────────────
         scheduler.add_job(
             run_scraper,
-            "interval", minutes=15,
+            "cron", hour="0,12", minute="0",
             id="indy_lost_pet_alert",
             args=[IndyLostPetAlertScraper, cfg],
             kwargs={"run_matching": True},
             max_instances=1,
             coalesce=True,
+            next_run_time=now,                          # run immediately on startup
         )
         scheduler.add_job(
             run_scraper,
-            "interval", minutes=30,
+            "cron", hour="0,12", minute="1",
             id="petconnect24",
             args=[PetConnect24Scraper, cfg],
-            kwargs={"run_matching": False},  # matching runs in its own job
+            kwargs={"run_matching": True},
             max_instances=1,
             coalesce=True,
+            next_run_time=now + timedelta(minutes=1),
         )
 
-        # ── Phase 2: Browser scrapers (Playwright — use longer intervals) ─────
+        # ── Phase 2: Browser scrapers (Playwright — staggered, one at a time) ─
         scheduler.add_job(
             run_scraper,
-            "interval", minutes=35,
+            "cron", hour="0,12", minute="4",
             id="pawboost",
             args=[PawBoostScraper, cfg],
-            kwargs={"run_matching": False},
+            kwargs={"run_matching": True},
             max_instances=1,
             coalesce=True,
+            next_run_time=now + timedelta(minutes=3),
         )
         scheduler.add_job(
             run_scraper,
-            "interval", minutes=40,
+            "cron", hour="0,12", minute="7",
             id="petfbi",
             args=[PetFBIScraper, cfg],
-            kwargs={"run_matching": False},
+            kwargs={"run_matching": True},
             max_instances=1,
             coalesce=True,
+            next_run_time=now + timedelta(minutes=6),
         )
         scheduler.add_job(
             run_scraper,
-            "interval", minutes=45,
+            "cron", hour="0,12", minute="10",
             id="lostmydoggie",
             args=[LostMyDoggieScraper, cfg],
-            kwargs={"run_matching": False},
+            kwargs={"run_matching": True},
             max_instances=1,
             coalesce=True,
+            next_run_time=now + timedelta(minutes=9),
         )
 
-        # ── Matching pass — runs after all scrapers have had a chance to run ──
+        # ── Matching pass — runs 20 min into each window (after scrapers done) ─
         scheduler.add_job(
             run_matching_pass,
-            "interval", minutes=30,
+            "cron", hour="0,12", minute="20",
             id="matching_pass",
             max_instances=1,
             coalesce=True,
         )
 
-        # ── Staleness check — marks old records inactive ───────────────────────
+        # ── Staleness check — once per day, 6 hours after midnight run ────────
         scheduler.add_job(
             check_stale_records,
-            "interval", hours=6,
+            "cron", hour="6,18", minute="0",
             id="staleness_check",
             max_instances=1,
             coalesce=True,

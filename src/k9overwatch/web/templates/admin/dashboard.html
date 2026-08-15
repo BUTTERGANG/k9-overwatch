@@ -15,17 +15,17 @@
                         <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
                     </svg>
                 </div>
-                <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Admin Dashboard</h1>
+                <h1 class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Admin Dashboard</h1>
             </div>
-            <p class="text-slate-500 text-sm">System health, scraper status, and database statistics.</p>
+            <p class="text-slate-500 dark:text-slate-400 text-sm">System health, scraper status, and database statistics.</p>
         </div>
 
         <!-- Auto-refresh badge -->
-        <div class="flex items-center gap-2 text-xs text-slate-500 bg-slate-100 rounded-xl px-3.5 py-2.5 border border-slate-200">
+        <div class="flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 rounded-xl px-3.5 py-2.5 border border-slate-200 dark:border-slate-700">
             <span class="w-2 h-2 rounded-full bg-green-400 flex-shrink-0" style="animation:pulseDot 2s ease-in-out infinite;" aria-hidden="true"></span>
             Auto-refreshes every 30s
             &mdash;
-            <span id="last-refresh" class="font-mono text-slate-600 font-medium" aria-live="polite" aria-label="Last refreshed at"></span>
+            <span id="last-refresh" class="font-mono text-slate-600 dark:text-slate-300 font-medium" aria-live="polite" aria-label="Last refreshed at"></span>
         </div>
     </div>
 
@@ -40,7 +40,7 @@
 
     <!-- Loading indicator for HTMX poll -->
     <div id="stats-spinner" class="htmx-indicator fixed bottom-4 right-4 z-50">
-        <div class="flex items-center gap-2 text-xs font-medium text-slate-600 bg-white border border-slate-200 rounded-xl px-3 py-2 shadow-card">
+        <div class="flex items-center gap-2 text-xs font-medium text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-3 py-2 shadow-card">
             <svg class="animate-spin w-3.5 h-3.5 text-brand-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>

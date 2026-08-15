@@ -8,9 +8,6 @@ Example: A "lost dog" report (black lab, Indianapolis, March 20) matched against
 """
 from __future__ import annotations
 
-from datetime import date
-from typing import Optional
-
 from ..db.models import PetRow
 from .breed_normalizer import normalize_breed
 from .signals import (
@@ -18,7 +15,7 @@ from .signals import (
     geo_distance_miles,
     score_breed_match,
     score_color_match,
-    score_date_proximity,
+    score_contact_phone,
     score_description_overlap,
     score_geo_distance,
     score_microchip,
@@ -32,8 +29,9 @@ LOST_FOUND_MIN_SCORE = 0.30
 # Maximum days the found date can precede the lost date (animals can be found before reported)
 MAX_DAYS_BEFORE_LOST = 3
 
-# Maximum days the found date can follow the lost date
-MAX_DAYS_AFTER_LOST = 90
+# Maximum days the found date can follow the lost date.
+# Most reunifications happen within 2 weeks; beyond 60 days the odds drop sharply.
+MAX_DAYS_AFTER_LOST = 60
 
 
 class LostFoundMatcher:
@@ -64,7 +62,7 @@ class LostFoundMatcher:
 
         return sorted(results, key=lambda r: r.score, reverse=True)
 
-    def _compare(self, lost: PetRow, found: PetRow) -> Optional[MatchResult]:
+    def _compare(self, lost: PetRow, found: PetRow) -> MatchResult | None:
         # Hard filters
         if lost.animal_type != found.animal_type:
             return None
@@ -90,7 +88,7 @@ class LostFoundMatcher:
             elif 0 <= delta <= 14:
                 signals["found_days_4_14"] = 0.05
             elif delta < 0:
-                signals["found_before_lost"] = 0.02  # found before reported — plausible
+                signals["found_before_lost"] = 0.05  # found before reported — plausible
 
         # ── Breed ────────────────────────────────────────────────────────────
         breed_lost = normalize_breed(lost.breed) or normalize_breed(lost.breed_normalized)
@@ -100,13 +98,19 @@ class LostFoundMatcher:
         # ── Color ────────────────────────────────────────────────────────────
         signals.update(score_color_match(lost.color_primary, found.color_primary, weight=0.15))
         if lost.color_secondary and found.color_secondary:
+            secondary_signals = score_color_match(
+                lost.color_secondary, found.color_secondary, weight=0.15
+            )
             signals.update(
-                {k + "_secondary": v * 0.4
-                 for k, v in score_color_match(lost.color_secondary, found.color_secondary, weight=0.15).items()}
+                {k + "_secondary": v * 0.4 for k, v in secondary_signals.items()}
             )
 
         # ── Gender ───────────────────────────────────────────────────────────
-        if lost.gender and found.gender and lost.gender == found.gender and lost.gender != "unknown":
+        if (
+            lost.gender and found.gender
+            and lost.gender == found.gender
+            and lost.gender != "unknown"
+        ):
             signals["gender_match"] = 0.12
 
         # ── Size ─────────────────────────────────────────────────────────────
@@ -119,6 +123,9 @@ class LostFoundMatcher:
 
         # ── Microchip ────────────────────────────────────────────────────────
         signals.update(score_microchip(lost.microchip_number, found.microchip_number))
+
+        # ── Contact phone ─────────────────────────────────────────────────────
+        signals.update(score_contact_phone(lost.contact_phone, found.contact_phone))
 
         # ── Description ──────────────────────────────────────────────────────
         signals.update(score_description_overlap(lost.description, found.description))

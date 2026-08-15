@@ -21,7 +21,7 @@
 
     <!-- Back button -->
     <a href="/pets"
-       class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 hover:text-slate-800 mb-6 transition-colors group"
+       class="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-100 mb-6 transition-colors group"
        aria-label="Back to pet directory">
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2.5" stroke="currentColor"
              class="w-4 h-4 group-hover:-translate-x-0.5 transition-transform duration-150" aria-hidden="true">
@@ -37,19 +37,30 @@
                 <span class="text-2xl leading-none flex-shrink-0" aria-hidden="true">
                     {% if pet.animal_type == 'dog' %}🐕{% elif pet.animal_type == 'cat' %}🐈{% else %}🐾{% endif %}
                 </span>
-                <h1 class="text-3xl font-extrabold text-slate-900 tracking-tight leading-tight">
+                <h1 class="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight leading-tight">
                     {{ pet.name or "Unknown Name" }}
                 </h1>
             </div>
-            <p class="text-base text-slate-500 capitalize mt-0.5">
+            <p class="text-base text-slate-500 dark:text-slate-400 capitalize mt-0.5">
                 {{ pet.breed or "Unknown breed" }}{% if pet.breed_secondary %} / {{ pet.breed_secondary }}{% endif %}
                 &bull; {{ pet.animal_type or "Unknown species" }}
             </p>
         </div>
 
         <!-- Status badge — prominent -->
-        <div class="flex-shrink-0 pt-1">
+        <div class="flex-shrink-0 pt-1 flex items-center gap-2 flex-wrap">
             {{ status_badge(pet.record_type, size="lg") }}
+            {% if match_count > 0 %}
+            <span class="inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full px-4 py-1.5 text-sm"
+                  style="background:#f0f9ff;color:#075985;border:1px solid #bae6fd;"
+                  title="{{ match_count }} possible match{% if match_count != 1 %}es{% endif %} found">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor"
+                     class="w-3.5 h-3.5 flex-shrink-0" aria-hidden="true">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
+                </svg>
+                {{ match_count }} Match{% if match_count != 1 %}es{% endif %}
+            </span>
+            {% endif %}
         </div>
     </div>
 
@@ -60,35 +71,37 @@
         <div class="md:col-span-1 flex flex-col gap-5">
 
             <!-- Photo / gallery -->
-            <div class="bg-slate-100 rounded-2xl overflow-hidden border border-slate-100"
+            <div class="bg-slate-100 dark:bg-slate-700 rounded-2xl overflow-hidden border border-slate-100 dark:border-slate-700"
                  style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
                 {% if pet.thumbnail_url %}
-                    <img src="{{ pet.thumbnail_url }}"
+                    <img src="/proxy/image?url={{ pet.thumbnail_url | urlencode }}"
                          alt="{{ pet.name or 'Pet photo' }}"
                          class="w-full object-cover max-h-72"
                          loading="lazy"
                          width="600"
-                         height="288">
+                         height="288"
+                         onerror="this.onerror=null;this.src='/static/img/pet-placeholder.svg'">
                 {% else %}
-                    <div class="w-full h-52 flex flex-col items-center justify-center text-slate-300 gap-2 bg-slate-50">
+                    <div class="w-full h-52 flex flex-col items-center justify-center text-slate-300 dark:text-slate-600 gap-2 bg-slate-50 dark:bg-slate-700">
                         {{ camera_placeholder("w-12 h-12") }}
-                        <span class="text-xs text-slate-400">No photo available</span>
+                        <span class="text-xs text-slate-400 dark:text-slate-500">No photo available</span>
                     </div>
                 {% endif %}
 
                 {% if pet.photos and pet.photos|length > 1 %}
-                <div class="grid grid-cols-4 gap-1 p-2 bg-white">
+                <div class="grid grid-cols-4 gap-1 p-2 bg-white dark:bg-slate-800">
                     {% for photo in pet.photos[1:9] %}
                     <button type="button"
-                            class="gallery-thumb rounded-lg overflow-hidden border border-slate-100 cursor-zoom-in"
-                            onclick="window.open('{{ photo }}','_blank')"
+                            class="gallery-thumb rounded-lg overflow-hidden border border-slate-100 dark:border-slate-700 cursor-zoom-in"
+                            onclick="window.open('/proxy/image?url={{ photo | urlencode }}','_blank')"
                             aria-label="View photo {{ loop.index + 1 }}">
-                        <img src="{{ photo }}"
+                        <img src="/proxy/image?url={{ photo | urlencode }}"
                              alt="Photo {{ loop.index + 1 }}"
                              class="w-full h-14 object-cover"
                              loading="lazy"
                              width="120"
-                             height="56">
+                             height="56"
+                             onerror="this.onerror=null;this.src='/static/img/pet-placeholder.svg'">
                     </button>
                     {% endfor %}
                 </div>
@@ -96,14 +109,14 @@
             </div>
 
             <!-- Contact card -->
-            <div class="bg-white rounded-2xl p-5 border border-slate-100"
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-700"
                  style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
-                <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 pb-2.5 border-b border-slate-100">
+                <h2 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-4 pb-2.5 border-b border-slate-100 dark:border-slate-700">
                     Contact Info
                 </h2>
                 <div class="space-y-3">
                     {% if pet.contact_name %}
-                    <div class="flex items-center gap-2.5 text-sm text-slate-700">
+                    <div class="flex items-center gap-2.5 text-sm text-slate-700 dark:text-slate-300">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
                              class="w-4 h-4 text-slate-400 flex-shrink-0" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z"/>
@@ -121,7 +134,8 @@
                         <button type="button"
                                 id="phone-masked"
                                 class="text-brand-600 hover:text-brand-800 hover:underline font-medium cursor-pointer text-sm transition-colors"
-                                onclick="this.textContent='{{ pet.contact_phone }}';this.onclick=null;"
+                                data-reveal="{{ pet.contact_phone | e }}"
+                                onclick="this.textContent=this.dataset.reveal;this.onclick=null;"
                                 aria-label="Click to reveal phone number">
                             Click to reveal phone
                         </button>
@@ -137,7 +151,8 @@
                         <button type="button"
                                 id="email-masked"
                                 class="text-brand-600 hover:text-brand-800 hover:underline font-medium cursor-pointer text-sm transition-colors"
-                                onclick="this.textContent='{{ pet.contact_email }}';this.onclick=null;"
+                                data-reveal="{{ pet.contact_email | e }}"
+                                onclick="this.textContent=this.dataset.reveal;this.onclick=null;"
                                 aria-label="Click to reveal email address">
                             Click to reveal email
                         </button>
@@ -145,7 +160,7 @@
                     {% endif %}
 
                     {% if not pet.contact_phone and not pet.contact_email and not pet.source_url %}
-                    <p class="text-sm text-slate-400 italic">No contact info available.</p>
+                    <p class="text-sm text-slate-400 dark:text-slate-500 italic">No contact info available.</p>
                     {% endif %}
                 </div>
 
@@ -167,96 +182,118 @@
         <div class="md:col-span-2 flex flex-col gap-5">
 
             <!-- Key details grid -->
-            <div class="bg-white rounded-2xl p-6 border border-slate-100"
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700"
                  style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
-                <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-4 pb-2.5 border-b border-slate-100">
+                <h2 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-4 pb-2.5 border-b border-slate-100 dark:border-slate-700">
                     Key Details
                 </h2>
 
                 <dl class="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-5 text-sm">
                     <!-- Date -->
                     <div class="flex flex-col gap-0.5">
-                        <dt class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <dt class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5"/>
                             </svg>
                             Date
                         </dt>
-                        <dd class="font-semibold text-slate-900 tabular-nums">{{ pet.date_event or "Unknown" }}</dd>
+                        <dd class="font-semibold text-slate-900 dark:text-slate-100 tabular-nums">{{ pet.date_event or "Unknown" }}</dd>
                     </div>
 
                     <!-- Species -->
                     <div class="flex flex-col gap-0.5">
-                        <dt class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Species</dt>
-                        <dd class="font-semibold text-slate-900 capitalize">{{ pet.animal_type or "Unknown" }}</dd>
+                        <dt class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Species</dt>
+                        <dd class="font-semibold text-slate-900 dark:text-slate-100 capitalize">{{ pet.animal_type or "Unknown" }}</dd>
                     </div>
 
                     <!-- Breed -->
                     <div class="flex flex-col gap-0.5">
-                        <dt class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Breed</dt>
-                        <dd class="font-semibold text-slate-900">
+                        <dt class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Breed</dt>
+                        <dd class="font-semibold text-slate-900 dark:text-slate-100">
                             {{ pet.breed or "Unknown" }}{% if pet.breed_secondary %} / {{ pet.breed_secondary }}{% endif %}
                         </dd>
                     </div>
 
                     <!-- Color -->
                     <div class="flex flex-col gap-0.5">
-                        <dt class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-1">
+                        <dt class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M9.53 16.122a3 3 0 00-5.78 1.128 2.25 2.25 0 01-2.4 2.245 4.5 4.5 0 008.4-2.245c0-.399-.078-.78-.22-1.128zm0 0a15.998 15.998 0 003.388-1.62m-5.043-.025a15.994 15.994 0 011.622-3.395m3.42 3.42a15.995 15.995 0 004.764-4.648l3.876-5.814a1.151 1.151 0 00-1.597-1.597L14.146 6.32a15.996 15.996 0 00-4.649 4.763m3.42 3.42a6.776 6.776 0 00-3.42-3.42"/>
                             </svg>
                             Color
                         </dt>
-                        <dd class="font-semibold text-slate-900">
+                        <dd class="font-semibold text-slate-900 dark:text-slate-100">
                             {{ pet.color_primary or "Unknown" }}{% if pet.color_secondary %} / {{ pet.color_secondary }}{% endif %}
                         </dd>
                     </div>
 
                     <!-- Gender -->
                     <div class="flex flex-col gap-0.5">
-                        <dt class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Gender</dt>
-                        <dd class="font-semibold text-slate-900 capitalize">{{ pet.gender or "Unknown" }}</dd>
+                        <dt class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Gender</dt>
+                        <dd class="font-semibold text-slate-900 dark:text-slate-100 capitalize">{{ pet.gender or "Unknown" }}</dd>
                     </div>
 
                     <!-- Age -->
                     <div class="flex flex-col gap-0.5">
-                        <dt class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Age</dt>
-                        <dd class="font-semibold text-slate-900">{{ pet.age or "Unknown" }}</dd>
+                        <dt class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Age</dt>
+                        <dd class="font-semibold text-slate-900 dark:text-slate-100">{{ pet.age or "Unknown" }}</dd>
                     </div>
 
                     <!-- Size -->
                     <div class="flex flex-col gap-0.5">
-                        <dt class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Size</dt>
-                        <dd class="font-semibold text-slate-900 capitalize">{{ pet.size or "Unknown" }}</dd>
+                        <dt class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Size</dt>
+                        <dd class="font-semibold text-slate-900 dark:text-slate-100 capitalize">{{ pet.size or "Unknown" }}</dd>
                     </div>
 
                     <!-- Source -->
                     <div class="flex flex-col gap-0.5">
-                        <dt class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Source</dt>
-                        <dd class="font-semibold text-slate-900">{{ pet.source }}</dd>
+                        <dt class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Source</dt>
+                        <dd class="font-semibold text-slate-900 dark:text-slate-100">{{ pet.source }}</dd>
                     </div>
+
+                    <!-- Microchip -->
+                    {% if pet.microchipped is not none %}
+                    <div class="flex flex-col gap-0.5">
+                        <dt class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a2.25 2.25 0 002.25-2.25V6.75a2.25 2.25 0 00-2.25-2.25H6.75A2.25 2.25 0 004.5 6.75v10.5a2.25 2.25 0 002.25 2.25zm.75-12h9v9h-9v-9z"/>
+                            </svg>
+                            Microchip
+                        </dt>
+                        <dd class="font-semibold text-slate-900 dark:text-slate-100">
+                            {% if pet.microchipped %}
+                                <span class="text-green-700 dark:text-green-400">Yes</span>
+                                {% if pet.microchip_number %}
+                                <span class="ml-1 font-mono text-xs text-slate-500 dark:text-slate-400 select-all" title="Microchip number">{{ pet.microchip_number }}</span>
+                                {% endif %}
+                            {% else %}
+                                <span class="text-slate-400 dark:text-slate-500">No</span>
+                            {% endif %}
+                        </dd>
+                    </div>
+                    {% endif %}
 
                     {% if pet.distinctive_features %}
                     <div class="col-span-2 sm:col-span-3 flex flex-col gap-0.5">
-                        <dt class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Distinctive Features</dt>
-                        <dd class="font-medium text-slate-800">{{ pet.distinctive_features }}</dd>
+                        <dt class="text-xs font-semibold text-slate-400 dark:text-slate-500 uppercase tracking-wider">Distinctive Features</dt>
+                        <dd class="font-medium text-slate-800 dark:text-slate-200">{{ pet.distinctive_features }}</dd>
                     </div>
                     {% endif %}
                 </dl>
 
                 {% if pet.description %}
-                <div class="mt-5 pt-4 border-t border-slate-100">
-                    <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Description</h3>
-                    <p class="text-sm text-slate-700 leading-relaxed whitespace-pre-line">{{ pet.description }}</p>
+                <div class="mt-5 pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <h3 class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider mb-2">Description</h3>
+                    <p class="text-sm text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-line">{{ pet.description }}</p>
                 </div>
                 {% endif %}
             </div>
 
             <!-- Mini Map -->
             {% if pet.lat and pet.lon %}
-            <div class="bg-white rounded-2xl p-5 border border-slate-100"
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-5 border border-slate-100 dark:border-slate-700"
                  style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);">
-                <h2 class="text-xs font-bold text-slate-700 uppercase tracking-wider mb-3 pb-2.5 border-b border-slate-100">
+                <h2 class="text-xs font-bold text-slate-700 dark:text-slate-200 uppercase tracking-wider mb-3 pb-2.5 border-b border-slate-100 dark:border-slate-700">
                     <span class="flex items-center gap-1.5">
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
                              class="w-4 h-4 text-brand-500" aria-hidden="true">
@@ -266,22 +303,47 @@
                         Location
                     </span>
                 </h2>
-                {% if pet.location_text %}
-                <p class="text-sm text-slate-600 mb-3 flex items-center gap-1.5">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
-                         class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" aria-hidden="true">
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/>
-                        <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/>
-                    </svg>
-                    {{ pet.location_text }}
-                </p>
-                {% endif %}
+                <div class="mb-3 space-y-1">
+                    {% if pet.location_text %}
+                    <p class="text-sm text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                             class="w-3.5 h-3.5 text-slate-400 flex-shrink-0" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/>
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/>
+                        </svg>
+                        {{ pet.location_text }}
+                    </p>
+                    {% endif %}
+
+                    {# Structured city / state / zip line #}
+                    {% if pet.city or pet.state or pet.zip %}
+                    <p class="text-sm text-slate-500 dark:text-slate-400 pl-5">
+                        {% set parts = [] %}
+                        {% if pet.city %}{% set _ = parts.append(pet.city) %}{% endif %}
+                        {% if pet.state %}{% set _ = parts.append(pet.state) %}{% endif %}
+                        {{ parts | join(', ') }}{% if pet.zip %} {{ pet.zip }}{% endif %}
+                    </p>
+                    {% endif %}
+
+                    {# Geocode confidence badge — only show for low/approximate confidence #}
+                    {% if pet.geocode_confidence and pet.geocode_confidence in ('low', 'approximate', 'city', 'zip') %}
+                    <p class="pl-5">
+                        <span class="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-900/30 border border-amber-200 dark:border-amber-700 rounded-full px-2 py-0.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor"
+                                 class="w-3 h-3 flex-shrink-0" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
+                            </svg>
+                            Approximate location
+                        </span>
+                    </p>
+                    {% endif %}
+                </div>
                 <div id="mini-map" role="region" aria-label="Location map for {{ pet.name or 'this pet' }}"></div>
             </div>
             {% endif %}
 
             <!-- Possible Matches (lazy HTMX load) -->
-            <div class="bg-white rounded-2xl p-6 border border-slate-100"
+            <div class="bg-white dark:bg-slate-800 rounded-2xl p-6 border border-slate-100 dark:border-slate-700"
                  style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06);"
                  hx-get="/pets/{{ pet.id }}/matches"
                  hx-trigger="load"

@@ -3,12 +3,11 @@ from __future__ import annotations
 
 import asyncio
 import os
-from typing import Optional
 
 import aiohttp
 
-from ..geocoder import BaseGeocodeProvider, GeocodeResult
 from ...models.enums import GeocodeConfidence, GeocodeSource
+from ..geocoder import BaseGeocodeProvider, GeocodeResult
 
 
 class NominatimProvider(BaseGeocodeProvider):
@@ -20,7 +19,7 @@ class NominatimProvider(BaseGeocodeProvider):
         self.headers = {"User-Agent": user_agent, "Accept-Language": "en"}
         self._last_request: float = 0.0
 
-    async def geocode(self, address: str) -> Optional[GeocodeResult]:
+    async def geocode(self, address: str) -> GeocodeResult | None:
         # Enforce rate limit
         now = asyncio.get_event_loop().time()
         wait = self.RATE_LIMIT - (now - self._last_request)
@@ -37,7 +36,11 @@ class NominatimProvider(BaseGeocodeProvider):
 
         try:
             async with aiohttp.ClientSession(headers=self.headers) as session:
-                async with session.get(self.BASE_URL, params=params, timeout=aiohttp.ClientTimeout(total=10)) as resp:
+                async with session.get(
+                    self.BASE_URL,
+                    params=params,
+                    timeout=aiohttp.ClientTimeout(total=10),
+                ) as resp:
                     self._last_request = asyncio.get_event_loop().time()
                     if resp.status != 200:
                         return None

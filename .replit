@@ -10,9 +10,13 @@ externalPort = 5000
 localPort = 8080
 externalPort = 80
 
+[[ports]]
+localPort = 8081
+externalPort = 8081
+
 [nix]
 channel = "stable-25_05"
-packages = ["libxcrypt", "postgresql", "rapidfuzz-cpp", "taskflow", "xcodebuild", "zlib", "gcc-unwrapped"]
+packages = ["libxcrypt", "postgresql", "rapidfuzz-cpp", "taskflow", "xcodebuild", "zlib", "gcc-unwrapped", "chromium"]
 
 [workflows]
 runButton = "Project"
@@ -32,6 +36,10 @@ author = "agent"
 
 [workflows.workflow.metadata]
 outputType = "webview"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "pip install -q playwright playwright-stealth && python -m playwright install chromium --with-deps 2>/dev/null || true"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"

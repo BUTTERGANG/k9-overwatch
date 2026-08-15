@@ -2,13 +2,26 @@
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
-    JSON, Boolean, Column, Date, DateTime, Float, Index, Integer,
-    String, Text, UniqueConstraint,
+    JSON,
+    Boolean,
+    Column,
+    Date,
+    DateTime,
+    Float,
+    Index,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import DeclarativeBase
+
+
+def _now():
+    return datetime.now(UTC).replace(tzinfo=None)
 
 
 class Base(DeclarativeBase):
@@ -38,7 +51,7 @@ class PetRow(Base):
     gender = Column(Text)
     age = Column(Text)
     size = Column(Text)
-    size_lbs = Column(Text)
+    size_lbs = Column(Text)  # stored as text in DB; cast to float in application code
     microchipped = Column(Boolean)
     microchip_number = Column(Text)
     distinctive_features = Column(Text)
@@ -87,9 +100,20 @@ class PetRow(Base):
     nextdoor_url = Column(Text)
     alert_number = Column(Text)
 
+    # Matching performance cache — incremented by save_match()
+    match_count = Column(Integer, default=0, nullable=False, server_default="0")
+
+    # User-submitted listing fields
+    user_id = Column(String(36))          # FK → users.id (no constraint for portability)
+    user_submitted = Column(Boolean, default=False)
+    moderation_status = Column(Text, default="approved")  # pending|approved|rejected|flagged
+    resolved = Column(Boolean, default=False)
+    resolved_at = Column(DateTime)
+    resolved_reason = Column(Text)         # reunited|found_deceased|other|cancelled
+
     # Audit
-    scraped_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
-    last_checked_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    scraped_at = Column(DateTime, default=_now)
+    last_checked_at = Column(DateTime, default=_now)
 
     # Raw payload
     raw = Column(JSON)
@@ -98,6 +122,7 @@ class PetRow(Base):
         UniqueConstraint("source", "source_id", name="uq_source_record"),
         Index("ix_pets_active_date_event", "active", "date_event"),
         Index("ix_pets_active_type_date", "active", "animal_type", "date_event"),
+        Index("ix_pets_active_lat_lon", "active", "lat", "lon"),
     )
 
     def __repr__(self) -> str:
@@ -119,7 +144,7 @@ class PetMatch(Base):
     confidence = Column(Text, nullable=False)       # "low" | "medium" | "high"
     signals_fired = Column(JSON)                    # dict of signal_name → weight
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    created_at = Column(DateTime, default=_now)
     reviewed = Column(Boolean, default=False)       # human-reviewed?
     confirmed = Column(Boolean)                     # human confirmed/rejected?
 
@@ -153,5 +178,54 @@ class GeocodeCache(Base):
     lon = Column(Float, nullable=False)
     geocode_source = Column(Text)
     geocode_confidence = Column(Text)
-    cached_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    cached_at = Column(DateTime, default=_now)
     hit_count = Column(Integer, default=1)
+
+
+class User(Base):
+    """Registered user accounts."""
+    __tablename__ = "users"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    email = Column(Text, nullable=False, unique=True)
+    email_verified = Column(Boolean, default=False)
+    password_hash = Column(Text)              # None for OAuth-only accounts
+    display_name = Column(Text, nullable=False)
+    phone = Column(Text)
+    phone_verified = Column(Boolean, default=False)
+
+    # Role & status
+    role = Column(Text, default="user")       # "user" | "moderator" | "admin"
+    active = Column(Boolean, default=True)
+    banned = Column(Boolean, default=False)
+    ban_reason = Column(Text)
+
+    # Profile
+    city = Column(Text)
+    state = Column(String(2))
+    zip = Column(String(10))
+
+    # Timestamps
+    created_at = Column(DateTime, nullable=False, default=_now)
+    last_login_at = Column(DateTime)
+    updated_at = Column(DateTime)
+
+    __table_args__ = (
+        Index("ix_users_email", "email"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<User {self.email} role={self.role}>"
+
+
+class UserSession(Base):
+    """Server-side session tokens for authenticated users."""
+    __tablename__ = "user_sessions"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=False, index=True)  # → users.id
+    ip_address = Column(Text)
+    user_agent = Column(Text)
+    created_at = Column(DateTime, nullable=False, default=_now)
+    expires_at = Column(DateTime, nullable=False)
+    revoked = Column(Boolean, default=False)

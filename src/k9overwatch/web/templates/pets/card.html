@@ -1,27 +1,28 @@
 {% from 'macros.html' import camera_placeholder, status_badge %}
 <a href="/pets/{{ pet.id }}"
-   class="group block bg-white rounded-2xl overflow-hidden flex flex-col
-          border border-slate-100
+   class="group block bg-white dark:bg-slate-800 rounded-2xl overflow-hidden flex flex-col
+          border border-slate-100 dark:border-slate-700
           transition-all duration-200 ease-out
-          hover:-translate-y-1 hover:border-slate-200
+          hover:-translate-y-1 hover:border-slate-200 dark:hover:border-slate-600
           focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2"
    style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06),0 1px 2px -1px rgb(0 0 0 / 0.06);"
    onmouseover="this.style.boxShadow='0 8px 24px -4px rgb(0 0 0 / 0.10),0 2px 8px -2px rgb(0 0 0 / 0.06)'"
    onmouseout="this.style.boxShadow='0 1px 3px 0 rgb(0 0 0 / 0.06),0 1px 2px -1px rgb(0 0 0 / 0.06)'"
 >
     <!-- Image area -->
-    <div class="h-48 bg-slate-100 flex-shrink-0 relative overflow-hidden">
+    <div class="h-48 bg-slate-100 dark:bg-slate-700 flex-shrink-0 relative overflow-hidden">
         {% if pet.thumbnail_url %}
-            <img src="{{ pet.thumbnail_url }}"
+            <img src="/proxy/image?url={{ pet.thumbnail_url | urlencode }}"
                  alt="{{ pet.name or 'Pet photo' }}"
                  class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                  loading="lazy"
                  width="400"
-                 height="192">
+                 height="192"
+                 onerror="this.onerror=null;this.src='/static/img/pet-placeholder.svg'">
         {% else %}
-            <div class="w-full h-full flex flex-col items-center justify-center text-slate-300 bg-slate-50 gap-2">
+            <div class="w-full h-full flex flex-col items-center justify-center text-slate-300 dark:text-slate-600 bg-slate-50 dark:bg-slate-700 gap-2">
                 {{ camera_placeholder("w-10 h-10") }}
-                <span class="text-xs text-slate-400 font-medium">No photo available</span>
+                <span class="text-xs text-slate-400 dark:text-slate-500 font-medium">No photo available</span>
             </div>
         {% endif %}
 
@@ -41,7 +42,7 @@
     <!-- Card body -->
     <div class="p-4 flex flex-col flex-grow">
         <!-- Name + species icon -->
-        <h3 class="font-bold text-base text-slate-900 truncate mb-0.5 tracking-tight flex items-center gap-1.5"
+        <h3 class="font-bold text-base text-slate-900 dark:text-slate-100 truncate mb-0.5 tracking-tight flex items-center gap-1.5"
             title="{{ pet.name or 'Unknown Name' }}">
             <span class="text-base leading-none flex-shrink-0" aria-hidden="true">
                 {% if pet.animal_type == 'dog' %}🐕
@@ -52,14 +53,14 @@
         </h3>
 
         <!-- Breed + species -->
-        <p class="text-xs text-slate-500 mb-3 truncate capitalize">
+        <p class="text-xs text-slate-500 dark:text-slate-400 mb-3 truncate capitalize">
             {{ pet.breed or 'Unknown breed' }}{% if pet.animal_type %} &middot; {{ pet.animal_type }}{% endif %}
         </p>
 
         <!-- Footer row -->
-        <div class="mt-auto pt-3 border-t border-slate-100 flex justify-between items-center">
+        <div class="mt-auto pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
             <!-- Date -->
-            <time class="text-xs font-semibold text-slate-500 tabular-nums"
+            <time class="text-xs font-semibold text-slate-500 dark:text-slate-400 tabular-nums"
                   datetime="{{ pet.date_event }}">
                 {{ pet.date_event }}
             </time>

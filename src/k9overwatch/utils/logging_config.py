@@ -3,17 +3,15 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import Optional
 
 import structlog
-
 
 _CONFIGURED = False
 
 
 def configure_logging(
     level: str = "INFO",
-    log_file: Optional[str] = None,
+    log_file: str | None = None,
     json_format: bool = False,
 ) -> None:
     """

@@ -2,12 +2,13 @@
 from __future__ import annotations
 
 import os
+import shutil
 from abc import abstractmethod
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import AsyncIterator, Optional
 
-from ..base import BaseScraper, ScraperConfig
 from ...models.pet_record import PetRecord
+from ..base import BaseScraper
 
 
 class BrowserBaseScraper(BaseScraper):
@@ -25,7 +26,7 @@ class BrowserBaseScraper(BaseScraper):
         "Chrome/122.0.0.0 Safari/537.36"
     )
 
-    async def scrape(self, after: Optional[datetime] = None) -> AsyncIterator[PetRecord]:
+    async def scrape(self, after: datetime | None = None) -> AsyncIterator[PetRecord]:
         """Wrap _scrape_with_page in browser lifecycle management."""
         try:
             from playwright.async_api import async_playwright
@@ -37,8 +38,21 @@ class BrowserBaseScraper(BaseScraper):
 
         headless = os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() != "false"
 
+        # Allow explicit override, then fall back to system chromium (Nix/PATH), then let
+        # Playwright use its own bundled browser if nothing is found.
+        chromium_path = (
+            os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
+            or shutil.which("chromium")
+            or shutil.which("chromium-browser")
+            or None
+        )
+
         async with async_playwright() as p:
-            browser = await p.chromium.launch(headless=headless, args=self.BROWSER_ARGS)
+            browser = await p.chromium.launch(
+                headless=headless,
+                args=self.BROWSER_ARGS,
+                executable_path=chromium_path,
+            )
             context = await browser.new_context(
                 user_agent=self.USER_AGENT,
                 viewport={"width": 1280, "height": 800},
@@ -61,13 +75,13 @@ class BrowserBaseScraper(BaseScraper):
     async def _scrape_with_page(
         self,
         page,
-        after: Optional[datetime],
+        after: datetime | None,
     ) -> AsyncIterator[PetRecord]:
         """Source-specific scraping logic given an active Playwright Page."""
         ...
 
     async def _setup_context(self, context) -> None:
-        """Hook for subclasses to configure the browser context (init scripts, permissions, etc.)."""
+        """Hook for subclasses to configure the browser context (init scripts, permissions)."""
         pass
 
     @staticmethod

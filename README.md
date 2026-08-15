@@ -287,9 +287,9 @@ src/k9overwatch/
 │   │   ├── matches.py        # /matches (lost→found pairs, dedup pairs)
 │   │   └── admin.py          # /admin, /admin/stats-partial (HTTP Basic auth required)
 │   ├── templates/
-│   │   ├── base.html         # Nav, mobile hamburger menu, active link highlighting
-│   │   ├── macros.html       # Shared Jinja2 macros (camera placeholder SVG, etc.)
-│   │   ├── map.html          # Leaflet map + filter sidebar
+│   │   ├── base.html         # Frosted-glass nav, mobile drawer menu, page transitions, Tailwind config
+│   │   ├── macros.html       # Shared Jinja2 macros (status_badge, species_icon, loading_spinner, etc.)
+│   │   ├── map.html          # Leaflet map + responsive filter drawer (FAB toggle on mobile)
 │   │   ├── pets/             # list.html, _results.html (HTMX partial), card.html, detail.html
 │   │   ├── matches/          # list.html — scored match pairs
 │   │   ├── admin/            # dashboard.html, stats_partial.html
@@ -323,26 +323,28 @@ docs/
 
 | Route | Description |
 |---|---|
-| `/map` | Interactive Leaflet map — pins colored by record type, bounding-box search, filter sidebar |
+| `/map` | Interactive Leaflet map — pins colored by record type, amber badge dot on pins with matches, bounding-box "Search this area" button, filter sidebar |
 | `/pets` | Filterable pet card grid — species, type, days; HTMX partial updates; URL-reflected filter state |
 | `/pets/{id}` | Pet detail page — full info, photo gallery, mini-map, matched pets |
-| `/matches` | Lost ↔ Found match list — confidence-scored pairs across sources |
+| `/matches` | Lost ↔ Found / dedup match list — confidence-scored pairs, confirm/dismiss review buttons |
 | `/admin` | Scraper health dashboard — live stats, run history, error counts (auth required) |
 
 ### API Endpoints
 
 | Endpoint | Description |
 |---|---|
-| `GET /api/map/geojson` | GeoJSON FeatureCollection filtered by bounding box + type + days |
+| `GET /api/map/geojson` | GeoJSON FeatureCollection filtered by bounding box + type + days; includes `match_count` per feature |
 | `GET /api/health` | Health check — returns 200 (ok) or 503 (db error) |
 | `GET /admin/stats-partial` | HTMX-polled stats partial (refreshes every 30s) |
+| `POST /api/matches/{id}/review?confirmed=true\|false` | Mark a match as human-reviewed; sets `confirmed` flag |
 
 ### Tech Stack
 
 - **Framework:** FastAPI + Jinja2 templates
-- **Interactivity:** HTMX (filter partials, admin polling, lazy match cards)
+- **Interactivity:** HTMX (filter partials, admin polling, lazy match cards, inline match review)
 - **Map:** Leaflet.js with OpenStreetMap tiles
-- **Styles:** Tailwind CSS (CDN)
+- **Styles:** Tailwind CSS v3 (CDN) with custom brand/accent/status color palette; full dark mode (`darkMode: 'class'`) with localStorage + `prefers-color-scheme` persistence
+- **Design:** Frosted-glass navbar, dark mode toggle, page transitions, mobile-first responsive drawers, accessible focus states
 - **Database:** SQLite (dev) / NeonDB PostgreSQL (production)
 
 ---
@@ -355,26 +357,64 @@ Identifies the same pet listed on multiple platforms. Signals:
 
 | Signal | Score |
 |---|---|
-| Geo: < 0.1 miles apart | 0.25 |
-| Same ZIP code | 0.20 |
+| Geo: < 0.5 miles apart | 0.25 |
+| Geo: 0.5–2 miles apart | 0.15 |
+| Geo: 2–5 miles apart | 0.08 |
+| Same ZIP code | 0.08 |
+| Microchip match | 0.50 (conclusive) |
+| Contact phone match | 0.35 |
+| Contact phone partial (last 7 digits) | 0.15 |
 | Exact breed match | 0.15 |
 | Exact name match | 0.15 |
-| Color match | 0.10 |
+| Primary color match | 0.10 |
+| Secondary color match | 0.06 |
 | Gender match | 0.08 |
+| Size match | 0.05 |
 | Date within same day | 0.12 |
-| Microchip match | 0.50 (conclusive) |
+| Date within 1 day | 0.10 |
+| Date within 3 days | 0.06 |
+| Date within 7 days | 0.03 |
 | Cross-source bonus | 0.05 |
+
+> Description overlap is intentionally excluded from dedup scoring — identical descriptions are expected for the same post on multiple platforms and would inflate scores artificially.
 
 ### Lost → Found Matching (min score: 0.30)
 
-Identifies found pet reports that likely correspond to a specific lost pet. Hard filters: same `animal_type`, found date within 90 days after lost date (or up to 3 days before). Signals include geo distance, breed, color, gender, size, microchip, description overlap, and distinctive feature keywords.
+Identifies found pet reports that likely correspond to a specific lost pet. Hard filters: same `animal_type`, found date within **180 days** after lost date (or up to 3 days before). Candidate query covers a ±180-day window to support long-running searches.
+
+Signals:
+
+| Signal | Score |
+|---|---|
+| Geo: < 0.5 miles apart | 0.25 |
+| Geo: 0.5–2 miles apart | 0.15 |
+| Geo: 2–5 miles apart | 0.08 |
+| Same ZIP code | 0.08 |
+| Microchip match | 0.50 (conclusive) |
+| Contact phone match | 0.35 |
+| Contact phone partial | 0.15 |
+| Exact breed match | 0.15 |
+| Exact name match | 0.15 |
+| Primary color match | 0.15 |
+| Secondary color match | up to 0.09 |
+| Gender match | 0.12 |
+| Size match | 0.08 |
+| Found 0–3 days after lost | 0.10 |
+| Found 4–14 days after lost | 0.05 |
+| Found before reported (≤3 days) | 0.05 |
+| Distinctive feature keyword overlap | 0.08 |
+| Description overlap | 0.05–0.10 |
 
 **Confidence tiers:**
 - `high` — score ≥ 0.65
 - `medium` — score ≥ 0.40
 - `low` — score ≥ 0.30
 
-> Note: Geo signals are the strongest gate. Records without geocoded coordinates will produce more weak matches.
+> Geo signals are the strongest gate for records with coordinates. Records without geocoded coordinates fall back to ZIP-based matching.
+
+### Score Updates
+
+Match scores are not frozen at creation. When a scraper re-encounters a record (e.g. after geocoding fills in missing coordinates), the matching pass will update any existing **unreviewed** match if the new score is higher. Human-reviewed matches are never overwritten.
 
 ---
 
@@ -406,8 +446,10 @@ Geocoding cost:
 | PawBoost | every 35 min | Playwright required |
 | Pet FBI | every 40 min | Playwright required (WAF token capture) |
 | Lost My Doggie | every 45 min | Playwright required |
-| Matching pass | every 30 min | Dedup + lost→found on unmatched records |
+| Matching pass | every 30 min | Full pass on unmatched active records (batch catch-up) |
 | Staleness check | every 6 hours | Marks IndyLostPetAlert records inactive when removed |
+
+All 5 scrapers also trigger an immediate targeted matching pass on their newly ingested records (`run_matching=True`), so new pets are matched against the existing pool without waiting for the 30-minute batch job.
 
 ---
 
@@ -456,12 +498,31 @@ The `DATABASE_URL` environment variable is automatically set to `$neondb` by the
 - [x] Admin dashboard with live scraper health stats (HTTP Basic auth)
 - [x] Mobile-responsive layout with hamburger nav
 - [x] NeonDB (PostgreSQL) production deployment on Replit
+- [x] UI modernization — frosted-glass navbar, page fade-in transitions, mobile filter drawers
+- [x] Reusable Jinja2 macros (status_badge, species_icon, loading_spinner)
+- [x] Accessibility improvements — ARIA attributes, keyboard-navigable gallery, screen reader support
+- [x] Map popup redesign — branded badges, styled action buttons, auto-dismiss error banners
+- [x] **Dark mode** — full site dark theme with toggle button, localStorage + `prefers-color-scheme` persistence, no flash on load
 
-### Phase 4 — Advanced Features
+### Phase 4 — Matching & Review Improvements ✅ Complete
+- [x] Contact phone signal added to both dedup and lost→found matching (0.35 / 0.15)
+- [x] Secondary color signal added to deduplication
+- [x] Description overlap removed from dedup (inflated cross-platform scores artificially)
+- [x] ZIP weight corrected (0.20 → 0.08 — ZIP is coarser than geo distance)
+- [x] `MAX_DAYS_AFTER_LOST` extended from 90 → 180 days
+- [x] Candidate date window extended from ±60 → ±180 days
+- [x] Match scores update in place when re-scored higher (unreviewed matches only)
+- [x] All scrapers now trigger immediate matching on new records (`run_matching=True`)
+- [x] `match_count` wired on map GeoJSON — pins with matches show an amber badge dot
+- [x] Match review UI — Confirm / Dismiss buttons on match cards (HTMX, no page reload)
+- [x] `POST /api/matches/{id}/review` endpoint for human review workflow
+
+### Phase 5 — Advanced Features
 - [ ] User accounts + saved searches
 - [ ] Email/push alerts for new matches
 - [ ] **Visual similarity matching** — CLIP/MobileNet image embeddings as an additional matching signal (catches same-pet listings with mismatched text, e.g. "brown mutt" vs "tan terrier")
 - [ ] PostGIS migration for `ST_DWithin()` geo queries at scale
+- [ ] Staleness checks for browser-based scrapers (PawBoost, PetFBI, LostMyDoggie)
 - [ ] Image proxy endpoint (resize + cache thumbnails)
 - [ ] Additional sources: Petfinder API, Petco Love Lost, Finding Rover
 

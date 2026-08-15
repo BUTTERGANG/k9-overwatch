@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Request, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
 
 from k9overwatch.db.models import PetMatch, PetRow
-from k9overwatch.web.dependencies import get_db
+from k9overwatch.web.dependencies import get_db, verify_admin
 from k9overwatch.web.templates_config import templates
 
 router = APIRouter()
@@ -14,7 +14,7 @@ async def matches_page(
     request: Request,
     match_type: str = Query(default="lost_found"),
     confidence: list[str] = Query(default=["high", "medium"]),
-    page: int = Query(default=1),
+    page: int = Query(default=1, ge=1),
     db: AsyncSession = Depends(get_db),
 ):
     PAGE_SIZE = 20
@@ -53,4 +53,25 @@ async def matches_page(
             "confidence": confidence,
             "page": page,
         },
+    )
+
+
+@router.post("/api/matches/{match_id}/review", dependencies=[Depends(verify_admin)])
+async def review_match(
+    request: Request,
+    match_id: str,
+    confirmed: bool,
+    db: AsyncSession = Depends(get_db),
+):
+    """Mark a match as reviewed. Returns an HTML badge fragment for HTMX outerHTML swap."""
+    result = await db.execute(select(PetMatch).where(PetMatch.id == match_id))
+    match = result.scalar_one_or_none()
+    if not match:
+        raise HTTPException(status_code=404, detail="Match not found")
+    match.reviewed = True
+    match.confirmed = confirmed
+    return templates.TemplateResponse(
+        request,
+        "matches/_review_badge.html",
+        {"match_id": match_id, "confirmed": confirmed},
     )

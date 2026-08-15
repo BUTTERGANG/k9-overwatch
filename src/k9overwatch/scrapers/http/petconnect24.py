@@ -3,15 +3,15 @@ from __future__ import annotations
 
 import asyncio
 import re
+from collections.abc import AsyncIterator
 from datetime import datetime
-from typing import AsyncIterator, Optional
 
 import aiohttp
 from bs4 import BeautifulSoup
 
-from ..base import BaseScraper, ScraperConfig
 from ...models.pet_record import PetRecord
 from ...normalizers.petconnect24 import PetConnect24Normalizer
+from ..base import BaseScraper, ScraperConfig
 
 
 class PetConnect24Scraper(BaseScraper):
@@ -44,7 +44,7 @@ class PetConnect24Scraper(BaseScraper):
 
     async def scrape(
         self,
-        after: Optional[datetime] = None,
+        after: datetime | None = None,
     ) -> AsyncIterator[PetRecord]:
         headers = {
             "X-Requested-With": "XMLHttpRequest",
@@ -94,7 +94,10 @@ class PetConnect24Scraper(BaseScraper):
             if not cards:
                 if page == 0 and total > 0:
                     from ..base import StructuralChangeError
-                    raise StructuralChangeError(f"No gridResult cards found despite total={total}. HTML layout may have changed.")
+                    raise StructuralChangeError(
+                        f"No gridResult cards found despite total={total}. "
+                        "HTML layout may have changed."
+                    )
                 break
 
             for card in cards:
@@ -123,6 +126,10 @@ class PetConnect24Scraper(BaseScraper):
                         return False
                     text = await resp.text()
                     # PetHarbor shows "not found" text when animal is removed
-                    return "not found" not in text.lower() and "no longer available" not in text.lower()
+                    lowered = text.lower()
+                    return (
+                        "not found" not in lowered
+                        and "no longer available" not in lowered
+                    )
         except Exception:
             return True

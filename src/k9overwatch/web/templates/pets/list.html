@@ -18,6 +18,7 @@
             overflow-y: auto;
             box-shadow: 4px 0 24px rgb(0 0 0 / 0.12);
         }
+        :root.dark #filter-drawer { background: #0f172a; }
         #filter-drawer.open {
             transform: translateX(0);
         }
@@ -49,12 +50,13 @@
                   hx-trigger="change, submit"
                   hx-push-url="true"
                   hx-indicator="#filter-indicator"
-                  class="bg-white rounded-2xl p-5 md:sticky md:top-24 space-y-5"
-                  style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06),0 1px 2px -1px rgb(0 0 0 / 0.06);border:1px solid #f1f5f9;">
+                  class="bg-white dark:bg-slate-900 rounded-2xl p-5 md:sticky md:top-24 space-y-5
+                         border border-slate-100 dark:border-slate-800"
+                  style="box-shadow:0 1px 3px 0 rgb(0 0 0 / 0.06),0 1px 2px -1px rgb(0 0 0 / 0.06);">
 
                 <!-- Header row -->
-                <div class="flex items-center justify-between pb-3 border-b border-slate-100">
-                    <h2 class="text-xs font-bold text-slate-700 tracking-wider uppercase">Filters</h2>
+                <div class="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-700">
+                    <h2 class="text-xs font-bold text-slate-700 dark:text-slate-200 tracking-wider uppercase">Filters</h2>
                     <div class="flex items-center gap-2">
                         <!-- HTMX loading indicator -->
                         <span id="filter-indicator" class="htmx-indicator">
@@ -65,7 +67,7 @@
                         </span>
                         <!-- Mobile close -->
                         <button type="button" id="close-filter-btn"
-                                class="md:hidden p-1 rounded text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition"
+                                class="md:hidden p-1 rounded text-slate-400 hover:text-slate-700 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800 transition"
                                 aria-label="Close filters">
                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
                                 <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
@@ -76,7 +78,7 @@
 
                 <!-- Status -->
                 <fieldset>
-                    <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5">Status</legend>
+                    <legend class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2.5">Status</legend>
                     <div class="flex flex-col gap-2">
                         {% for val, label, color in [
                             ('lost',     'Lost',     'red'),
@@ -88,7 +90,7 @@
                             <input type="checkbox" name="record_type" value="{{ val }}"
                                    {% if val in filters.record_type %}checked{% endif %}
                                    class="w-4 h-4 rounded border-slate-300 text-{{ color }}-500 focus:ring-{{ color }}-400 cursor-pointer">
-                            <span class="flex items-center gap-1.5 text-sm text-slate-700 group-hover:text-slate-900 transition-colors">
+                            <span class="flex items-center gap-1.5 text-sm text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">
                                 <span class="w-2 h-2 rounded-full bg-{{ color }}-500 flex-shrink-0"></span>
                                 {{ label }}
                             </span>
@@ -98,26 +100,27 @@
                 </fieldset>
 
                 <!-- Species -->
-                <fieldset class="pt-4 border-t border-slate-100">
-                    <legend class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5">Species</legend>
+                <fieldset class="pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <legend class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2.5">Species</legend>
                     <div class="flex flex-col gap-2">
                         {% for val, label in [('dog','🐕 Dog'),('cat','🐈 Cat'),('other','🐾 Other')] %}
                         <label class="flex items-center gap-2.5 cursor-pointer group select-none">
                             <input type="checkbox" name="animal_type" value="{{ val }}"
                                    {% if val in filters.animal_type %}checked{% endif %}
                                    class="w-4 h-4 rounded border-slate-300 text-brand-600 focus:ring-brand-500 cursor-pointer">
-                            <span class="text-sm text-slate-700 group-hover:text-slate-900 transition-colors">{{ label }}</span>
+                            <span class="text-sm text-slate-700 dark:text-slate-300 group-hover:text-slate-900 dark:group-hover:text-white transition-colors">{{ label }}</span>
                         </label>
                         {% endfor %}
                     </div>
                 </fieldset>
 
                 <!-- Timeframe -->
-                <div class="pt-4 border-t border-slate-100">
-                    <label class="text-xs font-bold text-slate-500 uppercase tracking-wider block mb-2.5"
+                <div class="pt-4 border-t border-slate-100 dark:border-slate-700">
+                    <label class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2.5"
                            for="days-select">Timeframe</label>
                     <select id="days-select" name="days"
-                            class="w-full border border-slate-200 rounded-lg py-2 px-3 bg-white text-sm text-slate-700
+                            class="w-full border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3
+                                   bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-200
                                    cursor-pointer transition focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none">
                         <option value="7"   {% if filters.days == 7  %}selected{% endif %}>Last 7 days</option>
                         <option value="30"  {% if filters.days == 30 or not filters.days %}selected{% endif %}>Last 30 days</option>
@@ -133,14 +136,15 @@
             <!-- Page heading + mobile filter toggle -->
             <div class="flex flex-wrap items-start justify-between gap-3 mb-6">
                 <div>
-                    <h1 class="text-2xl font-extrabold text-slate-900 tracking-tight">Pet Directory</h1>
-                    <p class="text-sm text-slate-500 mt-0.5">Lost, found, sightings and adoptable pets in your area.</p>
+                    <h1 class="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Pet Directory</h1>
+                    <p class="text-sm text-slate-500 dark:text-slate-400 mt-0.5">Lost, found, sightings and adoptable pets in your area.</p>
                 </div>
                 <!-- Mobile: open filters -->
                 <button type="button" id="open-filter-btn"
                         class="md:hidden flex items-center gap-1.5 px-3 py-2 text-sm font-medium
-                               border border-slate-200 rounded-xl bg-white text-slate-700
-                               hover:bg-slate-50 hover:border-slate-300 transition shadow-sm"
+                               border border-slate-200 dark:border-slate-700 rounded-xl
+                               bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200
+                               hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600 transition shadow-sm"
                         aria-expanded="false"
                         aria-controls="filter-drawer"
                         aria-label="Open filters">
@@ -160,6 +164,32 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+    // ── Skeleton loader: swap in shimmer cards before HTMX fetch ──────────
+    (function () {
+        var CARD = '<div class="bg-white dark:bg-slate-800 rounded-2xl overflow-hidden border border-slate-100' +
+            ' dark:border-slate-700 animate-pulse" aria-hidden="true">' +
+            '<div class="h-48 bg-slate-200 dark:bg-slate-700"></div>' +
+            '<div class="p-4 space-y-3">' +
+            '<div class="h-3 w-14 bg-slate-200 dark:bg-slate-700 rounded-full"></div>' +
+            '<div class="h-4 w-3/4 bg-slate-200 dark:bg-slate-700 rounded-full"></div>' +
+            '<div class="h-3 w-1/2 bg-slate-200 dark:bg-slate-700 rounded-full"></div>' +
+            '<div class="pt-3 mt-1 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">' +
+            '<div class="h-3 w-20 bg-slate-200 dark:bg-slate-700 rounded-full"></div>' +
+            '<div class="h-3 w-10 bg-slate-200 dark:bg-slate-700 rounded-full"></div>' +
+            '</div></div></div>';
+        var GRID = '<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5"' +
+            ' aria-busy="true" aria-label="Loading pets">' +
+            Array(8).fill(CARD).join('') + '</div>';
+
+        document.body.addEventListener('htmx:beforeRequest', function (e) {
+            if (e.target.id === 'pet-filters' || (e.target.closest && e.target.closest('#pet-filters'))) {
+                var container = document.getElementById('results-container');
+                if (container) container.innerHTML = GRID;
+            }
+        });
+    })();
+</script>
 <script>
     (function () {
         var openBtn  = document.getElementById('open-filter-btn');

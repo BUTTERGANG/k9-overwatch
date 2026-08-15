@@ -1,12 +1,12 @@
-from collections.abc import Sequence
-
-from fastapi import APIRouter, Request, Depends, Query, HTTPException
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func, desc, or_
-from datetime import datetime, timedelta, timezone
 import math
+from collections.abc import Sequence
+from datetime import UTC, datetime, timedelta
 
-from k9overwatch.db.models import PetRow, PetMatch
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from sqlalchemy import desc, func, or_, select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from k9overwatch.db.models import PetMatch, PetRow
 from k9overwatch.web.dependencies import get_db
 from k9overwatch.web.templates_config import templates
 
@@ -28,7 +28,7 @@ async def search_pets(
     if animal_type:
         stmt = stmt.where(PetRow.animal_type.in_(animal_type))
         
-    cutoff_date = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+    cutoff_date = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
     stmt = stmt.where(PetRow.date_event >= cutoff_date.date())
     
     # Get total count
@@ -113,7 +113,18 @@ async def pet_detail(
     if pet is None:
         raise HTTPException(status_code=404, detail="Pet not found")
 
-    return templates.TemplateResponse(request, "pets/detail.html", {"pet": pet})
+    match_count_result = await db.execute(
+        select(func.count()).where(
+            or_(PetMatch.pet_a_id == pet_id, PetMatch.pet_b_id == pet_id)
+        )
+    )
+    match_count = match_count_result.scalar_one()
+
+    return templates.TemplateResponse(
+        request,
+        "pets/detail.html",
+        {"pet": pet, "match_count": match_count},
+    )
 
 
 @router.get("/pets/{pet_id}/matches")
@@ -144,4 +155,8 @@ async def pet_matches_partial(
         if other:
             match_pairs.append({"match": m, "other": other})
 
-    return templates.TemplateResponse(request, "pets/matches_partial.html", {"match_pairs": match_pairs})
+    return templates.TemplateResponse(
+        request,
+        "pets/matches_partial.html",
+        {"match_pairs": match_pairs},
+    )

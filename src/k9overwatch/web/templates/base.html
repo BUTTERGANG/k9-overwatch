@@ -7,6 +7,7 @@
     <!-- Tailwind Play CDN: set window.tailwind BEFORE the script loads -->
     <script>
         window.tailwind = { config: {
+            darkMode: 'class',
             theme: {
                 extend: {
                     colors: {
@@ -73,6 +74,16 @@
             }
         } };
     </script>
+    <!-- Dark mode: apply theme before page renders to prevent flash -->
+    <script>
+        (function () {
+            var stored = localStorage.getItem('theme');
+            var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (stored === 'dark' || (!stored && prefersDark)) {
+                document.documentElement.classList.add('dark');
+            }
+        })();
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.11"></script>
@@ -112,6 +123,13 @@
         ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
         ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
 
+        /* ─── Dark scrollbar ─────────────────────────────────────────── */
+        :root.dark ::-webkit-scrollbar-thumb { background: #475569; }
+        :root.dark ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+
+        /* ─── Dark mode body background ──────────────────────────────── */
+        .dark body { background-image: linear-gradient(160deg, #0f172a 0%, #111827 100%) !important; }
+
         /* ─── Focus ring override for brand color ────────────────────── */
         :focus-visible {
             outline: 2px solid #2540eb;
@@ -127,11 +145,11 @@
     </style>
     {% block extra_head %}{% endblock %}
 </head>
-<body class="bg-slate-50 text-slate-900 flex flex-col min-h-screen font-sans antialiased"
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-900 dark:text-slate-100 flex flex-col min-h-screen font-sans antialiased"
       style="background-image: linear-gradient(160deg, #f8f9ff 0%, #f1f5f9 100%); background-attachment: fixed;">
 
     <!-- ── Navbar ──────────────────────────────────────────────────── -->
-    <nav class="bg-white/95 backdrop-blur-sm border-b border-slate-100 sticky top-0 z-50"
+    <nav class="bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm border-b border-slate-100 dark:border-slate-800 sticky top-0 z-50"
          style="box-shadow: 0 1px 0 0 rgb(0 0 0 / 0.06);">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div class="flex justify-between h-16">
@@ -149,7 +167,7 @@
                                 <path d="M12 10c-2.5 0-5 2-5 4.5 0 1.5.5 2.5 1.5 3.5.8.8 1.5 1 3.5 1s2.7-.2 3.5-1c1-1 1.5-2 1.5-3.5C17 12 14.5 10 12 10z"/>
                             </svg>
                         </span>
-                        <span class="text-slate-900 font-bold text-lg tracking-tight group-hover:text-brand-700 transition-colors">
+                        <span class="text-slate-900 dark:text-slate-100 font-bold text-lg tracking-tight group-hover:text-brand-700 dark:group-hover:text-brand-400 transition-colors">
                             K9<span class="text-brand-600">Overwatch</span>
                         </span>
                     </a>
@@ -161,28 +179,68 @@
 
                     <a href="/map"
                        class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
-                              {% if path == '/map' %}text-brand-600{% else %}text-slate-600 hover:text-slate-900 hover:bg-slate-50{% endif %}"
+                              {% if path == '/map' %}text-brand-600 dark:text-brand-400{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}"
                        {% if path == '/map' %}aria-current="page"{% endif %}>
                         Map
                         {% if path == '/map' %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
                     </a>
                     <a href="/pets"
                        class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
-                              {% if path.startswith('/pets') %}text-brand-600{% else %}text-slate-600 hover:text-slate-900 hover:bg-slate-50{% endif %}"
+                              {% if path.startswith('/pets') %}text-brand-600 dark:text-brand-400{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}"
                        {% if path.startswith('/pets') %}aria-current="page"{% endif %}>
                         Pets
                         {% if path.startswith('/pets') %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
                     </a>
                     <a href="/matches"
                        class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
-                              {% if path.startswith('/matches') %}text-brand-600{% else %}text-slate-600 hover:text-slate-900 hover:bg-slate-50{% endif %}"
+                              {% if path.startswith('/matches') %}text-brand-600 dark:text-brand-400{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}"
                        {% if path.startswith('/matches') %}aria-current="page"{% endif %}>
                         Matches
                         {% if path.startswith('/matches') %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
                     </a>
+
+                    <!-- Dark mode toggle (desktop) -->
+                    <button id="dark-mode-toggle"
+                            type="button"
+                            aria-label="Toggle dark mode"
+                            class="ml-1 inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 dark:text-slate-400
+                                   hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800
+                                   focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1
+                                   transition-colors">
+                        <!-- Moon: shown in light mode -->
+                        <svg id="icon-moon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                             stroke-width="1.5" stroke="currentColor" class="w-5 h-5" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+                        </svg>
+                        <!-- Sun: shown in dark mode -->
+                        <svg id="icon-sun" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                             stroke-width="1.5" stroke="currentColor" class="w-5 h-5 hidden" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
+                        </svg>
+                    </button>
+
+                    {% if request.state.current_user %}
+                    <span class="ml-2 flex items-center gap-2">
+                        <span class="text-sm text-slate-500 dark:text-slate-400 hidden lg:inline truncate max-w-[120px]"
+                              title="{{ request.state.current_user.email }}">{{ request.state.current_user.display_name }}</span>
+                        <form method="post" action="/auth/logout" class="inline">
+                            <button type="submit"
+                                    class="px-3 py-2 text-sm font-medium rounded-md border border-slate-200 dark:border-slate-700 bg-white dark:bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 transition-colors">
+                                Sign out
+                            </button>
+                        </form>
+                    </span>
+                    {% else %}
+                    <a href="/auth/login"
+                       class="ml-2 px-4 py-2 text-sm font-medium rounded-md border transition-colors
+                              {% if path.startswith('/auth') %}border-brand-200 text-brand-700 bg-brand-50 dark:border-brand-700 dark:text-brand-400 dark:bg-brand-900/30{% else %}border-slate-200 dark:border-slate-700 bg-white dark:bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600{% endif %}">
+                        Sign in
+                    </a>
+                    {% endif %}
+
                     <a href="/admin"
                        class="ml-2 px-4 py-2 text-sm font-medium rounded-md border transition-colors
-                              {% if path.startswith('/admin') %}border-brand-200 text-brand-700 bg-brand-50{% else %}border-slate-200 bg-white text-slate-600 hover:text-slate-900 hover:bg-slate-50 hover:border-slate-300{% endif %}"
+                              {% if path.startswith('/admin') %}border-brand-200 text-brand-700 bg-brand-50 dark:border-brand-700 dark:text-brand-400 dark:bg-brand-900/30{% else %}border-slate-200 dark:border-slate-700 bg-white dark:bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600{% endif %}"
                        {% if path.startswith('/admin') %}aria-current="page"{% endif %}>
                         Admin
                     </a>
@@ -194,8 +252,8 @@
                             aria-label="Toggle navigation menu"
                             aria-expanded="false"
                             aria-controls="mobile-menu"
-                            class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-500
-                                   hover:text-slate-900 hover:bg-slate-100
+                            class="inline-flex items-center justify-center w-9 h-9 rounded-lg text-slate-500 dark:text-slate-400
+                                   hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-slate-800
                                    focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-1
                                    transition-colors">
                         <svg id="icon-hamburger" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
@@ -212,14 +270,14 @@
         </div>
 
         <!-- Mobile menu (animated slide-down) -->
-        <div id="mobile-menu" class="sm:hidden border-t border-slate-100 bg-white/95 backdrop-blur-sm"
+        <div id="mobile-menu" class="sm:hidden border-t border-slate-100 dark:border-slate-800 bg-white/95 dark:bg-slate-900/95 backdrop-blur-sm"
              role="navigation" aria-label="Mobile navigation">
             <div>
                 {% set path = request.url.path %}
                 <div class="px-3 py-2.5 flex flex-col gap-0.5">
                     <a href="/map"
                        class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                              {% if path == '/map' %}bg-brand-50 text-brand-700{% else %}text-slate-700 hover:bg-slate-50 hover:text-slate-900{% endif %}"
+                              {% if path == '/map' %}bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400{% else %}text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white{% endif %}"
                        {% if path == '/map' %}aria-current="page"{% endif %}>
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z"/>
@@ -228,7 +286,7 @@
                     </a>
                     <a href="/pets"
                        class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                              {% if path.startswith('/pets') %}bg-brand-50 text-brand-700{% else %}text-slate-700 hover:bg-slate-50 hover:text-slate-900{% endif %}"
+                              {% if path.startswith('/pets') %}bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400{% else %}text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white{% endif %}"
                        {% if path.startswith('/pets') %}aria-current="page"{% endif %}>
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
@@ -237,16 +295,36 @@
                     </a>
                     <a href="/matches"
                        class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                              {% if path.startswith('/matches') %}bg-brand-50 text-brand-700{% else %}text-slate-700 hover:bg-slate-50 hover:text-slate-900{% endif %}"
+                              {% if path.startswith('/matches') %}bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400{% else %}text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white{% endif %}"
                        {% if path.startswith('/matches') %}aria-current="page"{% endif %}>
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
                         </svg>
                         Matches
                     </a>
+
+                    <!-- Dark mode toggle (mobile) -->
+                    <button id="dark-mode-toggle-mobile"
+                            type="button"
+                            aria-label="Toggle dark mode"
+                            class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                                   text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white">
+                        <!-- Moon: shown in light mode -->
+                        <svg id="icon-moon-mobile" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                             stroke-width="1.5" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M21.752 15.002A9.72 9.72 0 0118 15.75c-5.385 0-9.75-4.365-9.75-9.75 0-1.33.266-2.597.748-3.752A9.753 9.753 0 003 11.25C3 16.635 7.365 21 12.75 21a9.753 9.753 0 009.002-5.998z"/>
+                        </svg>
+                        <!-- Sun: shown in dark mode -->
+                        <svg id="icon-sun-mobile" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+                             stroke-width="1.5" stroke="currentColor" class="w-4 h-4 flex-shrink-0 hidden" aria-hidden="true">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z"/>
+                        </svg>
+                        <span id="dark-mode-label-mobile">Dark mode</span>
+                    </button>
+
                     <a href="/admin"
                        class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                              {% if path.startswith('/admin') %}bg-brand-50 text-brand-700{% else %}text-slate-700 hover:bg-slate-50 hover:text-slate-900{% endif %}"
+                              {% if path.startswith('/admin') %}bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400{% else %}text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white{% endif %}"
                        {% if path.startswith('/admin') %}aria-current="page"{% endif %}>
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.281z"/>
@@ -264,7 +342,7 @@
     </main>
 
     <!-- ── Footer ──────────────────────────────────────────────────── -->
-    <footer class="bg-white border-t border-slate-100 mt-auto">
+    <footer class="bg-white dark:bg-slate-900 border-t border-slate-100 dark:border-slate-800 mt-auto">
         <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
             <div class="flex flex-col sm:flex-row items-center justify-between gap-3">
                 <div class="flex items-center gap-2">
@@ -277,40 +355,131 @@
                             <path d="M12 10c-2.5 0-5 2-5 4.5 0 1.5.5 2.5 1.5 3.5.8.8 1.5 1 3.5 1s2.7-.2 3.5-1c1-1 1.5-2 1.5-3.5C17 12 14.5 10 12 10z"/>
                         </svg>
                     </span>
-                    <span class="font-bold text-slate-800 text-sm">K9Overwatch</span>
+                    <span class="font-bold text-slate-800 dark:text-slate-100 text-sm">K9Overwatch</span>
                 </div>
-                <p class="text-xs text-slate-500 text-center">Helping reunite lost pets with their families across Indianapolis.</p>
-                <p class="text-xs text-slate-400">&copy; 2026 K9-Overwatch. All rights reserved.</p>
+                <p class="text-xs text-slate-500 dark:text-slate-400 text-center">Helping reunite lost pets with their families across Indianapolis.</p>
+                <p class="text-xs text-slate-400 dark:text-slate-500">&copy; 2026 K9-Overwatch. All rights reserved.</p>
             </div>
         </div>
     </footer>
 
     <script>
         (function () {
+            // ── Mobile nav toggle ────────────────────────────────────────
             var btn    = document.getElementById('nav-toggle');
             var menu   = document.getElementById('mobile-menu');
             var iconHm = document.getElementById('icon-hamburger');
             var iconCl = document.getElementById('icon-close');
-            if (!btn) return;
-            btn.addEventListener('click', function () {
-                var isOpen = menu.classList.contains('open');
-                menu.classList.toggle('open', !isOpen);
-                iconHm.classList.toggle('hidden',  !isOpen);
-                iconCl.classList.toggle('hidden',   isOpen);
-                btn.setAttribute('aria-expanded', String(!isOpen));
-            });
-            // Close menu when a link is tapped
-            menu.querySelectorAll('a').forEach(function (a) {
-                a.addEventListener('click', function () {
-                    menu.classList.remove('open');
-                    iconHm.classList.remove('hidden');
-                    iconCl.classList.add('hidden');
-                    btn.setAttribute('aria-expanded', 'false');
+            if (btn) {
+                btn.addEventListener('click', function () {
+                    var isOpen = menu.classList.contains('open');
+                    menu.classList.toggle('open', !isOpen);
+                    iconHm.classList.toggle('hidden',  !isOpen);
+                    iconCl.classList.toggle('hidden',   isOpen);
+                    btn.setAttribute('aria-expanded', String(!isOpen));
                 });
-            });
+                // Close menu when a link is tapped
+                menu.querySelectorAll('a').forEach(function (a) {
+                    a.addEventListener('click', function () {
+                        menu.classList.remove('open');
+                        iconHm.classList.remove('hidden');
+                        iconCl.classList.add('hidden');
+                        btn.setAttribute('aria-expanded', 'false');
+                    });
+                });
+            }
+
+            // ── Dark mode toggle ─────────────────────────────────────────
+            function syncDarkIcons(isDark) {
+                // Desktop
+                var moon = document.getElementById('icon-moon');
+                var sun  = document.getElementById('icon-sun');
+                if (moon) moon.classList.toggle('hidden', isDark);
+                if (sun)  sun.classList.toggle('hidden', !isDark);
+                // Mobile
+                var moonM = document.getElementById('icon-moon-mobile');
+                var sunM  = document.getElementById('icon-sun-mobile');
+                if (moonM) moonM.classList.toggle('hidden', isDark);
+                if (sunM)  sunM.classList.toggle('hidden', !isDark);
+                // Mobile label
+                var label = document.getElementById('dark-mode-label-mobile');
+                if (label) label.textContent = isDark ? 'Light mode' : 'Dark mode';
+            }
+
+            // Set initial icon state from current class
+            syncDarkIcons(document.documentElement.classList.contains('dark'));
+
+            function applyToggle() {
+                var isDark = document.documentElement.classList.toggle('dark');
+                localStorage.setItem('theme', isDark ? 'dark' : 'light');
+                syncDarkIcons(isDark);
+                document.dispatchEvent(new CustomEvent('k9:darkModeChange', { detail: { dark: isDark } }));
+            }
+
+            var toggleBtn = document.getElementById('dark-mode-toggle');
+            if (toggleBtn) toggleBtn.addEventListener('click', applyToggle);
+
+            var toggleBtnMobile = document.getElementById('dark-mode-toggle-mobile');
+            if (toggleBtnMobile) toggleBtnMobile.addEventListener('click', applyToggle);
         })();
     </script>
 
     {% block extra_scripts %}{% endblock %}
+
+    <!-- ── Toast notification system ────────────────────────────── -->
+    <div id="toast-container"
+         aria-live="polite"
+         aria-atomic="false"
+         class="fixed top-5 right-5 z-[9999] flex flex-col gap-2.5 pointer-events-none">
+    </div>
+    <script>
+        window.showToast = (function () {
+            var _icons = {
+                success: '<path fill-rule="evenodd" d="M16.704 4.153a.75.75 0 01.143 1.052l-8 10.5a.75.75 0 01-1.127.075l-4.5-4.5a.75.75 0 011.06-1.06l3.894 3.893 7.48-9.817a.75.75 0 011.05-.143z" clip-rule="evenodd"/>',
+                error:   '<path fill-rule="evenodd" d="M5.47 5.47a.75.75 0 011.06 0L12 10.94l5.47-5.47a.75.75 0 111.06 1.06L13.06 12l5.47 5.47a.75.75 0 11-1.06 1.06L12 13.06l-5.47 5.47a.75.75 0 01-1.06-1.06L10.94 12 5.47 6.53a.75.75 0 010-1.06z" clip-rule="evenodd"/>',
+                warning: '<path fill-rule="evenodd" d="M9.401 3.003c1.155-2 4.043-2 5.197 0l7.355 12.748c1.154 2-.29 4.5-2.599 4.5H4.645c-2.309 0-3.752-2.5-2.598-4.5L9.4 3.003zM12 8.25a.75.75 0 01.75.75v3.75a.75.75 0 01-1.5 0V9a.75.75 0 01.75-.75zm0 8.25a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd"/>',
+                info:    '<path fill-rule="evenodd" d="M2.25 12c0-5.385 4.365-9.75 9.75-9.75s9.75 4.365 9.75 9.75-4.365 9.75-9.75 9.75S2.25 17.385 2.25 12zm8.706-1.442c1.146-.573 2.437.463 2.126 1.706l-.709 2.836.042-.02a.75.75 0 01.67 1.34l-.04.022c-1.147.573-2.438-.463-2.127-1.706l.71-2.836-.042.02a.75.75 0 11-.671-1.34l.041-.022zM12 9a.75.75 0 100-1.5.75.75 0 000 1.5z" clip-rule="evenodd"/>',
+            };
+            var _colors = {
+                success: 'bg-green-600',
+                error:   'bg-red-600',
+                warning: 'bg-amber-500',
+                info:    'bg-brand-600',
+            };
+
+            return function showToast(message, type) {
+                type = type || 'info';
+                var container = document.getElementById('toast-container');
+                if (!container) return;
+
+                var toast = document.createElement('div');
+                toast.setAttribute('role', 'status');
+                toast.className = 'pointer-events-auto flex items-center gap-2.5 ' +
+                    (_colors[type] || _colors.info) +
+                    ' text-white text-sm font-semibold px-4 py-3 rounded-xl shadow-lg max-w-xs' +
+                    ' opacity-0 translate-y-2 transition-all duration-200';
+                toast.innerHTML =
+                    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"' +
+                    ' class="w-4 h-4 flex-shrink-0" aria-hidden="true">' +
+                    (_icons[type] || _icons.info) + '</svg>' +
+                    '<span>' + String(message).replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</span>';
+
+                container.appendChild(toast);
+
+                // Animate in (double-rAF ensures transition fires)
+                requestAnimationFrame(function () {
+                    requestAnimationFrame(function () {
+                        toast.classList.remove('opacity-0', 'translate-y-2');
+                    });
+                });
+
+                // Auto-dismiss after 3.5s
+                setTimeout(function () {
+                    toast.classList.add('opacity-0', '-translate-y-2');
+                    setTimeout(function () { toast.remove(); }, 200);
+                }, 3500);
+            };
+        })();
+    </script>
 </body>
 </html>

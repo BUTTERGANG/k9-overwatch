@@ -7,20 +7,18 @@ consistent with the db_session fixture approach in conftest.py.
 from __future__ import annotations
 
 import base64
-from datetime import date
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from k9overwatch.db.models import Base, PetRow
-from k9overwatch.web.main import app
+from k9overwatch.db.models import Base
 from k9overwatch.web.dependencies import get_db
+from k9overwatch.web.main import app
 
-from .conftest import make_indy_record, make_petfbi_record
-
+from .conftest import make_petfbi_record
 
 # ── Per-test in-memory DB override ──────────────────────────────────────────
 

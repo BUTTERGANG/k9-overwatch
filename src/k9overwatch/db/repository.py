@@ -2,16 +2,14 @@
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import and_, exists, func, not_, or_, select, update
-from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy import and_, exists, not_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..matching.breed_normalizer import normalize_breed
 from ..models.pet_record import PetRecord
-from .models import PetMatch, PetRow, ScraperState
+from .models import PetMatch, PetRow, ScraperState, User, UserSession
 
 
 class PetRepository:
@@ -34,7 +32,7 @@ class PetRepository:
         result = await self.session.execute(stmt)
         existing = result.scalar_one_or_none()
 
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
 
         if existing is None:
             row = PetRow(
@@ -72,8 +70,12 @@ class PetRepository:
                 country=record.country,
                 lat=record.lat,
                 lon=record.lon,
-                geocode_source=str(record.geocode_source) if record.geocode_source else None,
-                geocode_confidence=str(record.geocode_confidence) if record.geocode_confidence else None,
+                geocode_source=(
+                    str(record.geocode_source) if record.geocode_source else None
+                ),
+                geocode_confidence=(
+                    str(record.geocode_confidence) if record.geocode_confidence else None
+                ),
                 shelter_name=record.shelter_name,
                 shelter_code=record.shelter_code,
                 shelter_id=record.shelter_id,
@@ -111,8 +113,12 @@ class PetRepository:
             if record.lat is not None:
                 existing.lat = record.lat
                 existing.lon = record.lon
-                existing.geocode_source = str(record.geocode_source) if record.geocode_source else None
-                existing.geocode_confidence = str(record.geocode_confidence) if record.geocode_confidence else None
+                existing.geocode_source = (
+                    str(record.geocode_source) if record.geocode_source else None
+                )
+                existing.geocode_confidence = (
+                    str(record.geocode_confidence) if record.geocode_confidence else None
+                )
             existing.raw = record.raw or existing.raw
             await self.session.flush()
             return existing, False
@@ -122,7 +128,7 @@ class PetRepository:
         stmt = (
             update(PetRow)
             .where(and_(PetRow.source == source, PetRow.source_id == source_id))
-            .values(active=False, last_checked_at=datetime.now(timezone.utc).replace(tzinfo=None))
+            .values(active=False, last_checked_at=datetime.now(UTC).replace(tzinfo=None))
         )
         await self.session.execute(stmt)
 
@@ -141,14 +147,14 @@ class PetRepository:
                     PetRow.source_id.not_in(seen_source_ids),
                 )
             )
-            .values(active=False, last_checked_at=datetime.now(timezone.utc).replace(tzinfo=None))
+            .values(active=False, last_checked_at=datetime.now(UTC).replace(tzinfo=None))
         )
         result = await self.session.execute(stmt)
         return result.rowcount
 
     # ── Queries ───────────────────────────────────────────────────────────────
 
-    async def get_by_key(self, source: str, source_id: str) -> Optional[PetRow]:
+    async def get_by_key(self, source: str, source_id: str) -> PetRow | None:
         stmt = select(PetRow).where(
             and_(PetRow.source == source, PetRow.source_id == source_id)
         )
@@ -160,10 +166,10 @@ class PetRepository:
         lat: float,
         lon: float,
         miles: float,
-        record_type: Optional[str] = None,
-        animal_type: Optional[str] = None,
+        record_type: str | None = None,
+        animal_type: str | None = None,
         active_only: bool = True,
-        days: Optional[int] = None,
+        days: int | None = None,
     ) -> list[PetRow]:
         """
         Find records within `miles` of (lat, lon).
@@ -186,7 +192,7 @@ class PetRepository:
         if animal_type:
             filters.append(PetRow.animal_type == animal_type)
         if days:
-            cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
+            cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=days)
             filters.append(PetRow.date_event >= cutoff.date())
 
         stmt = select(PetRow).where(and_(*filters))
@@ -201,7 +207,10 @@ class PetRepository:
             phi1, phi2 = math.radians(lat), math.radians(r.lat)
             d_phi = math.radians(r.lat - lat)
             d_lam = math.radians(r.lon - lon)
-            a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lam / 2) ** 2
+            a = (
+                math.sin(d_phi / 2) ** 2
+                + math.cos(phi1) * math.cos(phi2) * math.sin(d_lam / 2) ** 2
+            )
             return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
         return [r for r in candidates if haversine(r) <= miles]
@@ -211,24 +220,39 @@ class PetRepository:
         record: PetRecord,
         search_radius_miles: float = 15.0,
         date_window_days: int = 60,
+        max_record_age_days: int = 365,
     ) -> list[PetRow]:
         """
         Returns rows that are plausible match candidates for `record`:
         - Opposite or same record_type (for both dedup and lost→found)
         - Same animal_type
         - Within radius (if we have coordinates)
-        - Within date window
+        - Within date window (event-relative, or wall-clock fallback when date_event is None)
+        - Scraped within max_record_age_days (hard cap to prevent cross-year matches)
         """
         filters = [PetRow.active == True]
 
         if record.animal_type:
             filters.append(PetRow.animal_type == str(record.animal_type))
 
-        # Date window
+        # Date window: event-relative when available, wall-clock fallback otherwise.
+        # When date_event is None we still restrict to recently-scraped records so
+        # we never silently match against arbitrarily old data.
         if record.date_event:
             lower = record.date_event - timedelta(days=date_window_days)
             upper = record.date_event + timedelta(days=date_window_days)
             filters.append(PetRow.date_event.between(lower, upper))
+        else:
+            # No event date — only consider candidates scraped recently
+            scraped_cutoff = (
+                datetime.now(UTC).replace(tzinfo=None) - timedelta(days=date_window_days)
+            )
+            filters.append(PetRow.scraped_at >= scraped_cutoff)
+
+        # Hard cap: never match against records scraped longer ago than max_record_age_days,
+        # regardless of how the event date is set.
+        age_cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=max_record_age_days)
+        filters.append(PetRow.scraped_at >= age_cutoff)
 
         # Exclude the record itself
         filters.append(
@@ -268,7 +292,7 @@ class PetRepository:
         than `older_than_hours` hours (or NULL). Used by the staleness checker
         to verify that records still exist on the source website.
         """
-        cutoff = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(hours=older_than_hours)
+        cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=older_than_hours)
         stmt = select(PetRow).where(
             and_(
                 PetRow.source == source,
@@ -283,7 +307,7 @@ class PetRepository:
         return result.scalars().all()
 
     async def get_unmatched_records(
-        self, source: Optional[str] = None, limit: int = 500
+        self, source: str | None = None, limit: int = 500
     ) -> list[PetRow]:
         """Records not yet present in pet_matches — candidates for a matching pass."""
         # Use NOT EXISTS correlated subquery — faster than NOT IN for large tables
@@ -304,7 +328,7 @@ class PetRepository:
 
     # ── Scraper state ─────────────────────────────────────────────────────────
 
-    async def get_scraper_state(self, source: str) -> Optional[ScraperState]:
+    async def get_scraper_state(self, source: str) -> ScraperState | None:
         stmt = select(ScraperState).where(ScraperState.source == source)
         result = await self.session.execute(stmt)
         return result.scalar_one_or_none()
@@ -316,14 +340,14 @@ class PetRepository:
         success: bool,
         records_fetched: int = 0,
         records_new: int = 0,
-        last_record_at: Optional[datetime] = None,
-        error_message: Optional[str] = None,
+        last_record_at: datetime | None = None,
+        error_message: str | None = None,
     ) -> None:
         stmt = select(ScraperState).where(ScraperState.source == source)
         result = await self.session.execute(stmt)
         state = result.scalar_one_or_none()
 
-        now = datetime.now(timezone.utc).replace(tzinfo=None)
+        now = datetime.now(UTC).replace(tzinfo=None)
         if state is None:
             state = ScraperState(source=source)
             self.session.add(state)
@@ -345,9 +369,12 @@ class PetRepository:
     # ── Match storage ─────────────────────────────────────────────────────────
 
     async def save_match(self, match) -> bool:
-        """Save a MatchResult. Returns False if match already exists."""
-        from ..matching.signals import MatchResult
-        existing = await self.session.execute(
+        """
+        Save a MatchResult. Returns True if a new record was created.
+        If a match already exists and the new score is higher (and not yet
+        human-reviewed), updates the score, confidence, and signals in place.
+        """
+        result = await self.session.execute(
             select(PetMatch).where(
                 or_(
                     and_(PetMatch.pet_a_id == match.pet_a_id, PetMatch.pet_b_id == match.pet_b_id),
@@ -355,7 +382,13 @@ class PetRepository:
                 )
             ).where(PetMatch.match_type == match.match_type)
         )
-        if existing.scalar_one_or_none():
+        existing = result.scalar_one_or_none()
+        if existing:
+            if not existing.reviewed and match.score > existing.score:
+                existing.score = match.score
+                existing.confidence = match.confidence
+                existing.signals_fired = match.signals_fired
+                await self.session.flush()
             return False
         row = PetMatch(
             pet_a_id=match.pet_a_id,
@@ -366,6 +399,13 @@ class PetRepository:
             signals_fired=match.signals_fired,
         )
         self.session.add(row)
+        # Increment the denormalized match_count on both pets so the map
+        # endpoint can skip the expensive UNION ALL subquery.
+        await self.session.execute(
+            update(PetRow)
+            .where(PetRow.id.in_([match.pet_a_id, match.pet_b_id]))
+            .values(match_count=PetRow.match_count + 1)
+        )
         await self.session.flush()
         return True
 
@@ -375,3 +415,71 @@ class PetRepository:
         ).order_by(PetMatch.score.desc())
         result = await self.session.execute(stmt)
         return result.scalars().all()
+
+
+class UserRepository:
+    """Data access layer for user accounts and sessions."""
+
+    def __init__(self, session: AsyncSession):
+        self.session = session
+
+    async def create_user(
+        self,
+        *,
+        email: str,
+        display_name: str,
+        password_hash: str | None = None,
+    ) -> User:
+        user = User(email=email, display_name=display_name, password_hash=password_hash)
+        self.session.add(user)
+        await self.session.flush()
+        return user
+
+    async def get_user_by_email(self, email: str) -> User | None:
+        result = await self.session.execute(select(User).where(User.email == email))
+        return result.scalar_one_or_none()
+
+    async def get_user_by_id(self, user_id: str) -> User | None:
+        result = await self.session.execute(select(User).where(User.id == user_id))
+        return result.scalar_one_or_none()
+
+    async def create_session(
+        self,
+        *,
+        user_id: str,
+        expires_at: datetime,
+        ip_address: str | None = None,
+        user_agent: str | None = None,
+    ) -> UserSession:
+        session = UserSession(
+            user_id=user_id,
+            expires_at=expires_at,
+            ip_address=ip_address,
+            user_agent=user_agent,
+        )
+        self.session.add(session)
+        await self.session.flush()
+        return session
+
+    async def get_session(self, session_id: str) -> UserSession | None:
+        """Return a valid (not revoked, not expired) session."""
+        result = await self.session.execute(
+            select(UserSession).where(
+                UserSession.id == session_id,
+                UserSession.revoked == False,
+                UserSession.expires_at > datetime.now(UTC).replace(tzinfo=None),
+            )
+        )
+        return result.scalar_one_or_none()
+
+    async def revoke_session(self, session_id: str) -> None:
+        await self.session.execute(
+            update(UserSession).where(UserSession.id == session_id).values(revoked=True)
+        )
+
+    async def update_last_login(self, user_id: str) -> None:
+        await self.session.execute(
+            update(User)
+            .where(User.id == user_id)
+            .values(last_login_at=datetime.now(UTC).replace(tzinfo=None))
+        )

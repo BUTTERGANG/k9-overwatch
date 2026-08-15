@@ -5,20 +5,18 @@ from datetime import date
 
 import pytest
 
+from k9overwatch.matching.breed_normalizer import normalize_breed
 from k9overwatch.matching.signals import (
     MatchResult,
     geo_distance_miles,
     score_breed_match,
     score_color_match,
     score_date_proximity,
-    score_description_overlap,
     score_geo_distance,
     score_microchip,
     score_name_match,
     score_zip_match,
 )
-from k9overwatch.matching.breed_normalizer import normalize_breed
-
 
 # ── geo_distance_miles ────────────────────────────────────────────────────────
 
@@ -183,7 +181,9 @@ class TestScoreZipMatch:
     def test_zip_match(self):
         signals = score_zip_match("46205", "46205")
         assert "zip_match" in signals
-        assert signals["zip_match"] == pytest.approx(0.20)
+        # ZIP weight is intentionally low (0.08) — ZIP covers ~15 sq mi, so it's
+        # weaker than direct geo distance. See replit.md "Matching Engine".
+        assert signals["zip_match"] == pytest.approx(0.08)
 
     def test_zip_match_with_plus4(self):
         signals = score_zip_match("46205-1234", "46205-5678")
