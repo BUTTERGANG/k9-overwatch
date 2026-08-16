@@ -7,6 +7,7 @@ from sqlalchemy import desc, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from k9overwatch.db.models import PetMatch, PetRow
+from k9overwatch.db.repository import PetRepository
 from k9overwatch.web.dependencies import get_db
 from k9overwatch.web.templates_config import templates
 
@@ -78,12 +79,14 @@ async def pets_page(
 ):
     pets, total = await search_pets(db, record_type, animal_type, days, page, q)
     total_pages = math.ceil(total / PAGE_SIZE) if total > 0 else 1
+    match_counts = await PetRepository(db).get_match_counts([pet.id for pet in pets])
 
     return templates.TemplateResponse(
         request,
         "pets/list.html",
         {
             "pets": pets,
+            "match_counts": match_counts,
             "total": total,
             "page": page,
             "total_pages": total_pages,
@@ -108,12 +111,14 @@ async def pets_results(
 ):
     pets, total = await search_pets(db, record_type, animal_type, days, page, q)
     total_pages = math.ceil(total / PAGE_SIZE) if total > 0 else 1
+    match_counts = await PetRepository(db).get_match_counts([pet.id for pet in pets])
 
     return templates.TemplateResponse(
         request,
         "pets/_results.html",
         {
             "pets": pets,
+            "match_counts": match_counts,
             "total": total,
             "page": page,
             "total_pages": total_pages,

@@ -101,6 +101,35 @@ class TestPetsPage:
         response = await client.get("/pets?days=999")
         assert response.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_pets_page_surfaces_potential_match_badge(
+        self, client: AsyncClient, web_db_session: AsyncSession
+    ):
+        from k9overwatch.db.models import PetMatch
+        from k9overwatch.db.repository import PetRepository
+
+        repo = PetRepository(web_db_session)
+        first, _ = await repo.upsert(make_petfbi_record(source_id="match-a"))
+        second, _ = await repo.upsert(
+            make_petfbi_record(source_id="match-b", name="Scout")
+        )
+        web_db_session.add(
+            PetMatch(
+                pet_a_id=first.id,
+                pet_b_id=second.id,
+                match_type="lost_found",
+                score=0.91,
+                confidence="high",
+            )
+        )
+        await web_db_session.commit()
+
+        response = await client.get("/pets?days=365")
+
+        assert response.status_code == 200
+        assert "potential match" in response.text
+        assert 'href="/matches"' in response.text
+
 
 # ── Pet detail ────────────────────────────────────────────────────────────────
 
