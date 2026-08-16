@@ -1,6 +1,6 @@
 # K9-Overwatch — Product Roadmap
 
-_Last reviewed: 2026-08-15 · grounded in a full read of the codebase (src + templates + tests + README), not a generic template._
+_Last reviewed: 2026-08-15 · grounded in the current codebase, tests, README, and browser smoke checks._
 
 The mission is simple and emotionally loaded: **help a stressed, often non-technical
 person find their lost animal faster.** Every item below is scored against that mission.
@@ -33,12 +33,18 @@ once a match exists (notification, contact, trust) and around keeping the data f
 - **Recency buckets** (≤7d / 8–14d / 15–30d / >30d) with a plain-language summary bar
   + `/api/map/buckets` endpoint (robust even when `date_event` is missing).
 - Pet directory (HTMX filters) + detail pages with source attribution.
+- Map UX includes an actionable empty state, active-filter summary, clear-all recovery,
+  prominent report CTA, and a synchronized report-list panel. List cards can focus the
+  corresponding map marker and open its popup; the list is also available as a map-free
+  accessible alternative.
 - **"See similar photos" → Google Lens** reverse image search on every photo (no ML dependency).
 - Admin dashboard: scraper health, match stats, ungeocoded counts.
 - CI (GitHub Actions ruff + pytest) + Dependabot.
 
 **Quality**
-- 210 tests pass; ruff clean; live smoke test (opt-in) proves scrape→bucket ingestion.
+- 250 tests pass, 1 skipped; Ruff clean; JavaScript syntax check passes; map browser smoke
+  checks cover initialization, empty state, filter summary, report-panel open/close, and
+  console cleanliness. Live scrape smoke remains opt-in.
 - Two pre-existing UI-killing bugs found and fixed (Starlette TemplateResponse signature,
   conditional `{% extends %}` in list.html).
 
@@ -50,20 +56,19 @@ These are things that will quietly hurt the user experience or reliability as th
 dataset grows. Listed roughly by impact on "find animals faster."
 
 ### A. Critical — matching/UX gaps that block a real reunion
-1. **Matches are computed but never delivered.** There is NO notification path —
-   no email, no SMS, no push, no saved-search alert. A `PetMatch` exists in the DB,
-   the detail page shows it, but an owner only sees it if they happen to visit their
-   pet's page. For a worried owner, "we found a match but didn't tell you" is a miss.
-   _This is the single biggest gap between the engine and the mission._
-2. **No owner-submitted reports.** Every record comes from shelters/aggregators.
-   There is no way for an owner (or a good samaritan who found a dog) to _post_ a
-   lost/found notice themselves. That cuts the dataset and the reunion surface in half.
+1. **Notification delivery is only an initial email slice.** Owner-submitted lost reports
+   can receive instant or daily-digest email alerts with confidence thresholds, opt-out,
+   and unsubscribe support. Durable delivery state, retries, SMS, push, and multi-process
+   digest storage remain open before public launch.
+2. **Owner-submitted reports exist, but the workflow is incomplete.** Authenticated users
+   can post lost/found/sighting reports with photos and geocoded locations. Moderation,
+   editing, resolution/reunited states, and abuse controls remain.
 3. **No contact / handoff mechanism.** Detail pages show "source attribution" but no
    direct path to reach the finder/shelter. `other.contact_info` exists on the model
    but is not surfaced or even populated by scrapers. A match that can't be acted on
    isn't a reunion.
-4. **No user accounts / saved searches.** Can't watch a specific pet or area. Phase 4
-   item, but it's foundational for notifications (#1) and for repeat visitors.
+4. **No saved searches or watch areas.** Accounts exist for submitted reports and alert
+   preferences, but users cannot yet watch a specific pet, area, or search query.
 
 ### B. High — data freshness & scale
 5. **Re-match is O(n²) and will get slow.** `run_matching_pass(rematch=True)` loads up
@@ -86,9 +91,10 @@ dataset grows. Listed roughly by impact on "find animals faster."
 9. **No image proxy / cache** (README unchecked). Large source images (IndyLostPetAlert)
    load slowly or get blocked (we saw this in testing — thumbnail didn't render in the
    sandbox). A proxy that resizes + caches would speed up cards, popups, and the detail page.
-10. **`match_count` on map pins is hardcoded to 0** (`Could query matching table for this
-    later`). The recency bar and buckets are great, but a pin can't show "3 possible
-    matches" yet. Cheap win.
+10. **Match counts are not yet fully surfaced in the report-list experience.** The map
+    API and marker popups can expose potential-match counts, but the synchronized list
+    still needs a dedicated match badge/link treatment so users can scan likely reunions
+    quickly.
 11. **No confidence calibration / feedback loop.** We store human `confirmed`/`rejected`
     but never USE rejections to tune signal weights. A learning loop (re-weight signals by
     accepted/rejected outcomes) would steadily cut false positives — the user's original
@@ -139,8 +145,9 @@ dataset grows. Listed roughly by impact on "find animals faster."
 
 | Item | Status | Why it's backlogged |
 |---|---|---|
-| User-submitted lost/found reports | In progress | Basic authenticated reports exist; moderation/editing remains |
-| Match notifications (email/SMS/push) | Email implemented | Instant/daily digest, confidence threshold, opt-out, unsubscribe; SMS/push remain |
+| User-submitted lost/found reports | Basic slice shipped | Authenticated reports, photos, geocoding, and immediate matching exist; moderation/editing/resolution remain |
+| Match notifications (email/SMS/push) | Email slice shipped | Instant/daily digest, confidence threshold, opt-out, unsubscribe; durable delivery, SMS, and push remain |
+| Map/report synchronized discovery | Shipped initial slice | Empty-state recovery, filter summary, report panel, and card-to-marker focus are live; match badges and mobile bottom sheet remain |
 | Image proxy + cache | Planned, unchecked | Perf, not correctness |
 | Batch geocode existing DB | Planned, unchecked | One-off script exists, not run |
 | Visual similarity signal | Deferred (D1) | New dependency (imagehash/CLIP) |
@@ -155,14 +162,14 @@ dataset grows. Listed roughly by impact on "find animals faster."
 ## 5. Recommended sequencing (to maximize "find animals faster" per unit effort)
 
 **Now (highest ROI, low risk):**
-1. Run `geocode_batch.py` on the existing DB — unlocks currently-invisible matches. (hours)
-2. Populate + show `match_count` on pins. (hours)
+1. Add match badges and direct match links to synchronized map report cards. (hours)
+2. Run `geocode_batch.py` on the existing DB — unlocks currently-invisible matches. (hours)
 3. Expand staleness/inactive logic beyond IndyLostPetAlert. (days)
 4. Add an image proxy. (days) — faster loads = owners browse more.
 
 **Next (the reunion gap):**
-5. Owner-submitted reports + minimal accounts. (the big one)
-6. Match notifications (email slice shipped) — closes flaw #1; add delivery tracking/provider hardening next.
+5. Complete owner reports with moderation, editing, and resolution states.
+6. Harden match notifications with durable delivery tracking, retries, and provider isolation.
 7. Surface + populate contact info so a match is actionable.
 
 **Then (scale + precision):**
@@ -183,6 +190,6 @@ results without clutter, (c) get a match **pushed to them**, not discovered by l
 (d) reach the finder/shelter directly, and (e) trust the result because low-confidence
 matches are clearly labeled and false positives shrink over time.
 
-Today we deliver (a) partially, (b) yes, (c) **no**, (d) **no**, (e) partially.
+Today we deliver (a) partially, (b) yes, (c) **email for eligible owner-submitted lost reports**, (d) **no**, (e) partially.
 That gap — between "we computed a match" and "the owner knows and can act" — is the
 roadmap's center of gravity.
