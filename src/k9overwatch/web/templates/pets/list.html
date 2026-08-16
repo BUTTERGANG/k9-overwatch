@@ -202,6 +202,25 @@
 </script>
 <script>
     (function () {
+        function resetPetFilters() {
+            var form = document.getElementById('pet-filters');
+            if (!form) return;
+            form.querySelectorAll('input[type="checkbox"]').forEach(function (input) {
+                input.checked = input.name === 'record_type';
+            });
+            var search = document.getElementById('pet-search');
+            if (search) search.value = '';
+            var days = document.getElementById('days-select');
+            if (days) days.value = '365';
+            if (window.htmx) htmx.trigger(form, 'submit');
+        }
+
+        document.addEventListener('click', function (event) {
+            if (event.target.closest && event.target.closest('#clear-pet-filters-btn')) {
+                resetPetFilters();
+            }
+        });
+
         var openBtn  = document.getElementById('open-filter-btn');
         var closeBtn = document.getElementById('close-filter-btn');
         var drawer   = document.getElementById('filter-drawer');

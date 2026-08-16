@@ -140,7 +140,24 @@ class TestMapPage:
         assert 'id="map-list-panel"' in response.text
         assert 'id="map-report-list"' in response.text
         assert 'id="toggle-map-list-btn"' in response.text
-        assert 'aria-label="Map reports"' in response.text
+        assert 'aria-label="View reports"' in response.text
+
+    @pytest.mark.asyncio
+    async def test_map_page_prioritizes_report_and_view_reports_actions(self, client: AsyncClient):
+        response = await client.get("/map")
+        assert response.status_code == 200
+        assert "Report a lost pet" in response.text
+        assert 'aria-label="View reports"' in response.text
+        assert "potential match" in response.text
+
+    @pytest.mark.asyncio
+    async def test_pets_page_has_actionable_empty_state_contract(self, client: AsyncClient):
+        response = await client.get("/pets")
+        assert response.status_code == 200
+        assert 'id="pets-results-status"' in response.text
+        assert 'id="clear-pet-filters-btn"' in response.text
+        assert "Report a lost or found pet" in response.text
+        assert 'aria-live="polite"' in response.text
 
 
 class TestMapGeoJSON:

@@ -199,11 +199,10 @@
                         {% if path.startswith('/matches') %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
                     </a>
                     <a href="/report"
-                       class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
-                              {% if path.startswith('/report') %}text-brand-600 dark:text-brand-400{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}"
+                       class="relative ml-1 inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold rounded-lg transition-colors shadow-sm
+                              {% if path.startswith('/report') %}bg-brand-700 text-white{% else %}bg-brand-600 text-white hover:bg-brand-700{% endif %}"
                        {% if path.startswith('/report') %}aria-current="page"{% endif %}>
-                        Report
-                        {% if path.startswith('/report') %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
+                        <span aria-hidden="true">＋</span> Report a lost pet
                     </a>
 
                     <!-- Dark mode toggle (desktop) -->
@@ -317,13 +316,13 @@
                         Matches
                     </a>
                     <a href="/report"
-                       class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                              {% if path.startswith('/report') %}bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-400{% else %}text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white{% endif %}"
+                       class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors
+                              {% if path.startswith('/report') %}bg-brand-700 text-white dark:bg-brand-600{% else %}bg-brand-600 text-white hover:bg-brand-700{% endif %}"
                        {% if path.startswith('/report') %}aria-current="page"{% endif %}>
                         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z"/>
                         </svg>
-                        Report
+                        Report a lost pet
                     </a>
 
                     <!-- Dark mode toggle (mobile) -->
