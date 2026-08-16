@@ -35,8 +35,8 @@ once a match exists (notification, contact, trust) and around keeping the data f
 - Pet directory (HTMX filters) + detail pages with source attribution.
 - Map UX includes an actionable empty state, active-filter summary, clear-all recovery,
   prominent report CTA, and a synchronized report-list panel. List cards can focus the
-  corresponding map marker and open its popup; the list is also available as a map-free
-  accessible alternative.
+  corresponding map marker and open its popup; potential-match badges link to the match
+  review page; the list is also available as a map-free accessible alternative.
 - **"See similar photos" → Google Lens** reverse image search on every photo (no ML dependency).
 - Admin dashboard: scraper health, match stats, ungeocoded counts.
 - CI (GitHub Actions ruff + pytest) + Dependabot.
