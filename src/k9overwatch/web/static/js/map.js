@@ -202,6 +202,53 @@ document.addEventListener("DOMContentLoaded", () => {
     const clearFiltersBtn = document.getElementById('clear-map-filters-btn');
     const clearAllFiltersBtn = document.getElementById('clear-all-map-filters-btn');
     const filterSummary = document.getElementById('map-filter-summary');
+    const listPanel = document.getElementById('map-list-panel');
+    const reportList = document.getElementById('map-report-list');
+    const listCount = document.getElementById('map-list-count');
+    const toggleListBtn = document.getElementById('toggle-map-list-btn');
+    const closeListBtn = document.getElementById('close-map-list-btn');
+    const markerById = new Map();
+
+    function setListOpen(open) {
+        listPanel.classList.toggle('open', open);
+        listPanel.setAttribute('aria-hidden', String(!open));
+        toggleListBtn.setAttribute('aria-expanded', String(open));
+        if (open) closeListBtn.focus();
+    }
+
+    toggleListBtn.addEventListener('click', () => setListOpen(!listPanel.classList.contains('open')));
+    closeListBtn.addEventListener('click', () => {
+        setListOpen(false);
+        toggleListBtn.focus();
+    });
+
+    function renderReportList(features) {
+        markerById.clear();
+        reportList.replaceChildren();
+        listCount.textContent = `${features.length} report${features.length === 1 ? '' : 's'} in this view`;
+        if (!features.length) {
+            reportList.innerHTML = '<p class="p-4 text-sm text-slate-500 dark:text-slate-400">No reports match these filters.</p>';
+            return;
+        }
+        features.forEach(feature => {
+            const p = feature.properties || {};
+            const card = document.createElement('button');
+            card.type = 'button';
+            card.className = 'map-report-card block w-full text-left mb-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 hover:border-brand-400 dark:hover:border-brand-500';
+            card.setAttribute('role', 'listitem');
+            card.dataset.petId = p.id || '';
+            card.innerHTML = `<span class="block text-xs font-bold uppercase tracking-wide text-brand-600 dark:text-brand-400">${escapeHtml(p.record_type || 'report')}</span><span class="mt-1 block font-semibold text-sm text-slate-800 dark:text-slate-100">${escapeHtml(p.name || 'Unknown name')}</span><span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">${escapeHtml(p.breed || 'Unknown breed')} · ${escapeHtml(p.date_event || 'Date unavailable')}</span>`;
+            card.addEventListener('click', () => {
+                const marker = markerById.get(String(p.id));
+                if (!marker) return;
+                map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14));
+                marker.openPopup();
+                reportList.querySelectorAll('.is-selected').forEach(el => el.classList.remove('is-selected'));
+                card.classList.add('is-selected');
+            });
+            reportList.appendChild(card);
+        });
+    }
 
     // ── Spinner overlay ──────────────────────────────────────────────────
     const mapContainer = document.getElementById('map').parentElement;
@@ -447,10 +494,12 @@ document.addEventListener("DOMContentLoaded", () => {
                         minWidth: 210,
                         className: 'k9-popup',
                     });
+                    markerById.set(String(p.id), marker);
                     markers.push(marker);
                 });
             }
 
+            renderReportList(data.features || []);
             clusterGroup.addLayers(markers);
 
             // Update the result count badge using the `total` field from the

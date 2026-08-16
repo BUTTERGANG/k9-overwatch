@@ -133,6 +133,15 @@ class TestMapPage:
         assert 'id="clear-all-map-filters-btn"' in response.text
         assert 'aria-live="polite"' in response.text
 
+    @pytest.mark.asyncio
+    async def test_map_page_has_synchronized_report_list_controls(self, client: AsyncClient):
+        response = await client.get("/map")
+        assert response.status_code == 200
+        assert 'id="map-list-panel"' in response.text
+        assert 'id="map-report-list"' in response.text
+        assert 'id="toggle-map-list-btn"' in response.text
+        assert 'aria-label="Map reports"' in response.text
+
 
 class TestMapGeoJSON:
     @pytest.mark.asyncio
