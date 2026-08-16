@@ -115,4 +115,10 @@ async def _migrate_existing_db():
             await conn.execute(text("ALTER TABLE pets ADD COLUMN owner_id TEXT"))
         # New tables (users, notification_prefs)
         await conn.run_sync(Base.metadata.create_all)
+        # Add the map query index for existing SQLite databases. PostgreSQL
+        # deployments should use their migration system for this index.
+        await conn.execute(text(
+            "CREATE INDEX IF NOT EXISTS ix_pets_active_date_lat_lon "
+            "ON pets (active, date_event, lat, lon)"
+        ))
         await conn.commit()

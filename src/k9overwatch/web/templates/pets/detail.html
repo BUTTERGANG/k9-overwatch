@@ -129,6 +129,20 @@
                     Log in to view
                 </a>
                 {% else %}
+                {% if contact_sent %}
+                <p class="mb-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2" role="status">Your private contact request was sent.</p>
+                {% endif %}
+                {% if pet.owner_id and pet.owner_id != current_user_id %}
+                <div class="mb-4 rounded-xl border border-brand-200 bg-brand-50/60 p-3 dark:border-brand-800 dark:bg-brand-900/20">
+                    <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">Contact the report owner securely</p>
+                    <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Send a message through K9-Overwatch without revealing your email address.</p>
+                    <form method="post" action="/pets/{{ pet.id }}/contact" class="mt-3 space-y-2">
+                        <label for="contact-message" class="sr-only">Message to the report owner</label>
+                        <textarea id="contact-message" name="message" required maxlength="2000" rows="3" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Share where you saw or found this pet..."></textarea>
+                        <button type="submit" class="w-full rounded-lg bg-brand-600 px-3 py-2 text-sm font-semibold text-white hover:bg-brand-700">Send private message</button>
+                    </form>
+                </div>
+                {% endif %}
                 <div class="space-y-3">
                     {% if pet.contact_name %}
                     <div class="flex items-center gap-2.5 text-sm text-slate-700 dark:text-slate-300">

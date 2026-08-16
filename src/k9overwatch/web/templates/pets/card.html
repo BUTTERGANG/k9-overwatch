@@ -57,6 +57,14 @@
             {{ pet.breed or 'Unknown breed' }}{% if pet.animal_type %} &middot; {{ pet.animal_type }}{% endif %}
         </p>
 
+        {% set match_count = match_counts.get(pet.id, 0) if match_counts is defined else 0 %}
+        {% if match_count > 0 %}
+        <span class="mb-3 inline-flex w-fit items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-700">
+            <span aria-hidden="true">◆</span>
+            {{ match_count }} potential match{% if match_count != 1 %}es{% endif %}
+        </span>
+        {% endif %}
+
         <!-- Footer row -->
         <div class="mt-auto pt-3 border-t border-slate-100 dark:border-slate-700 flex justify-between items-center">
             <!-- Date -->

@@ -102,6 +102,18 @@ document.addEventListener("DOMContentLoaded", () => {
         return `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(imageUrl)}`;
     }
 
+    function updateFilterSummary() {
+        const form = document.getElementById('map-filters');
+        const statusCount = form.querySelectorAll('input[name="record_type"]:checked').length;
+        const speciesCount = form.querySelectorAll('input[name="animal_type"]:checked').length;
+        const days = form.querySelector('select[name="days"]').value;
+        const parts = [];
+        if (statusCount < form.querySelectorAll('input[name="record_type"]').length) parts.push(`${statusCount} statuses`);
+        if (speciesCount < form.querySelectorAll('input[name="animal_type"]').length) parts.push(`${speciesCount} species`);
+        if (days !== '365') parts.push(`${days}-day window`);
+        filterSummary.textContent = parts.length ? parts.join(' · ') : 'All filters active';
+    }
+
     function updateRecencyBar() {
         const form = document.getElementById('map-filters');
         const types = new FormData(form).getAll('record_type');
@@ -186,6 +198,59 @@ document.addEventListener("DOMContentLoaded", () => {
     const searchAreaBtn = document.getElementById('search-this-area-btn');
     const resultCountEl = document.getElementById('map-result-count');
     const resultCountText = document.getElementById('map-result-count-text');
+    const emptyState = document.getElementById('map-empty-state');
+    const clearFiltersBtn = document.getElementById('clear-map-filters-btn');
+    const clearAllFiltersBtn = document.getElementById('clear-all-map-filters-btn');
+    const filterSummary = document.getElementById('map-filter-summary');
+    const listPanel = document.getElementById('map-list-panel');
+    const reportList = document.getElementById('map-report-list');
+    const listCount = document.getElementById('map-list-count');
+    const toggleListBtn = document.getElementById('toggle-map-list-btn');
+    const closeListBtn = document.getElementById('close-map-list-btn');
+    const markerById = new Map();
+
+    function setListOpen(open) {
+        listPanel.classList.toggle('open', open);
+        listPanel.setAttribute('aria-hidden', String(!open));
+        toggleListBtn.setAttribute('aria-expanded', String(open));
+        if (open) closeListBtn.focus();
+    }
+
+    toggleListBtn.addEventListener('click', () => setListOpen(!listPanel.classList.contains('open')));
+    closeListBtn.addEventListener('click', () => {
+        setListOpen(false);
+        toggleListBtn.focus();
+    });
+
+    function renderReportList(features) {
+        markerById.clear();
+        reportList.replaceChildren();
+        listCount.textContent = `${features.length} report${features.length === 1 ? '' : 's'} in this view`;
+        if (!features.length) {
+            reportList.innerHTML = '<p class="p-4 text-sm text-slate-500 dark:text-slate-400">No reports match these filters.</p>';
+            return;
+        }
+        features.forEach(feature => {
+            const p = feature.properties || {};
+            const card = document.createElement('div');
+            card.className = 'map-report-card block w-full text-left mb-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 p-3 hover:border-brand-400 dark:hover:border-brand-500';
+            card.setAttribute('role', 'listitem');
+            card.dataset.petId = p.id || '';
+            const matchCount = Number(p.match_count || 0);
+            const matchBadge = matchCount > 0 ? `<a href="/matches" aria-label="View ${escapeHtml(matchCount)} potential match${matchCount === 1 ? '' : 'es'}" class="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-700"><span aria-hidden="true">◆</span>${escapeHtml(matchCount)} potential match${matchCount === 1 ? '' : 'es'}</a>` : '';
+            card.innerHTML = `<button type="button" class="map-report-card-main block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg"><span class="block text-xs font-bold uppercase tracking-wide text-brand-600 dark:text-brand-400">${escapeHtml(p.record_type || 'report')}</span><span class="mt-1 block font-semibold text-sm text-slate-800 dark:text-slate-100">${escapeHtml(p.name || 'Unknown name')}</span><span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">${escapeHtml(p.breed || 'Unknown breed')} · ${escapeHtml(p.date_event || 'Date unavailable')}</span></button>${matchBadge}`;
+            const cardMain = card.querySelector('.map-report-card-main');
+            cardMain.addEventListener('click', () => {
+                const marker = markerById.get(String(p.id));
+                if (!marker) return;
+                map.setView(marker.getLatLng(), Math.max(map.getZoom(), 14));
+                marker.openPopup();
+                reportList.querySelectorAll('.is-selected').forEach(el => el.classList.remove('is-selected'));
+                card.classList.add('is-selected');
+            });
+            reportList.appendChild(card);
+        });
+    }
 
     // ── Spinner overlay ──────────────────────────────────────────────────
     const mapContainer = document.getElementById('map').parentElement;
@@ -211,8 +276,16 @@ document.addEventListener("DOMContentLoaded", () => {
         <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4 flex-shrink-0" aria-hidden="true">
             <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z"/>
         </svg>
-        <span id="map-error-text">Failed to load map data. Please try again.</span>`;
+        <span id="map-error-text">Failed to load map data. Please try again.</span>
+        <button id="map-retry-btn" type="button" class="underline underline-offset-2 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-white">Retry</button>`;
     mapContainer.appendChild(errorBanner);
+    document.getElementById('map-retry-btn').addEventListener('click', () => loadPins());
+
+    const truncationBanner = document.createElement('div');
+    truncationBanner.id = 'map-truncation';
+    truncationBanner.className = 'absolute bottom-16 left-1/2 -translate-x-1/2 z-[1000] hidden bg-amber-100 dark:bg-amber-900/80 text-amber-900 dark:text-amber-100 text-xs font-semibold px-4 py-2 rounded-full shadow-lg border border-amber-200 dark:border-amber-700';
+    truncationBanner.setAttribute('role', 'status');
+    mapContainer.appendChild(truncationBanner);
 
     // ── Marker icons ─────────────────────────────────────────────────────
     const icons = {
@@ -248,19 +321,29 @@ document.addEventListener("DOMContentLoaded", () => {
         document.getElementById('map-error-text').textContent =
             message || 'Failed to load map data. Please try again.';
         errorBanner.classList.remove('hidden');
-        // Auto-hide after 6s
-        setTimeout(() => errorBanner.classList.add('hidden'), 6000);
+        // Keep the error visible until the user retries or a later request succeeds.
     }
 
     // ── Result count badge ───────────────────────────────────────────────
-    function updateResultCount(total) {
+    function updateResultCount(total, returned, truncated) {
         if (total == null) {
             resultCountEl.style.display = 'none';
+            truncationBanner.classList.add('hidden');
+            emptyState.classList.add('hidden');
             return;
         }
         const label = total === 1 ? '1 pet' : `${total.toLocaleString()} pets`;
-        resultCountText.textContent = label;
+        emptyState.classList.toggle('hidden', total !== 0);
+        resultCountText.textContent = truncated
+            ? `${returned.toLocaleString()} of ${label}`
+            : label;
         resultCountEl.style.display = 'flex';
+        if (truncated) {
+            truncationBanner.textContent = `Showing ${returned.toLocaleString()} of ${total.toLocaleString()} pets in this area. Zoom in to see more.`;
+            truncationBanner.classList.remove('hidden');
+        } else {
+            truncationBanner.classList.add('hidden');
+        }
     }
 
     // ── Build popup HTML ─────────────────────────────────────────────────
@@ -385,6 +468,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const resp = await fetch(`/api/map/geojson?${params.toString()}`, { signal });
             if (!resp.ok) throw new Error(`Server error: ${resp.status} ${resp.statusText}`);
             const data = await resp.json();
+            errorBanner.classList.add('hidden');
 
             clusterGroup.clearLayers();
 
@@ -412,16 +496,19 @@ document.addEventListener("DOMContentLoaded", () => {
                         minWidth: 210,
                         className: 'k9-popup',
                     });
+                    markerById.set(String(p.id), marker);
                     markers.push(marker);
                 });
             }
 
+            renderReportList(data.features || []);
             clusterGroup.addLayers(markers);
 
             // Update the result count badge using the `total` field from the
             // API response, falling back to the feature count if absent.
-            const total = (data.total != null) ? data.total : (data.features ? data.features.length : 0);
-            updateResultCount(total);
+            const returned = (data.returned != null) ? data.returned : (data.features ? data.features.length : 0);
+            const total = (data.total != null) ? data.total : returned;
+            updateResultCount(total, returned, data.truncated === true);
 
             // Auto-reload is now handling pan/zoom — keep the manual button
             // hidden until an explicit filter change triggers it to reappear.
@@ -473,11 +560,29 @@ document.addEventListener("DOMContentLoaded", () => {
         loadPins();
     });
 
+    // Clear filters from the empty state and broaden the search.
+    function clearMapFilters() {
+        const form = document.getElementById('map-filters');
+        form.querySelectorAll('input[type="checkbox"]').forEach(input => { input.checked = true; });
+        document.getElementById('map-days-select').value = '365';
+        updateFilterSummary();
+        clearTimeout(moveDebounceTimer);
+        loadPins();
+    }
+
+    clearFiltersBtn.addEventListener('click', clearMapFilters);
+    clearAllFiltersBtn.addEventListener('click', clearMapFilters);
+    document.querySelectorAll('#map-filters input, #map-filters select').forEach(input => {
+        input.addEventListener('change', updateFilterSummary);
+    });
+
     // Filter apply: reload immediately and keep search button hidden
     document.getElementById('apply-filters-btn').addEventListener('click', () => {
+        updateFilterSummary();
         clearTimeout(moveDebounceTimer);
         loadPins();
     });
+    updateFilterSummary();
 
     // Initial load — wait until the map has a real viewport
     map.whenReady(() => loadPins());

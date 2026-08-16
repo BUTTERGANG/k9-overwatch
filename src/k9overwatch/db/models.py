@@ -115,6 +115,7 @@ class PetRow(Base):
         Index("ix_pets_active_date_event", "active", "date_event"),
         Index("ix_pets_active_type_date", "active", "animal_type", "date_event"),
         Index("ix_pets_active_lat_lon", "active", "lat", "lon"),
+        Index("ix_pets_active_date_lat_lon", "active", "date_event", "lat", "lon"),
     )
 
     def __repr__(self) -> str:
@@ -208,3 +209,21 @@ class NotificationPrefs(Base):
     unsubscribe_token = Column(Text, nullable=False, unique=True)
 
     updated_at = Column(DateTime, default=_now)
+
+
+class ContactRequest(Base):
+    """Private, authenticated relay between a report owner and another user."""
+    __tablename__ = "contact_requests"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    pet_id = Column(String(36), nullable=False, index=True)
+    requester_id = Column(String(36), nullable=False, index=True)
+    recipient_id = Column(String(36), nullable=False, index=True)
+    message = Column(Text, nullable=False)
+    status = Column(Text, nullable=False, default="open")
+    created_at = Column(DateTime, default=_now, nullable=False)
+    updated_at = Column(DateTime, default=_now, onupdate=_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_contact_requests_pair_pet_status", "pet_id", "requester_id", "recipient_id", "status"),
+    )

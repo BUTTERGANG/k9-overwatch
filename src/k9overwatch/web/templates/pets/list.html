@@ -77,6 +77,16 @@
                 </div>
 
                 <!-- Status -->
+                <div>
+                    <label for="pet-search" class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2.5">Search descriptions</label>
+                    <input id="pet-search" name="q" type="search" value="{{ filters.q }}"
+                           placeholder="breed, color, name..."
+                           maxlength="200"
+                           class="w-full border border-slate-200 dark:border-slate-700 rounded-lg py-2 px-3 bg-white dark:bg-slate-800 text-sm text-slate-700 dark:text-slate-200 focus:border-brand-500 focus:ring-1 focus:ring-brand-500 focus:outline-none"
+                           autocomplete="off">
+                </div>
+
+                <!-- Status -->
                 <fieldset>
                     <legend class="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block mb-2.5">Status</legend>
                     <div class="flex flex-col gap-2">
@@ -192,6 +202,25 @@
 </script>
 <script>
     (function () {
+        function resetPetFilters() {
+            var form = document.getElementById('pet-filters');
+            if (!form) return;
+            form.querySelectorAll('input[type="checkbox"]').forEach(function (input) {
+                input.checked = input.name === 'record_type';
+            });
+            var search = document.getElementById('pet-search');
+            if (search) search.value = '';
+            var days = document.getElementById('days-select');
+            if (days) days.value = '365';
+            if (window.htmx) htmx.trigger(form, 'submit');
+        }
+
+        document.addEventListener('click', function (event) {
+            if (event.target.closest && event.target.closest('#clear-pet-filters-btn')) {
+                resetPetFilters();
+            }
+        });
+
         var openBtn  = document.getElementById('open-filter-btn');
         var closeBtn = document.getElementById('close-filter-btn');
         var drawer   = document.getElementById('filter-drawer');

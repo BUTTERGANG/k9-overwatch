@@ -1,7 +1,7 @@
 """Account routes: register, login, logout, notification preferences."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Form, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -119,8 +119,31 @@ async def account_page(request: Request, db: AsyncSession = Depends(get_db)):
 
     stmt = select(PetRow).where(PetRow.owner_id == user_id).order_by(PetRow.date_posted.desc())
     my_reports = list((await db.execute(stmt)).scalars().all())
+    from k9overwatch.db.models import ContactRequest
+    contact_stmt = select(ContactRequest, PetRow, User).join(
+        PetRow, PetRow.id == ContactRequest.pet_id
+    ).join(User, User.id == ContactRequest.requester_id).where(
+        ContactRequest.recipient_id == user_id,
+        ContactRequest.status.in_(["open", "in_conversation"]),
+    ).order_by(ContactRequest.created_at.desc())
+    contact_requests = [
+        {"contact": contact, "pet": pet, "requester": requester}
+        for contact, pet, requester in (await db.execute(contact_stmt)).all()
+    ]
+    outgoing_stmt = select(ContactRequest, PetRow, User).join(
+        PetRow, PetRow.id == ContactRequest.pet_id
+    ).join(User, User.id == ContactRequest.recipient_id).where(
+        ContactRequest.requester_id == user_id,
+    ).order_by(ContactRequest.created_at.desc())
+    outgoing_requests = [
+        {"contact": contact, "pet": pet, "recipient": recipient}
+        for contact, pet, recipient in (await db.execute(outgoing_stmt)).all()
+    ]
     return templates.TemplateResponse(
-        request, "accounts/account.html", {"user": user, "prefs": prefs, "my_reports": my_reports}
+        request, "accounts/account.html", {
+            "user": user, "prefs": prefs, "my_reports": my_reports,
+            "contact_requests": contact_requests, "outgoing_requests": outgoing_requests,
+        }
     )
 
 
@@ -150,6 +173,31 @@ async def save_preferences(
     )
     await db.commit()
     return RedirectResponse(url="/account?saved=1", status_code=302)
+
+
+@router.post("/contact-requests/{contact_id}/status")
+async def update_contact_status(
+    contact_id: str,
+    request: Request,
+    status_value: str = Form(..., alias="status"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Allow only the two relay participants to advance a handoff status."""
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    allowed_statuses = {"open", "in_conversation", "handoff_arranged", "reunited", "closed"}
+    if status_value not in allowed_statuses:
+        raise HTTPException(status_code=400, detail="Invalid contact request status.")
+    from k9overwatch.db.models import ContactRequest
+    contact = await db.get(ContactRequest, contact_id)
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Contact request not found")
+    if user_id not in (contact.requester_id, contact.recipient_id):
+        raise HTTPException(status_code=403, detail="You are not a participant in this contact request.")
+    contact.status = status_value
+    await db.commit()
+    return RedirectResponse(url="/account", status_code=303)
 
 
 @router.get("/unsubscribe")

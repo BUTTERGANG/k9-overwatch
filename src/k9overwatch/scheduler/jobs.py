@@ -332,8 +332,17 @@ async def _maybe_notify(session, record, result, candidates) -> None:
         other = (await session.execute(stmt)).scalar_one_or_none()
     if other is None:
         return
-    # `record` is the lost side in lost_found matching.
-    await notify_new_match(session, MatchEvent(lost_pet=record, other_pet=other, match=result))
+    # Matching runs in both directions. Always notify the LOST side's owner,
+    # rather than assuming the newly ingested record is the lost record.
+    if record.record_type == "lost":
+        lost_pet, other_pet = record, other
+    elif other.record_type == "lost":
+        lost_pet, other_pet = other, record
+    else:
+        return
+    await notify_new_match(
+        session, MatchEvent(lost_pet=lost_pet, other_pet=other_pet, match=result)
+    )
 
 
 async def flush_digest_notifications() -> dict:
