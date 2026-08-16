@@ -20,7 +20,7 @@ import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage
 
-from k9overwatch.db.models import PetMatch, PetRow
+from k9overwatch.db.models import ContactRequest, PetMatch, PetRow
 from k9overwatch.db.repository import UserRepository
 
 CONF_RANK = {"low": 0, "medium": 1, "high": 2}
@@ -131,3 +131,27 @@ async def flush_digest() -> int:
             sent += 1
     _digest.clear()
     return sent
+
+
+async def notify_contact_request(session, contact: ContactRequest, pet: PetRow) -> bool:
+    """Notify a report owner of a relay message without exposing either address."""
+    repo = UserRepository(session)
+    prefs = await repo.get_prefs(contact.recipient_id)
+    recipient = await repo.get_by_id(contact.recipient_id)
+    if not recipient or not prefs or prefs.frequency == "off" or not prefs.email_enabled:
+        return False
+    requester = await repo.get_by_id(contact.requester_id)
+    if not requester:
+        return False
+    subject = "Someone wants to contact you about your K9-Overwatch report"
+    body = (
+        f"Hi {recipient.display_name or 'there'},\n\n"
+        f"{requester.display_name or 'Another K9-Overwatch user'} sent a private message about "
+        f"{pet.name or 'your pet'}:\n\n{contact.message}\n\n"
+        f"Reply securely here: {os.getenv('APP_BASE_URL', '')}/account\n"
+    )
+    if _smtp_configured():
+        return _send_email(recipient.email, subject, body, prefs.unsubscribe_token)
+    import logging
+    logging.getLogger(__name__).info("[notify:contact] would email %s: %s", recipient.email, subject)
+    return True

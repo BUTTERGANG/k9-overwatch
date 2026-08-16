@@ -126,6 +126,170 @@ async def test_submit_report_creates_user_row_and_geocodes(client, db_session):
     assert row.lat is not None and row.lon is not None
 
 
+async def test_contact_request_requires_login(client, db_session):
+    repo = PetRepository(db_session)
+    row, _ = await repo.upsert(__import__("k9overwatch.models.pet_record", fromlist=["PetRecord"]).PetRecord(
+        source="user", source_id="contact-target", record_type="lost", animal_type="dog",
+    ), owner_id="owner-id")
+    await db_session.commit()
+
+    resp = await client.post(f"/pets/{row.id}/contact", data={"message": "I may have found your dog."})
+
+    assert resp.status_code in (302, 303)
+    assert "/login" in str(resp.headers.get("location", ""))
+
+
+async def test_contact_request_creates_private_handoff(client, db_session):
+    users = UserRepository(db_session)
+    owner = await users.create("owner@example.com", "password123", "Owner")
+    requester = await users.create("finder@example.com", "password123", "Finder")
+    await db_session.commit()
+    repo = PetRepository(db_session)
+    row, _ = await repo.upsert(__import__("k9overwatch.models.pet_record", fromlist=["PetRecord"]).PetRecord(
+        source="user", source_id="contact-target-2", record_type="lost", animal_type="dog", name="Buddy",
+    ), owner_id=owner.id)
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/pets/{row.id}/contact",
+        data={"message": "I may have found Buddy near the park."},
+        headers={"Cookie": f"{COOKIE_NAME}={make_session_token(requester.id)}"},
+    )
+
+    assert resp.status_code in (302, 303)
+    assert f"/pets/{row.id}" in str(resp.headers.get("location", ""))
+    from k9overwatch.db.models import ContactRequest
+    request_row = await db_session.get(ContactRequest, (await db_session.execute(
+        __import__("sqlalchemy", fromlist=["select"]).select(ContactRequest)
+    )).scalars().first().id)
+    assert request_row.requester_id == requester.id
+    assert request_row.recipient_id == owner.id
+    assert request_row.message == "I may have found Buddy near the park."
+    assert request_row.status == "open"
+
+
+async def test_contact_request_rejects_duplicate_open_request(client, db_session):
+    owner = await UserRepository(db_session).create("duplicate-owner@example.com", "password123")
+    requester = await UserRepository(db_session).create("duplicate-requester@example.com", "password123")
+    await db_session.commit()
+    row, _ = await PetRepository(db_session).upsert(__import__("k9overwatch.models.pet_record", fromlist=["PetRecord"]).PetRecord(
+        source="user", source_id="duplicate-target", record_type="lost", animal_type="dog",
+    ), owner_id=owner.id)
+    await db_session.commit()
+    headers = {"Cookie": f"{COOKIE_NAME}={make_session_token(requester.id)}"}
+    first = await client.post(f"/pets/{row.id}/contact", data={"message": "First message"}, headers=headers)
+    second = await client.post(f"/pets/{row.id}/contact", data={"message": "Second message"}, headers=headers)
+
+    assert first.status_code in (302, 303)
+    assert second.status_code == 409
+    assert "already have an open contact request" in second.text
+
+
+async def test_contact_request_cannot_target_own_report(client, db_session):
+    user = await UserRepository(db_session).create("self@example.com", "password123")
+    await db_session.commit()
+    row, _ = await PetRepository(db_session).upsert(__import__("k9overwatch.models.pet_record", fromlist=["PetRecord"]).PetRecord(
+        source="user", source_id="own-target", record_type="lost", animal_type="dog",
+    ), owner_id=user.id)
+    await db_session.commit()
+
+    resp = await client.post(
+        f"/pets/{row.id}/contact",
+        data={"message": "My own report."},
+        headers={"Cookie": f"{COOKIE_NAME}={make_session_token(user.id)}"},
+    )
+
+    assert resp.status_code == 400
+    assert "your own report" in resp.text
+
+
+async def test_contact_request_participants_can_update_status(client, db_session):
+    from k9overwatch.db.models import ContactRequest
+    owner = await UserRepository(db_session).create("status-owner@example.com", "password123")
+    requester = await UserRepository(db_session).create("status-requester@example.com", "password123")
+    outsider = await UserRepository(db_session).create("status-outsider@example.com", "password123")
+    await db_session.commit()
+    row, _ = await PetRepository(db_session).upsert(__import__("k9overwatch.models.pet_record", fromlist=["PetRecord"]).PetRecord(
+        source="user", source_id="status-target", record_type="lost", animal_type="dog",
+    ), owner_id=owner.id)
+    contact = ContactRequest(
+        pet_id=row.id, requester_id=requester.id, recipient_id=owner.id, message="I found this pet."
+    )
+    db_session.add(contact)
+    await db_session.commit()
+
+    denied = await client.post(
+        f"/contact-requests/{contact.id}/status", data={"status": "in_conversation"},
+        headers={"Cookie": f"{COOKIE_NAME}={make_session_token(outsider.id)}"},
+    )
+    allowed = await client.post(
+        f"/contact-requests/{contact.id}/status", data={"status": "in_conversation"},
+        headers={"Cookie": f"{COOKIE_NAME}={make_session_token(owner.id)}"},
+    )
+
+    assert denied.status_code == 403
+    assert allowed.status_code in (302, 303)
+    await db_session.refresh(contact)
+    assert contact.status == "in_conversation"
+
+
+async def test_pet_detail_exposes_private_contact_form(client, db_session):
+    owner = await UserRepository(db_session).create("form-owner@example.com", "password123")
+    await db_session.commit()
+    row, _ = await PetRepository(db_session).upsert(__import__("k9overwatch.models.pet_record", fromlist=["PetRecord"]).PetRecord(
+        source="user", source_id="form-target", record_type="lost", animal_type="dog",
+    ), owner_id=owner.id)
+    await db_session.commit()
+    viewer = await UserRepository(db_session).create("form-viewer@example.com", "password123")
+    await db_session.commit()
+
+    resp = await client.get(f"/pets/{row.id}", headers={"Cookie": f"{COOKIE_NAME}={make_session_token(viewer.id)}"})
+
+    assert resp.status_code == 200
+    assert f'action="/pets/{row.id}/contact"' in resp.text
+    assert "Contact the report owner securely" in resp.text
+
+
+async def test_account_shows_outgoing_contact_requests(client, db_session):
+    from k9overwatch.db.models import ContactRequest
+    owner = await UserRepository(db_session).create("outgoing-owner@example.com", "password123", "Owner")
+    requester = await UserRepository(db_session).create("outgoing-requester@example.com", "password123", "Requester")
+    await db_session.commit()
+    row, _ = await PetRepository(db_session).upsert(__import__("k9overwatch.models.pet_record", fromlist=["PetRecord"]).PetRecord(
+        source="user", source_id="outgoing-target", record_type="lost", animal_type="dog", name="Scout",
+    ), owner_id=owner.id)
+    db_session.add(ContactRequest(
+        pet_id=row.id, requester_id=requester.id, recipient_id=owner.id, message="I saw Scout near the trail."
+    ))
+    await db_session.commit()
+
+    resp = await client.get("/account", headers={"Cookie": f"{COOKIE_NAME}={make_session_token(requester.id)}"})
+
+    assert resp.status_code == 200
+    assert "Your contact requests" in resp.text
+    assert "I saw Scout near the trail." in resp.text
+
+
+async def test_account_shows_contact_requests(client, db_session):
+    from k9overwatch.db.models import ContactRequest
+    owner = await UserRepository(db_session).create("inbox-owner@example.com", "password123")
+    requester = await UserRepository(db_session).create("inbox-requester@example.com", "password123")
+    await db_session.commit()
+    row, _ = await PetRepository(db_session).upsert(__import__("k9overwatch.models.pet_record", fromlist=["PetRecord"]).PetRecord(
+        source="user", source_id="inbox-target", record_type="lost", animal_type="dog", name="Scout",
+    ), owner_id=owner.id)
+    db_session.add(ContactRequest(
+        pet_id=row.id, requester_id=requester.id, recipient_id=owner.id, message="I saw Scout near the trail."
+    ))
+    await db_session.commit()
+
+    resp = await client.get("/account", headers={"Cookie": f"{COOKIE_NAME}={make_session_token(owner.id)}"})
+
+    assert resp.status_code == 200
+    assert "Contact requests" in resp.text
+    assert "I saw Scout near the trail." in resp.text
+
+
 async def test_contact_info_gated_behind_login(client, db_session):
     repo = PetRepository(db_session)
     row, _ = await repo.upsert(__import__("k9overwatch.models.pet_record", fromlist=["PetRecord"]).PetRecord(

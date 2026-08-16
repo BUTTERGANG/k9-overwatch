@@ -42,7 +42,7 @@ once a match exists (notification, contact, trust) and around keeping the data f
 - CI (GitHub Actions ruff + pytest) + Dependabot.
 
 **Quality**
-- 250 tests pass, 1 skipped; Ruff clean; JavaScript syntax check passes; map browser smoke
+- 260 tests pass, 1 skipped; Ruff clean; JavaScript syntax check passes; map browser smoke
   checks cover initialization, empty state, filter summary, report-panel open/close, and
   console cleanliness. Live scrape smoke remains opt-in.
 - Two pre-existing UI-killing bugs found and fixed (Starlette TemplateResponse signature,
@@ -63,10 +63,13 @@ dataset grows. Listed roughly by impact on "find animals faster."
 2. **Owner-submitted reports exist, but the workflow is incomplete.** Authenticated users
    can post lost/found/sighting reports with photos and geocoded locations. Moderation,
    editing, resolution/reunited states, and abuse controls remain.
-3. **No contact / handoff mechanism.** Detail pages show "source attribution" but no
-   direct path to reach the finder/shelter. `other.contact_info` exists on the model
-   but is not surfaced or even populated by scrapers. A match that can't be acted on
-   isn't a reunion.
+3. **Contact / handoff is an initial relay slice, not a complete conversation system.**
+   Authenticated users can send a privacy-preserving message to an owner-submitted
+   report, owners see the request in their account inbox, eligible owners receive an
+   email notification, and either participant can advance the request through open,
+   conversation, handoff-arranged, reunited, and closed states. Full two-way threaded
+   messaging, block/report controls, durable notification delivery, and moderation
+   remain before public launch.
 4. **No saved searches or watch areas.** Accounts exist for submitted reports and alert
    preferences, but users cannot yet watch a specific pet, area, or search query.
 
