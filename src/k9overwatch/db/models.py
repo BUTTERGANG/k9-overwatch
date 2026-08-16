@@ -80,6 +80,7 @@ class PetRow(Base):
 
     # Ownership: links a record to the user who submitted it (source == "user")
     owner_id = Column(String(36), index=True)
+    owner_report_status = Column(Text, index=True)
 
     # Shelter
     shelter_name = Column(Text)

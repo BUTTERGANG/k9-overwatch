@@ -61,8 +61,8 @@ dataset grows. Listed roughly by impact on "find animals faster."
    and unsubscribe support. Durable delivery state, retries, SMS, push, and multi-process
    digest storage remain open before public launch.
 2. **Owner-submitted reports exist, but the workflow is incomplete.** Authenticated users
-   can post lost/found/sighting reports with photos and geocoded locations. Moderation,
-   editing, resolution/reunited states, and abuse controls remain.
+   can post lost/found/sighting reports with photos and geocoded locations. Owners can now
+   mark their reports resolved, reunited, or closed; moderation, editing, and abuse controls remain.
 3. **Contact / handoff is an initial relay slice, not a complete conversation system.**
    Authenticated users can send a privacy-preserving message to an owner-submitted
    report, owners see the request in their account inbox, eligible owners receive an
@@ -148,7 +148,7 @@ dataset grows. Listed roughly by impact on "find animals faster."
 
 | Item | Status | Why it's backlogged |
 |---|---|---|
-| User-submitted lost/found reports | Basic slice shipped | Authenticated reports, photos, geocoding, and immediate matching exist; moderation/editing/resolution remain |
+| User-submitted lost/found reports | Owner lifecycle slice shipped | Authenticated reports, photos, geocoding, immediate matching, and owner resolution/reunited/closed states; moderation/editing/abuse controls remain |
 | Match notifications (email/SMS/push) | Email slice shipped | Instant/daily digest, confidence threshold, opt-out, unsubscribe; durable delivery, SMS, and push remain |
 | Map/report synchronized discovery | Shipped initial slice | Empty-state recovery, filter summary, report panel, and card-to-marker focus are live; match badges and mobile bottom sheet remain |
 | Image proxy + cache | Planned, unchecked | Perf, not correctness |

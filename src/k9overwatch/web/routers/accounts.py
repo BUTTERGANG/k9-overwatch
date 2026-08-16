@@ -200,6 +200,33 @@ async def update_contact_status(
     return RedirectResponse(url="/account", status_code=303)
 
 
+@router.post("/reports/{report_id}/status")
+async def update_report_status(
+    report_id: str,
+    request: Request,
+    status_value: str = Form(..., alias="status"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Let a report owner close the loop when their pet is found or reunited."""
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    from k9overwatch.db.models import PetRow
+
+    allowed = {"open", "resolved", "reunited", "closed"}
+    if status_value not in allowed:
+        raise HTTPException(status_code=400, detail="Invalid report status.")
+    report = (await db.execute(select(PetRow).where(
+        PetRow.id == report_id, PetRow.owner_id == user_id, PetRow.source == "user"
+    ))).scalar_one_or_none()
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    report.owner_report_status = status_value
+    report.active = status_value == "open"
+    await db.commit()
+    return RedirectResponse(url="/account?report_saved=1", status_code=303)
+
+
 @router.get("/unsubscribe")
 async def unsubscribe(token: str, request: Request, db: AsyncSession = Depends(get_db)):
     """One-click opt-out from the email footer — no login required."""

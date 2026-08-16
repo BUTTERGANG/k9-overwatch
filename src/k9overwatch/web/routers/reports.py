@@ -120,6 +120,7 @@ async def submit_report(
 
     repo = PetRepository(db)
     row, _created = await repo.upsert(record, owner_id=user_id)
+    row.owner_report_status = "open"
     await db.commit()
 
     # Run matching immediately so a brand-new lost report surfaces a found match now.

@@ -366,3 +366,44 @@ async def test_expire_stale_by_age(client, db_session):
     await db_session.refresh(fresh)
     assert old.active is False
     assert fresh.active is True
+
+
+async def test_report_owner_can_mark_report_reunited(client, db_session):
+    from k9overwatch.models.pet_record import PetRecord
+
+    owner = await UserRepository(db_session).create("reunited@example.com", "password123")
+    await db_session.commit()
+    row, _ = await PetRepository(db_session).upsert(
+        PetRecord(source="user", source_id="reunited-report", record_type="lost", animal_type="dog"),
+        owner_id=owner.id,
+    )
+    row.owner_report_status = "open"
+    await db_session.commit()
+    response = await client.post(
+        f"/reports/{row.id}/status",
+        data={"status": "reunited"},
+        headers={"Cookie": f"{COOKIE_NAME}={make_session_token(owner.id)}"},
+    )
+    assert response.status_code in (302, 303)
+    await db_session.refresh(row)
+    assert row.owner_report_status == "reunited"
+    assert row.active is False
+
+
+async def test_report_status_cannot_be_changed_by_another_user(client, db_session):
+    from k9overwatch.models.pet_record import PetRecord
+
+    owner = await UserRepository(db_session).create("status-owner-2@example.com", "password123")
+    outsider = await UserRepository(db_session).create("status-outsider-2@example.com", "password123")
+    await db_session.commit()
+    row, _ = await PetRepository(db_session).upsert(
+        PetRecord(source="user", source_id="private-status-report", record_type="lost", animal_type="dog"),
+        owner_id=owner.id,
+    )
+    await db_session.commit()
+    response = await client.post(
+        f"/reports/{row.id}/status",
+        data={"status": "closed"},
+        headers={"Cookie": f"{COOKIE_NAME}={make_session_token(outsider.id)}"},
+    )
+    assert response.status_code == 404

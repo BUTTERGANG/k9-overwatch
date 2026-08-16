@@ -113,6 +113,8 @@ async def _migrate_existing_db():
         )
         if "owner_id" not in existing_cols:
             await conn.execute(text("ALTER TABLE pets ADD COLUMN owner_id TEXT"))
+        if "owner_report_status" not in existing_cols:
+            await conn.execute(text("ALTER TABLE pets ADD COLUMN owner_report_status TEXT"))
         # New tables (users, notification_prefs)
         await conn.run_sync(Base.metadata.create_all)
         # Add the map query index for existing SQLite databases. PostgreSQL

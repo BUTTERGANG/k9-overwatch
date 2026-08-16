@@ -140,6 +140,20 @@ wheels = [
 ]
 
 [[package]]
+name = "alembic"
+version = "1.19.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "mako" },
+    { name = "sqlalchemy" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/16/2b/e4153978368de59918115c9e01d3ebf58a558a7285efa7e960c383c4b59a/alembic-1.19.1.tar.gz", hash = "sha256:e0fca0518118c78acc493e31bcb5402f190057aaf6df8b5b95ce94c4789cf648", size = 2070816, upload-time = "2026-08-08T16:32:01.565Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/20/89/e62cc37b69ad357cc8ecd6e7367f5245f523d3cbb338a66197212bdf6749/alembic-1.19.1-py3-none-any.whl", hash = "sha256:b39018cb3d9413a19cbd54cf3c02ad33998641f0538eb77413a488a21c3e14be", size = 265946, upload-time = "2026-08-08T16:32:03.153Z" },
+]
+
+[[package]]
 name = "annotated-doc"
 version = "0.0.4"
 source = { registry = "https://pypi.org/simple" }
@@ -776,22 +790,25 @@ dependencies = [
     { name = "aiohttp" },
     { name = "aiosqlite" },
     { name = "apscheduler" },
-    { name = "asyncpg" },
     { name = "beautifulsoup4" },
     { name = "fastapi" },
     { name = "geopy" },
     { name = "greenlet" },
     { name = "jinja2" },
     { name = "lxml" },
+    { name = "playwright" },
+    { name = "playwright-stealth" },
     { name = "pydantic" },
     { name = "python-dotenv" },
     { name = "python-multipart" },
     { name = "rapidfuzz" },
     { name = "requests" },
     { name = "sqlalchemy" },
+    { name = "starlette" },
     { name = "structlog" },
     { name = "tenacity" },
     { name = "uvicorn", extra = ["standard"] },
+    { name = "zipcodes" },
 ]
 
 [package.optional-dependencies]
@@ -808,13 +825,18 @@ dev = [
     { name = "pytest-httpx" },
     { name = "ruff" },
 ]
+postgres = [
+    { name = "alembic" },
+    { name = "asyncpg" },
+]
 
 [package.metadata]
 requires-dist = [
     { name = "aiohttp", specifier = ">=3.9" },
     { name = "aiosqlite", specifier = ">=0.19" },
+    { name = "alembic", marker = "extra == 'postgres'", specifier = ">=1.13" },
     { name = "apscheduler", specifier = ">=3.10" },
-    { name = "asyncpg", specifier = ">=0.29" },
+    { name = "asyncpg", marker = "extra == 'postgres'", specifier = ">=0.29" },
     { name = "beautifulsoup4", specifier = ">=4.12" },
     { name = "fastapi", specifier = ">=0.111" },
     { name = "geopy", specifier = ">=2.4" },
@@ -823,7 +845,9 @@ requires-dist = [
     { name = "jinja2", specifier = ">=3.1" },
     { name = "lxml", specifier = ">=4.9" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.9" },
+    { name = "playwright", specifier = ">=1.43" },
     { name = "playwright", marker = "extra == 'browser'", specifier = ">=1.43" },
+    { name = "playwright-stealth", specifier = ">=0.0.1" },
     { name = "playwright-stealth", marker = "extra == 'browser'", specifier = ">=0.0.1" },
     { name = "pydantic", specifier = ">=2.6" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.4" },
@@ -835,11 +859,13 @@ requires-dist = [
     { name = "requests", specifier = ">=2.31" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.3" },
     { name = "sqlalchemy", specifier = ">=2.0" },
+    { name = "starlette", specifier = ">=0.37" },
     { name = "structlog", specifier = ">=24.1" },
     { name = "tenacity", specifier = ">=8.2" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.29" },
+    { name = "zipcodes", specifier = ">=1.2" },
 ]
-provides-extras = ["browser", "dev"]
+provides-extras = ["postgres", "browser", "dev"]
 
 [[package]]
 name = "librt"
@@ -1014,6 +1040,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/7a/c1/27428a2ff348e994ab4f8777d3a0ad510b6b92d37718e5887d2da99952a2/lxml-6.0.2-pp311-pypy311_pp73-manylinux_2_26_aarch64.manylinux_2_28_aarch64.whl", hash = "sha256:60fa43be34f78bebb27812ed90f1925ec99560b0fa1decdb7d12b84d857d31e9", size = 4272119, upload-time = "2025-09-22T04:04:51.801Z" },
     { url = "https://files.pythonhosted.org/packages/f0/d0/3020fa12bcec4ab62f97aab026d57c2f0cfd480a558758d9ca233bb6a79d/lxml-6.0.2-pp311-pypy311_pp73-manylinux_2_26_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:21c73b476d3cfe836be731225ec3421fa2f048d84f6df6a8e70433dff1376d5a", size = 4417314, upload-time = "2025-09-22T04:04:55.024Z" },
     { url = "https://files.pythonhosted.org/packages/6c/77/d7f491cbc05303ac6801651aabeb262d43f319288c1ea96c66b1d2692ff3/lxml-6.0.2-pp311-pypy311_pp73-win_amd64.whl", hash = "sha256:27220da5be049e936c3aca06f174e8827ca6445a4353a1995584311487fc4e3e", size = 3518768, upload-time = "2025-09-22T04:04:57.097Z" },
+]
+
+[[package]]
+name = "mako"
+version = "1.4.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "markupsafe" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/2a/12/b5fa2353e2754cd67fb9f83793fa48ff42c213a5da7e719869d2301f6ab8/mako-1.4.1.tar.gz", hash = "sha256:d7904710b662996425a21627710c4777c45053146942cf8a7aebf757c92b8c27", size = 410165, upload-time = "2026-08-05T06:10:56.611Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a5/54/12ed58d458474aaab5c3d180173e745a4fe131bb330370596876d19ff60f/mako-1.4.1-py3-none-any.whl", hash = "sha256:a359d9a94a541213958742b2698d0a7757bb83551767bc468a74b9905aba9617", size = 80010, upload-time = "2026-08-05T06:10:58.248Z" },
 ]
 
 [[package]]
@@ -2346,4 +2384,17 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e1/19/3774d162f6732d1cfb0b47b4140a942a35ca82bb19b6db1f80e9e7bdc8f8/yarl-1.23.0-cp314-cp314t-win_amd64.whl", hash = "sha256:4503053d296bc6e4cbd1fad61cf3b6e33b939886c4f249ba7c78b602214fabe2", size = 97610, upload-time = "2026-03-01T22:07:45.773Z" },
     { url = "https://files.pythonhosted.org/packages/51/47/3fa2286c3cb162c71cdb34c4224d5745a1ceceb391b2bd9b19b668a8d724/yarl-1.23.0-cp314-cp314t-win_arm64.whl", hash = "sha256:44bb7bef4ea409384e3f8bc36c063d77ea1b8d4a5b2706956c0d6695f07dcc25", size = 86041, upload-time = "2026-03-01T22:07:49.026Z" },
     { url = "https://files.pythonhosted.org/packages/69/68/c8739671f5699c7dc470580a4f821ef37c32c4cb0b047ce223a7f115757f/yarl-1.23.0-py3-none-any.whl", hash = "sha256:a2df6afe50dea8ae15fa34c9f824a3ee958d785fd5d089063d960bae1daa0a3f", size = 48288, upload-time = "2026-03-01T22:07:51.388Z" },
+]
+
+[[package]]
+name = "zipcodes"
+version = "3.0.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/fd/a6/4f0b4666c54eccffe057124b63e4385b80598dd94a967d6d5eb0a6363ae7/zipcodes-3.0.0.tar.gz", hash = "sha256:9a9426527f1288d334444a4de7d1960d9f6670bb26b843b274234fcf95ce4497", size = 734493, upload-time = "2026-06-14T19:15:04.83Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/a0/0c/5c001eb2ee68cd143d57e2c23f47bc6eb88ed8bb8bd73876bd0541c626d3/zipcodes-3.0.0-cp39-abi3-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:70b1d5687930c186c883ef1c05cf76c3d05a68191162e2f3f47a132dc81571a7", size = 2032980, upload-time = "2026-06-14T19:14:57.465Z" },
+    { url = "https://files.pythonhosted.org/packages/8e/6b/4ef5c0a557c042c18d87bcb8a00708083c9ab4d3d5660bc911134a9ef6bd/zipcodes-3.0.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:6cb450f427d5568530e4c6a6a497c0d572eaacc987c6f75f8a92b206d6056280", size = 1031320, upload-time = "2026-06-14T19:14:59.025Z" },
+    { url = "https://files.pythonhosted.org/packages/ea/0d/46a183b1c500f81d3013c423557a469b1a3daf2a08627f71fc718a9b94a0/zipcodes-3.0.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:862d8f6b6b82b50f5268ae2651cf08af1892526ea929fbe658d3872ebe395b1a", size = 1039810, upload-time = "2026-06-14T19:15:00.541Z" },
+    { url = "https://files.pythonhosted.org/packages/33/75/225120a686fb32df12719f1cdf363b701a0471507960f2393933677c3224/zipcodes-3.0.0-cp39-abi3-musllinux_1_2_x86_64.whl", hash = "sha256:2f2ce64cd478f753ac9cda90095889e25b6f66cc3b1ebc0f30809d87e40d19a6", size = 1250571, upload-time = "2026-06-14T19:15:01.882Z" },
+    { url = "https://files.pythonhosted.org/packages/37/a0/9ab7dc8b1884141de27cc9677b25e98061eb5b46e9a2eabc3e748765e8b4/zipcodes-3.0.0-cp39-abi3-win_amd64.whl", hash = "sha256:57e61aa5182aaeec2a1f44af3d0358c54c0495aaa0c08f8aebb022c94aed5682", size = 930228, upload-time = "2026-06-14T19:15:03.291Z" },
 ]
