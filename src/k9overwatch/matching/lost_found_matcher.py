@@ -22,6 +22,7 @@ from .signals import (
     score_name_match,
     score_zip_match,
 )
+from .visual_similarity import EmbeddingProvider, score_visual_similarity
 
 # Minimum score to record a lost→found match
 LOST_FOUND_MIN_SCORE = 0.30
@@ -38,7 +39,21 @@ class LostFoundMatcher:
     """
     Finds found pet reports that may correspond to a specific lost pet report.
     Operates on PetRow DB objects for access to normalized fields (breed_normalized etc).
+
+    ``visual_provider`` is optional by design. Without a real provider, visual
+    similarity contributes no signal and matching remains deterministic.
     """
+
+    def __init__(
+        self,
+        visual_provider: EmbeddingProvider | None = None,
+        *,
+        visual_threshold: float = 0.85,
+        visual_weight: float = 0.10,
+    ) -> None:
+        self.visual_provider = visual_provider
+        self.visual_threshold = visual_threshold
+        self.visual_weight = visual_weight
 
     def find_matches(
         self,
@@ -167,6 +182,18 @@ class LostFoundMatcher:
             matches = sum(1 for kw in keywords if kw in desc_lower)
             if keywords and matches / len(keywords) >= 0.5:
                 signals["distinctive_feature_match"] = 0.08
+
+        # ── Optional visual similarity ───────────────────────────────────────
+        # This is deliberately provider-backed; no image embedding is guessed.
+        signals.update(
+            score_visual_similarity(
+                lost.photos,
+                found.photos,
+                provider=self.visual_provider,
+                threshold=self.visual_threshold,
+                weight=self.visual_weight,
+            )
+        )
 
         if not signals:
             return None
