@@ -6,14 +6,45 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from k9overwatch.db.models import User
+from k9overwatch.db.models import SavedSearch, User
 from k9overwatch.db.repository import UserRepository
 from k9overwatch.notifications import flush_digest
 from k9overwatch.web.auth import COOKIE_NAME, make_session_token, verify_password
-from k9overwatch.web.dependencies import get_current_user_id, get_db
+from k9overwatch.web.dependencies import get_current_user_id, get_db, verify_admin
 from k9overwatch.web.templates_config import templates
 
 router = APIRouter()
+
+_RECORD_TYPES = {"lost", "found", "sighting", "adoptable"}
+_ANIMAL_TYPES = {"dog", "cat", "bird", "rabbit", "other"}
+_CONFIDENCE = {"low", "medium", "high"}
+
+
+def _saved_search_values(name, record_type, animal_type, species, latitude, longitude, radius_miles, days, min_confidence):
+    name = name.strip()
+    if not name or len(name) > 120:
+        raise HTTPException(status_code=400, detail="Search name must be 1–120 characters.")
+    if record_type not in _RECORD_TYPES or (animal_type and animal_type not in _ANIMAL_TYPES):
+        raise HTTPException(status_code=400, detail="Invalid search type.")
+    try:
+        parsed_days = int(days or 30)
+        parsed_radius = int(radius_miles) if radius_miles else None
+        lat = float(latitude) if latitude else None
+        lon = float(longitude) if longitude else None
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="Search numbers must be valid.") from exc
+    if not 1 <= parsed_days <= 365:
+        raise HTTPException(status_code=400, detail="Recency must be between 1 and 365 days.")
+    if parsed_radius is not None and not 1 <= parsed_radius <= 100:
+        raise HTTPException(status_code=400, detail="Radius must be between 1 and 100 miles.")
+    if ((lat is None) != (lon is None) or (lat is not None and not -90 <= lat <= 90)
+            or (lon is not None and not -180 <= lon <= 180)):
+        raise HTTPException(status_code=400, detail="Latitude and longitude must be a valid pair.")
+    if min_confidence not in _CONFIDENCE:
+        raise HTTPException(status_code=400, detail="Invalid confidence threshold.")
+    return {"name": name, "record_type": record_type, "animal_type": animal_type or None,
+            "species": species.strip()[:120] or None, "latitude": lat, "longitude": lon,
+            "radius_miles": parsed_radius, "days": parsed_days, "min_confidence": min_confidence}
 
 
 def _set_session(resp, user: User) -> None:
@@ -139,10 +170,14 @@ async def account_page(request: Request, db: AsyncSession = Depends(get_db)):
         {"contact": contact, "pet": pet, "recipient": recipient}
         for contact, pet, recipient in (await db.execute(outgoing_stmt)).all()
     ]
+    saved_searches = list((await db.execute(
+        select(SavedSearch).where(SavedSearch.user_id == user_id).order_by(SavedSearch.created_at.desc())
+    )).scalars().all())
     return templates.TemplateResponse(
         request, "accounts/account.html", {
             "user": user, "prefs": prefs, "my_reports": my_reports,
             "contact_requests": contact_requests, "outgoing_requests": outgoing_requests,
+            "saved_searches": saved_searches,
         }
     )
 
@@ -173,6 +208,59 @@ async def save_preferences(
     )
     await db.commit()
     return RedirectResponse(url="/account?saved=1", status_code=302)
+
+
+@router.post("/account/saved-searches")
+async def create_saved_search(
+    request: Request,
+    name: str = Form(...), record_type: str = Form("lost"), animal_type: str = Form(""),
+    species: str = Form(""), latitude: str = Form(""), longitude: str = Form(""),
+    radius_miles: str = Form(""), days: str = Form("30"), min_confidence: str = Form("medium"),
+    db: AsyncSession = Depends(get_db),
+):
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    values = _saved_search_values(name, record_type, animal_type, species, latitude, longitude, radius_miles, days, min_confidence)
+    db.add(SavedSearch(user_id=user_id, **values))
+    await db.commit()
+    return RedirectResponse(url="/account?saved_search=1", status_code=303)
+
+
+@router.post("/account/saved-searches/{search_id}")
+async def update_saved_search(
+    search_id: str, request: Request, name: str = Form(...), record_type: str = Form("lost"),
+    animal_type: str = Form(""), species: str = Form(""), latitude: str = Form(""),
+    longitude: str = Form(""), radius_miles: str = Form(""), days: str = Form("30"),
+    min_confidence: str = Form("medium"), db: AsyncSession = Depends(get_db),
+):
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    saved = (await db.execute(select(SavedSearch).where(
+        SavedSearch.id == search_id, SavedSearch.user_id == user_id
+    ))).scalar_one_or_none()
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Saved search not found")
+    for key, value in _saved_search_values(name, record_type, animal_type, species, latitude, longitude, radius_miles, days, min_confidence).items():
+        setattr(saved, key, value)
+    await db.commit()
+    return RedirectResponse(url="/account?saved_search=1", status_code=303)
+
+
+@router.post("/account/saved-searches/{search_id}/delete")
+async def delete_saved_search(search_id: str, request: Request, db: AsyncSession = Depends(get_db)):
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    saved = (await db.execute(select(SavedSearch).where(
+        SavedSearch.id == search_id, SavedSearch.user_id == user_id
+    ))).scalar_one_or_none()
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Saved search not found")
+    await db.delete(saved)
+    await db.commit()
+    return RedirectResponse(url="/account?saved_search=1", status_code=303)
 
 
 @router.post("/contact-requests/{contact_id}/status")
@@ -249,7 +337,7 @@ async def unsubscribe(token: str, request: Request, db: AsyncSession = Depends(g
     )
 
 
-@router.post("/admin/flush-digest")
+@router.post("/admin/flush-digest", dependencies=[Depends(verify_admin)])
 async def flush_digest_endpoint(db: AsyncSession = Depends(get_db)):
     """Triggers the daily digest send (normally run by the scheduler)."""
     sent = await flush_digest()

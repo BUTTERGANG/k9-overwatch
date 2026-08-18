@@ -325,7 +325,7 @@ async def _maybe_notify(session, record, result, candidates) -> None:
     from k9overwatch.notifications import MatchEvent, notify_new_match
 
     # Identify the other pet in the pair.
-    other_id = result.pet_b_id if result.pet_a_id == str(record.id) else result.pet_b_id
+    other_id = result.pet_b_id if result.pet_a_id == str(record.id) else result.pet_a_id
     other = next((c for c in candidates if str(c.id) == other_id), None)
     if other is None:
         stmt = select(_PetRow).where(_PetRow.id == other_id)

@@ -212,6 +212,28 @@ class NotificationPrefs(Base):
     updated_at = Column(DateTime, default=_now)
 
 
+class SavedSearch(Base):
+    """A user's persisted listing criteria for future alerts and quick reuse."""
+    __tablename__ = "saved_searches"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    record_type = Column(Text, nullable=False, default="lost")
+    animal_type = Column(Text)
+    species = Column(Text)
+    latitude = Column(Float)
+    longitude = Column(Float)
+    radius_miles = Column(Integer)
+    days = Column(Integer, nullable=False, default=30)
+    min_confidence = Column(Text, nullable=False, default="medium")
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=_now, nullable=False)
+    updated_at = Column(DateTime, default=_now, onupdate=_now, nullable=False)
+
+    __table_args__ = (Index("ix_saved_searches_user_enabled", "user_id", "enabled"),)
+
+
 class ContactRequest(Base):
     """Private, authenticated relay between a report owner and another user."""
     __tablename__ = "contact_requests"
