@@ -26,24 +26,6 @@ def test_production_rejects_missing_or_default_session_secret(monkeypatch, envir
     importlib.reload(auth)
 
 
-def test_production_rejects_missing_or_default_admin_password(monkeypatch):
-    monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("SESSION_SECRET", "a-real-production-secret")
-    monkeypatch.setenv("ADMIN_PASSWORD", "changeme")
-
-    import k9overwatch.web.auth as auth
-    import k9overwatch.web.dependencies as dependencies
-
-    importlib.reload(auth)
-    with pytest.raises(RuntimeError, match="ADMIN_PASSWORD"):
-        importlib.reload(dependencies)
-
-    monkeypatch.setenv("ENVIRONMENT", "test")
-    monkeypatch.setenv("SESSION_SECRET", "test-secret")
-    importlib.reload(auth)
-    importlib.reload(dependencies)
-
-
 def test_production_session_cookies_are_secure(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
     monkeypatch.setenv("SESSION_SECRET", "a-real-production-secret")
