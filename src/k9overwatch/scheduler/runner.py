@@ -20,6 +20,7 @@ from .jobs import (
     check_stale_records,
     expire_stale_listings,
     flush_digest_notifications,
+    flush_saved_search_notifications,
     run_matching_pass,
     run_scraper,
 )
@@ -123,6 +124,16 @@ class ScraperScheduler:
             flush_digest_notifications,
             "cron", hour=19, minute=0,
             id="match_digest",
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # Durable saved-search alerts are delivered independently of the
+        # scraper transaction, so a temporary SMTP failure never loses an alert.
+        scheduler.add_job(
+            flush_saved_search_notifications,
+            "interval", minutes=5,
+            id="saved_search_notifications",
             max_instances=1,
             coalesce=True,
         )

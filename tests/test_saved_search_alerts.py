@@ -133,3 +133,10 @@ async def test_saved_search_evaluation_is_called_for_new_scraper_rows(db_session
     monkeypatch.setattr(PetRepository, "evaluate_saved_searches", fake_evaluate)
     assert hasattr(jobs, "run_saved_search_alerts")
     assert callable(jobs.run_saved_search_alerts)
+
+
+def test_scheduler_registers_durable_saved_search_delivery_job():
+    from k9overwatch.scheduler.runner import ScraperScheduler
+
+    job_ids = {job.id for job in ScraperScheduler().build().get_jobs()}
+    assert "saved_search_notifications" in job_ids
