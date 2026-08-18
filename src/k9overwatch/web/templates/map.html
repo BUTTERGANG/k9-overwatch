@@ -329,17 +329,39 @@
     <div class="flex-1 relative">
         <!-- Actionable empty state, shown when the current view has no reports. -->
         <div id="map-empty-state" class="hidden" role="status" aria-live="polite">
-            <div id="map-empty-state-card" class="bg-white/95 dark:bg-slate-900/95 backdrop-blur rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 text-center">
-                <div class="mx-auto mb-3 w-12 h-12 rounded-full bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center" aria-hidden="true">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-6 h-6 text-brand-600 dark:text-brand-400"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 10.5-7.5 10.5S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
+            <div id="map-empty-state-card" class="bg-white/95 dark:bg-slate-900/95 backdrop-blur rounded-2xl border border-slate-200 dark:border-slate-700 shadow-xl p-6 sm:p-7 text-center max-w-sm">
+                <div class="mx-auto mb-3 w-14 h-14 rounded-full bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center" aria-hidden="true">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-7 h-7 text-brand-600 dark:text-brand-400">
+                        <ellipse cx="8.5"  cy="7"  rx="1.5" ry="2"/>
+                        <ellipse cx="15.5" cy="7"  rx="1.5" ry="2"/>
+                        <ellipse cx="5.5"  cy="11" rx="1.5" ry="2"/>
+                        <ellipse cx="18.5" cy="11" rx="1.5" ry="2"/>
+                        <path d="M12 10c-2.5 0-5 2-5 4.5 0 1.5.5 2.5 1.5 3.5.8.8 1.5 1 3.5 1s2.7-.2 3.5-1c1-1 1.5-2 1.5-3.5C17 12 14.5 10 12 10z"/>
+                    </svg>
                 </div>
-                <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">No reports match this view</h2>
-                <p class="mt-1.5 text-sm leading-relaxed text-slate-500 dark:text-slate-400">Try clearing filters or expanding the date range. Know about a missing pet?</p>
-                <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
-                    <button id="clear-map-filters-btn" type="button" class="inline-flex items-center rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">Clear filters</button>
-                    <a href="/pets" class="inline-flex items-center rounded-lg border border-slate-200 dark:border-slate-600 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800">Browse all reports</a>
-                    <a href="/report" class="inline-flex items-center rounded-lg bg-brand-600 px-3 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">Report a lost pet</a>
+                <h2 class="text-base font-bold text-slate-800 dark:text-slate-100">No pets here yet</h2>
+                <p class="mt-1.5 text-sm leading-relaxed text-slate-500 dark:text-slate-400">
+                    Try searching a different area, or clearing your filters to see more results.
+                </p>
+                <div class="mt-5 flex flex-wrap items-center justify-center gap-2">
+                    <button id="clear-map-filters-btn" type="button"
+                            class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-600 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-3.5 h-3.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/></svg>
+                        Clear filters
+                    </button>
+                    <a href="/pets"
+                       class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-600 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-500 transition-colors">
+                        Browse all reports
+                    </a>
+                    <a href="/report"
+                       class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-3.5 py-2 text-xs font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 transition-colors">
+                        <span aria-hidden="true">＋</span>
+                        Report a lost pet
+                    </a>
                 </div>
+                <p class="mt-3 text-xs text-slate-400 dark:text-slate-500">
+                    <span aria-hidden="true">💡</span> Tip: Try zooming out or selecting a wider date range to find more pets in your area.
+                </p>
             </div>
         </div>
 

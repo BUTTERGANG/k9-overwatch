@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}K9-Overwatch — Reuniting Lost Pets with Their Families{% endblock %}
+
+{% block content %}
+<div class="flex-1 flex flex-col">
+    <!-- ── Hero section ────────────────────────────────────────────── -->
+    <section class="relative overflow-hidden">
+        <!-- Subtle background decoration -->
+        <div class="absolute inset-0 pointer-events-none" aria-hidden="true">
+            <div class="absolute -top-40 -right-40 w-80 h-80 rounded-full bg-brand-100/40 dark:bg-brand-900/10 blur-3xl"></div>
+            <div class="absolute -bottom-40 -left-40 w-80 h-80 rounded-full bg-accent-100/30 dark:bg-accent-900/10 blur-3xl"></div>
+        </div>
+
+        <div class="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-16 sm:py-24 text-center">
+            <!-- Icon -->
+            <div class="mx-auto mb-6 w-16 h-16 rounded-2xl bg-brand-100 dark:bg-brand-900/30 flex items-center justify-center shadow-sm ring-1 ring-brand-200 dark:ring-brand-700/30" aria-hidden="true">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-brand-600 dark:text-brand-400">
+                    <ellipse cx="8.5"  cy="7"  rx="1.5" ry="2"/>
+                    <ellipse cx="15.5" cy="7"  rx="1.5" ry="2"/>
+                    <ellipse cx="5.5"  cy="11" rx="1.5" ry="2"/>
+                    <ellipse cx="18.5" cy="11" rx="1.5" ry="2"/>
+                    <path d="M12 10c-2.5 0-5 2-5 4.5 0 1.5.5 2.5 1.5 3.5.8.8 1.5 1 3.5 1s2.7-.2 3.5-1c1-1 1.5-2 1.5-3.5C17 12 14.5 10 12 10z"/>
+                </svg>
+            </div>
+
+            <h1 class="text-4xl sm:text-5xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight leading-tight">
+                Helping lost pets find<br/>
+                <span class="text-brand-600">their way home</span>
+            </h1>
+
+            <p class="mt-5 text-lg sm:text-xl text-slate-600 dark:text-slate-400 max-w-2xl mx-auto leading-relaxed">
+                K9 Overwatch brings together lost and found pet reports from across Indianapolis —
+                shelters, social media, and community members — all on one map.
+                Report a missing pet, search for found animals, and get matched automatically.
+            </p>
+
+            <!-- Action buttons -->
+            <div class="mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+                <a href="/map"
+                   class="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-base font-semibold text-white
+                          shadow-md hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500
+                          focus-visible:ring-offset-2 transition-all active:scale-95">
+                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" aria-hidden="true">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z"/>
+                    </svg>
+                    View the map
+                </a>
+                <a href="/how-it-works"
+                   class="inline-flex items-center gap-2 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-800
+                          px-6 py-3 text-base font-semibold text-slate-700 dark:text-slate-200
+                          hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-500
+                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 transition-all active:scale-95">
+                    How it works
+                </a>
+                <a href="/report"
+                   class="inline-flex items-center gap-2 rounded-xl bg-white dark:bg-slate-800 border-2 border-accent-400 dark:border-accent-500
+                          px-6 py-3 text-base font-semibold text-accent-600 dark:text-accent-400
+                          hover:bg-accent-50 dark:hover:bg-accent-900/20 hover:border-accent-500
+                          focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-400 transition-all active:scale-95">
+                    <span aria-hidden="true">🐾</span>
+                    Report a lost pet
+                </a>
+            </div>
+            <p class="mt-4 text-sm text-slate-500 dark:text-slate-400">
+                No account needed to search &middot; Free for everyone
+            </p>
+        </div>
+    </section>
+
+    <!-- ── Quick highlights ───────────────────────────────────────── -->
+    <section class="bg-white dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-800">
+        <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8">
+
+                <!-- Card 1: Report -->
+                <div class="bg-white dark:bg-slate-800/80 rounded-2xl p-6 shadow-card border border-slate-100 dark:border-slate-700/60 text-center hover:shadow-card-hover transition-shadow duration-200">
+                    <div class="mx-auto mb-4 w-12 h-12 rounded-xl bg-status-lostBg dark:bg-status-lostText/10 flex items-center justify-center text-xl" aria-hidden="true">
+                        📢
+                    </div>
+                    <h3 class="font-bold text-slate-900 dark:text-slate-100">Report a pet</h3>
+                    <p class="mt-2 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Lost a pet? Found one? Tell us the details and upload a photo. Your report goes on the map instantly.
+                    </p>
+                    <a href="/report" class="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors">
+                        Report now <span aria-hidden="true">→</span>
+                    </a>
+                </div>
+
+                <!-- Card 2: Search -->
+                <div class="bg-white dark:bg-slate-800/80 rounded-2xl p-6 shadow-card border border-slate-100 dark:border-slate-700/60 text-center hover:shadow-card-hover transition-shadow duration-200">
+                    <div class="mx-auto mb-4 w-12 h-12 rounded-xl bg-status-sightingBg dark:bg-status-sightingText/10 flex items-center justify-center text-xl" aria-hidden="true">
+                        🔍
+                    </div>
+                    <h3 class="font-bold text-slate-900 dark:text-slate-100">Search the map</h3>
+                    <p class="mt-2 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Browse an interactive map of lost, found, and sighted pets. Filter by species, status, and recency.
+                    </p>
+                    <a href="/map" class="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors">
+                        Open map <span aria-hidden="true">→</span>
+                    </a>
+                </div>
+
+                <!-- Card 3: Matches -->
+                <div class="bg-white dark:bg-slate-800/80 rounded-2xl p-6 shadow-card border border-slate-100 dark:border-slate-700/60 text-center hover:shadow-card-hover transition-shadow duration-200">
+                    <div class="mx-auto mb-4 w-12 h-12 rounded-xl bg-status-foundBg dark:bg-status-foundText/10 flex items-center justify-center text-xl" aria-hidden="true">
+                        🤝
+                    </div>
+                    <h3 class="font-bold text-slate-900 dark:text-slate-100">Find matches</h3>
+                    <p class="mt-2 text-sm text-slate-500 dark:text-slate-400 leading-relaxed">
+                        Our matching engine automatically compares reports to find pets that could be the same animal.
+                    </p>
+                    <a href="/matches" class="mt-4 inline-flex items-center gap-1 text-sm font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors">
+                        See matches <span aria-hidden="true">→</span>
+                    </a>
+                </div>
+
+            </div>
+        </div>
+    </section>
+
+    <!-- ── Stats / trust signals ──────────────────────────────────── -->
+    <section class="bg-brand-50 dark:bg-brand-900/10 border-t border-brand-100 dark:border-brand-800/50">
+        <div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 sm:py-14 text-center">
+            <p class="text-sm font-semibold text-brand-700 dark:text-brand-400 uppercase tracking-wider mb-4">How it works in three simple steps</p>
+            <div class="flex flex-col sm:flex-row items-center justify-center gap-6 sm:gap-10 text-sm">
+                <div class="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-full bg-brand-200 dark:bg-brand-700 text-brand-700 dark:text-brand-300 font-bold text-xs">1</span>
+                    Report a lost or found pet
+                </div>
+                <span class="hidden sm:inline text-slate-300 dark:text-slate-600 text-xl" aria-hidden="true">→</span>
+                <div class="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-full bg-brand-200 dark:bg-brand-700 text-brand-700 dark:text-brand-300 font-bold text-xs">2</span>
+                    Search for found pets nearby
+                </div>
+                <span class="hidden sm:inline text-slate-300 dark:text-slate-600 text-xl" aria-hidden="true">→</span>
+                <div class="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                    <span class="flex items-center justify-center w-8 h-8 rounded-full bg-brand-200 dark:bg-brand-700 text-brand-700 dark:text-brand-300 font-bold text-xs">3</span>
+                    Get matched &amp; reunited
+                </div>
+            </div>
+            <div class="mt-6">
+                <a href="/how-it-works" class="inline-flex items-center gap-1 text-sm font-semibold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 transition-colors">
+                    Learn more <span aria-hidden="true">→</span>
+                </a>
+            </div>
+        </div>
+    </section>
+</div>
+{% endblock %}
