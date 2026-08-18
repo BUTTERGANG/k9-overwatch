@@ -19,7 +19,12 @@ async def test_anonymous_auth_endpoints_are_exempt_from_csrf(client, db_session)
         "/register",
         data={"email": "missing-token@example.com", "password": "password123"},
     )
-    assert registered.status_code in (302, 303)
+    assert registered.status_code == 200
+    from sqlalchemy import select
+
+    from k9overwatch.db.models import EmailQueue
+    queued = (await db_session.execute(select(EmailQueue))).scalar_one()
+    await client.get(f"/account/email-verification?token={queued.body.split('token=', 1)[1]}")
 
     logged_in = await client.post(
         "/login",
