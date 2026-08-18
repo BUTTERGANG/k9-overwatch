@@ -23,15 +23,22 @@ if not (secrets.compare_digest(credentials.username, ADMIN_USER) and
 **Key details:**
 - Uses `secrets.compare_digest()` for timing-safe string comparison (prevents timing attacks)
 - Credentials stored in environment variables (`ADMIN_USER`, `ADMIN_PASSWORD`)
+- Production startup rejects a missing or default `ADMIN_PASSWORD` (`changeme`)
 - Applied to admin dashboard, stats endpoint, and stats partial
 
-### 2. SQL Injection Prevention
+### 2. User Sessions
+
+- Sessions use HMAC-signed cookies with `SESSION_SECRET`.
+- Production startup rejects a missing or default `SESSION_SECRET`.
+- Session cookies are `HttpOnly`, `SameSite=Lax`, and `Secure` in production.
+
+### 3. SQL Injection Prevention
 
 - All database queries use SQLAlchemy ORM with parameterized queries
 - No raw SQL strings with user input
 - Pydantic models validate and type-check all incoming data before it reaches the database
 
-### 3. Input Validation
+### 4. Input Validation
 
 - **Pydantic models** validate all API request/response data
 - **Query parameters** have type constraints (e.g., `int` with `ge`/`le` bounds)
@@ -96,7 +103,7 @@ The `/proxy/image` endpoint prevents open proxy abuse:
 |-----|------|----------------|
 | No rate limiting on web endpoints | DoS vulnerability | Add per-IP rate limiting middleware |
 | No password hashing | Admin password stored as plaintext in env | Hash with bcrypt/argon2 |
-| No session management | HTTP Basic sends credentials every request | Add session tokens/cookies |
+| ~~No session management~~ | ~~HTTP Basic sends credentials every request~~ | ✅ Fixed — signed user sessions use hardened cookies; production secrets are fail-closed. |
 | No audit logging | No record of admin actions | Log all state-changing operations |
 
 ### Low Priority

@@ -76,6 +76,7 @@ Uses Starlette 0.36+ `TemplateResponse` API: `templates.TemplateResponse(request
 | `NOMINATIM_USER_AGENT` | `k9overwatch/1.0` | Required for Nominatim |
 | `SEARCH_LAT` / `SEARCH_LON` | Indianapolis | Default map center |
 | `SEARCH_ZIP` | `46201` | ZIP code for sources that require it |
-| `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `changeme` | HTTP Basic auth for `/admin` |
+| `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `changeme` (development only) | HTTP Basic auth for `/admin`; production requires a non-default `ADMIN_PASSWORD` |
+| `SESSION_SECRET` | (development default only) | Production requires a non-default secret; session cookies are `Secure` in production |
 | `RUN_SCHEDULER` | `false` | Set `true` to run scrapers inside web process |
 | `LOG_LEVEL` | `INFO` | |
