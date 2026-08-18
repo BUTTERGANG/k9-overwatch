@@ -18,6 +18,7 @@ from k9overwatch.web.auth import (
     verify_password,
 )
 from k9overwatch.web.dependencies import get_current_user_id, get_db, verify_admin
+from k9overwatch.web.rate_limit import rate_limit
 from k9overwatch.web.templates_config import templates
 
 router = APIRouter()
@@ -76,7 +77,7 @@ async def login_page(request: Request):
     return templates.TemplateResponse(request, "accounts/login.html", {})
 
 
-@router.post("/login")
+@router.post("/login", dependencies=[Depends(rate_limit("login", limit=10))])
 async def login(
     request: Request,
     email: str = Form(...),
@@ -110,7 +111,7 @@ async def register_page(request: Request):
     return templates.TemplateResponse(request, "accounts/register.html", {})
 
 
-@router.post("/register")
+@router.post("/register", dependencies=[Depends(rate_limit("register", limit=5))])
 async def register(
     request: Request,
     email: str = Form(...),
@@ -165,7 +166,7 @@ async def forgot_password_page(request: Request):
     return templates.TemplateResponse(request, "accounts/forgot_password.html", {})
 
 
-@router.post("/forgot-password")
+@router.post("/forgot-password", dependencies=[Depends(rate_limit("forgot-password", limit=5))])
 async def forgot_password(request: Request, email: str = Form(...), db: AsyncSession = Depends(get_db)):
     user = await UserRepository(db).get_by_email(email)
     if user:
@@ -182,7 +183,7 @@ async def reset_password_page(request: Request, token: str):
     return templates.TemplateResponse(request, "accounts/reset_password.html", {"token": token})
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", dependencies=[Depends(rate_limit("reset-password", limit=5))])
 async def reset_password(
     request: Request, token: str = Form(...), password: str = Form(...), db: AsyncSession = Depends(get_db)
 ):

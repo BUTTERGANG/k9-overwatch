@@ -21,6 +21,7 @@ from k9overwatch.geocoding.geocoder import GeocodingService
 from k9overwatch.geocoding.providers.nominatim import NominatimProvider
 from k9overwatch.models.pet_record import PetRecord
 from k9overwatch.web.dependencies import get_current_user_id, get_db
+from k9overwatch.web.rate_limit import rate_limit
 from k9overwatch.web.templates_config import templates
 
 router = APIRouter()
@@ -112,7 +113,7 @@ async def report_page(request: Request, db: AsyncSession = Depends(get_db)):
     return templates.TemplateResponse(request, "accounts/report.html", {})
 
 
-@router.post("/report")
+@router.post("/report", dependencies=[Depends(rate_limit("report", limit=10))])
 async def submit_report(
     request: Request,
     record_type: str = Form(...),

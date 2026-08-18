@@ -51,7 +51,9 @@ async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
     """HTTP client wired to the per-test database for shared web tests."""
     from k9overwatch.db import connection as db_conn
     from k9overwatch.web import dependencies as deps
+    from k9overwatch.web import rate_limit
 
+    rate_limit.reset()
     engine = db_session.bind
     factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     saved_engine = db_conn._engine
