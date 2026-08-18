@@ -8,7 +8,8 @@ Lost & found pet aggregation platform that pulls listings from multiple sources 
 - **Frontend**: Tailwind CSS v3 (CDN), HTMX for progressive enhancement, Leaflet.js maps
 - **UI Design**: Frosted-glass navbar, dark mode toggle (localStorage + `prefers-color-scheme`), page transitions, mobile-first responsive filter drawers, reusable Jinja2 macros (status_badge, species_icon, loading_spinner)
 - **Database**: PostgreSQL (via Replit-managed DB) using SQLAlchemy async engine + asyncpg driver
-- **Scheduler**: APScheduler for periodic scraping and match jobs
+- **Scheduler**: APScheduler for periodic scraping and match jobs; PostgreSQL advisory-lock or host file-lock singleton ownership prevents duplicate schedulers
+- **Accounts**: signed-cookie sessions, scrypt password hashing, email verification, single-use password-reset tokens, CSRF middleware, and bounded image-signature-checked uploads
 - **Scraping**: aiohttp (HTTP scrapers) + Playwright (browser scrapers for WAF-protected sites)
 - **Matching**: rapidfuzz for string similarity; custom weighted signal scoring
 - **Geocoding**: geopy (cascading Google Maps → Nominatim → ZIP centroid fallback)
@@ -64,7 +65,7 @@ The Replit-managed `DATABASE_URL` uses the libpq `postgresql://` scheme with que
 Uses Starlette 0.36+ `TemplateResponse` API: `templates.TemplateResponse(request, "template.html", context_dict)`. The `request` object is the first positional argument, NOT inside the context dict.
 
 ### Deployment
-`.replit` deployment config runs on port 8080. Development workflow runs on port 5000.
+`.replit` contains deployment configuration for port 8080; the development workflow runs on port 5000. Live deployment, PostgreSQL migrations, scheduler ownership in production, and external-provider validation are deferred and have not been claimed here.
 
 ## Environment Variables
 
@@ -78,5 +79,7 @@ Uses Starlette 0.36+ `TemplateResponse` API: `templates.TemplateResponse(request
 | `SEARCH_ZIP` | `46201` | ZIP code for sources that require it |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | `admin` / `changeme` (development only) | HTTP Basic auth for `/admin`; production requires a non-default `ADMIN_PASSWORD` |
 | `SESSION_SECRET` | (development default only) | Production requires a non-default secret; session cookies are `Secure` in production |
-| `RUN_SCHEDULER` | `false` | Set `true` to run scrapers inside web process |
+| `RUN_SCHEDULER` | `false` | Set `true` to run scrapers inside web process; singleton ownership prevents duplicate schedulers |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_USER` / `SMTP_PASSWORD` | — / `587` | Optional SMTP provider for notifications; delivery is configuration-gated and durably retried for saved-search alerts |
+| `APP_BASE_URL` | `http://localhost:8000` | Base URL used in notification and account links |
 | `LOG_LEVEL` | `INFO` | |

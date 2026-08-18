@@ -73,12 +73,28 @@ The `/proxy/image` endpoint prevents open proxy abuse:
 - Prevents overwhelming external sources
 - Browser scrapers are inherently rate-limited by page load times
 
-### 6. Same-Origin Policy
+### 6. CSRF Protection
+
+- Middleware issues signed, user-bound CSRF tokens to templates.
+- Cookie-authenticated `POST`, `PUT`, `PATCH`, and `DELETE` requests must
+  provide the matching form token or `X-CSRF-Token` header.
+- Anonymous login, registration, and password-recovery endpoints are exempt
+  because they do not have a prior authenticated session.
+
+### 7. Upload Validation
+
+- Owner report uploads are limited to three files and 5 MiB per file.
+- Extensions are restricted to JPEG, PNG, and WebP.
+- JPEG, PNG, and WebP container signatures are checked; filenames and MIME
+  types are not trusted.
+- Files are stored under generated UUID names in `data/uploads/`.
+
+### 8. Same-Origin Policy
 
 - No CORS headers configured (requests limited to same origin)
 - API endpoints only accessible from the same domain
 
-### 7. Async Database Safety
+### 9. Async Database Safety
 
 - SQLAlchemy async sessions with automatic commit/rollback
 - Context manager pattern ensures sessions are always closed
@@ -94,56 +110,39 @@ The `/proxy/image` endpoint prevents open proxy abuse:
 |-----|------|--------|
 | ~~Match review has no auth~~ | ~~Anyone can confirm/reject matches~~ | ✅ Fixed — `verify_admin` on `POST /api/matches/{id}/review`. Non-admin HTMX requests receive a 401 with a toast warning. |
 | ~~No security headers~~ | ~~Missing X-Frame-Options, CSP, HSTS~~ | ✅ Fixed — `SecurityHeadersMiddleware` sets X-Frame-Options, X-Content-Type-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy, and a full CSP on every response. |
-| No CSRF protection | Form submissions vulnerable to cross-site forgery | Add CSRF tokens to all forms |
-| Admin over HTTP | Credentials sent in cleartext | Enforce HTTPS in production |
+| ~~No CSRF protection~~ | ~~Form submissions vulnerable to cross-site forgery~~ | ✅ Fixed — signed user-bound tokens are enforced on cookie-authenticated state-changing requests; anonymous auth/recovery endpoints are intentionally exempt. |
+| Admin over HTTP | Credentials sent in cleartext | Enforce HTTPS in production; deployment validation is deferred |
 
 ### Medium Priority
 
 | Gap | Risk | Recommendation |
 |-----|------|----------------|
-| No rate limiting on web endpoints | DoS vulnerability | Add per-IP rate limiting middleware |
-| No password hashing | Admin password stored as plaintext in env | Hash with bcrypt/argon2 |
+| No rate limiting on web endpoints | DoS vulnerability | **Deferred** — add per-IP rate limiting middleware |
+| ~~No password hashing~~ | ~~User passwords stored as plaintext~~ | ✅ Fixed — user passwords use stdlib scrypt hashes; admin HTTP Basic credentials remain environment-configured and deployment hardening is deferred. |
 | ~~No session management~~ | ~~HTTP Basic sends credentials every request~~ | ✅ Fixed — signed user sessions use hardened cookies; production secrets are fail-closed. |
-| No audit logging | No record of admin actions | Log all state-changing operations |
+| No audit logging | No record of admin actions | **Deferred** — log all state-changing operations |
 
 ### Low Priority
 
 | Gap | Risk | Recommendation |
 |-----|------|----------------|
-| No content security policy | XSS risk from injected content | Add CSP headers |
+| ~~No content security policy~~ | ~~XSS risk from injected content~~ | ✅ Fixed — `SecurityHeadersMiddleware` sends a CSP; deployment/live-browser validation remains deferred. |
 | Tailwind via CDN | CDN compromise could inject malicious CSS | Self-host Tailwind build |
 | No request logging | Limited visibility into traffic patterns | Add structured access logs |
 
 ---
 
-## Security Recommendations for User Accounts
+## Remaining Security Recommendations
 
-When user accounts are added (see `06-USER-ACCOUNTS.md`), the following security measures should be implemented:
+The account flow is implemented with scrypt password hashing, signed sessions,
+email verification, single-use password-reset tokens, CSRF middleware, and
+bounded image upload validation. Remaining hardening is intentionally deferred:
 
-### Authentication
-- **Password hashing:** Use `argon2` or `bcrypt` (never store plaintext)
-- **OAuth2 support:** Google, Facebook, Apple sign-in for convenience
-- **JWT tokens:** Stateless auth for API endpoints
-- **Session management:** Secure httponly cookies with SameSite=Strict
-- **MFA option:** TOTP-based two-factor authentication
-
-### Authorization
-- **Role-based access control (RBAC):** User, Moderator, Admin roles
-- **Resource ownership:** Users can only edit/delete their own listings
-- **Rate limiting:** Per-user rate limits on posting and API access
-
-### Data Protection
-- **PII encryption:** Encrypt contact info at rest
-- **Data minimization:** Only collect necessary personal information
-- **GDPR compliance:** Data export and deletion capabilities
-- **Email verification:** Verify email before activating accounts
-
-### API Security
-- **CORS configuration:** Whitelist specific frontend origins
-- **CSRF tokens:** On all state-changing endpoints
-- **Request signing:** For sensitive API operations
-- **Input sanitization:** Strip HTML from user-submitted text
-- **File upload validation:** Image type, size, and content verification
+- Add per-IP/per-user rate limiting to web endpoints.
+- Add audit logging for state-changing operations.
+- Evaluate MFA, RBAC expansion, PII-at-rest encryption, and data export/deletion.
+- Validate production HTTPS, deployment, migrations, and external providers in a
+  controlled environment; no live deployment is claimed by this document.
 
 ---
 
