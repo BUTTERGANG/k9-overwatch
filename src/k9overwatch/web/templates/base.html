@@ -88,6 +88,31 @@
     <!-- HTMX -->
     <script src="https://unpkg.com/htmx.org@1.9.11"></script>
     <style>
+        /* ─── Status color CSS custom properties ──────────────────────── */
+        :root {
+            --status-lost:         #dc2626;
+            --status-lost-bg:       #fef2f2;
+            --status-lost-text:     #991b1b;
+            --status-lost-border:   #fecaca;
+
+            --status-found:        #16a34a;
+            --status-found-bg:      #f0fdf4;
+            --status-found-text:    #14532d;
+            --status-found-border:  #bbf7d0;
+
+            --status-sighting:     #2563eb;
+            --status-sighting-bg:   #eff6ff;
+            --status-sighting-text: #1e3a8a;
+            --status-sighting-border: #bfdbfe;
+
+            --status-adoptable:        #d97706;
+            --status-adoptable-bg:      #fffbeb;
+            --status-adoptable-text:    #92400e;
+            --status-adoptable-border:  #fde68a;
+
+            --brand-600: #2540eb;
+        }
+
         /* ─── Mobile nav slide-down ──────────────────────────────────── */
         #mobile-menu {
             display: grid;
@@ -105,7 +130,7 @@
             transform: translateX(-50%);
             width: 24px;
             height: 2px;
-            background: #2540eb;
+            background: var(--brand-600);
             border-radius: 2px 2px 0 0;
         }
 
@@ -132,7 +157,7 @@
 
         /* ─── Focus ring override for brand color ────────────────────── */
         :focus-visible {
-            outline: 2px solid #2540eb;
+            outline: 2px solid var(--brand-600);
             outline-offset: 2px;
         }
 
