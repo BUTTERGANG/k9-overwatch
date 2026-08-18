@@ -14,7 +14,19 @@ import os
 import secrets
 
 COOKIE_NAME = "k9_session"
-_SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-secret-change-me")
+_DEFAULT_SESSION_SECRET = "dev-insecure-secret-change-me"
+_ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("APP_ENV", "development")).lower()
+_IS_PRODUCTION = _ENVIRONMENT in {"production", "prod"}
+_SESSION_SECRET = os.getenv("SESSION_SECRET", "")
+if _IS_PRODUCTION and (not _SESSION_SECRET or _SESSION_SECRET == _DEFAULT_SESSION_SECRET):
+    raise RuntimeError("SESSION_SECRET must be explicitly configured in production")
+if not _SESSION_SECRET:
+    _SESSION_SECRET = _DEFAULT_SESSION_SECRET
+
+
+def is_production() -> bool:
+    """Return whether the application is running in a production environment."""
+    return _IS_PRODUCTION
 
 
 def hash_password(password: str) -> str:
