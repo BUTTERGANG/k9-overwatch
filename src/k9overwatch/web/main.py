@@ -132,7 +132,9 @@ async def auth_context(request: Request, call_next):
 
     # Login and registration are intentionally usable without a prior session
     # token. All cookie-authenticated mutations still require a user-bound token.
-    auth_path = request.url.path in {"/login", "/register"}
+    auth_path = request.url.path in {
+        "/login", "/register", "/forgot-password", "/reset-password",
+    }
     if user_id and not auth_path and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
         token = request.headers.get("X-CSRF-Token")
         if not token:

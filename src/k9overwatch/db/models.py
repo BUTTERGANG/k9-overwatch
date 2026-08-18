@@ -176,6 +176,36 @@ class GeocodeCache(Base):
     hit_count = Column(Integer, default=1)
 
 
+class AccountToken(Base):
+    """Hashed, expiring, single-use account action token."""
+    __tablename__ = "account_tokens"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=False, index=True)
+    purpose = Column(String(40), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    used_at = Column(DateTime)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+    __table_args__ = (Index("ix_account_tokens_lookup", "user_id", "purpose", "used_at"),)
+
+
+class EmailQueue(Base):
+    """Provider-independent outbound email queue for local/dev delivery adapters."""
+    __tablename__ = "email_queue"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=False, index=True)
+    recipient = Column(Text, nullable=False)
+    kind = Column(String(40), nullable=False)
+    subject = Column(Text, nullable=False)
+    body = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    created_at = Column(DateTime, default=_now, nullable=False)
+    sent_at = Column(DateTime)
+
+
 class User(Base):
     """A person with an account (submits reports, receives match alerts)."""
     __tablename__ = "users"
@@ -187,6 +217,7 @@ class User(Base):
     password_hash = Column(Text, nullable=False)
     created_at = Column(DateTime, default=_now)
     is_active = Column(Boolean, default=True, nullable=False)
+    email_verified = Column(Boolean, default=False, nullable=False)
 
 
 class NotificationPrefs(Base):

@@ -120,7 +120,12 @@ async def _migrate_existing_db():
         )
         if "next_attempt_at" not in queue_cols:
             await conn.execute(text("ALTER TABLE notification_queue ADD COLUMN next_attempt_at TIMESTAMP"))
-        # New tables (users, notification_prefs, saved_searches). create_all is
+        user_cols = await conn.run_sync(
+            lambda c: [col["name"] for col in inspect(c).get_columns("users")]
+        )
+        if "email_verified" not in user_cols:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT 0"))
+        # New tables (users, notification_prefs, saved_searches, account tokens, email queue). create_all is
         # idempotent and leaves existing production data untouched.
         await conn.run_sync(Base.metadata.create_all)
         # Add the map query index for existing SQLite databases. PostgreSQL

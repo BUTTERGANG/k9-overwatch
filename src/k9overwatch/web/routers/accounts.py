@@ -9,7 +9,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from k9overwatch.db.models import SavedSearch, User
 from k9overwatch.db.repository import UserRepository
 from k9overwatch.notifications import flush_digest
-from k9overwatch.web.auth import COOKIE_NAME, is_production, make_session_token, verify_password
+from k9overwatch.web.account_tokens import consume_token, issue_token
+from k9overwatch.web.auth import (
+    COOKIE_NAME,
+    hash_password,
+    is_production,
+    make_session_token,
+    verify_password,
+)
 from k9overwatch.web.dependencies import get_current_user_id, get_db, verify_admin
 from k9overwatch.web.templates_config import templates
 
@@ -86,6 +93,11 @@ async def login(
         return templates.TemplateResponse(
             request, "accounts/login.html", {"error": "This account is disabled."}, status_code=403
         )
+    if not user.email_verified:
+        return templates.TemplateResponse(
+            request, "accounts/login.html",
+            {"error": "Please verify your email before logging in."}, status_code=403
+        )
     resp = RedirectResponse(url="/map", status_code=302)
     _set_session(resp, user)
     return resp
@@ -123,10 +135,66 @@ async def register(
             status_code=409,
         )
     user = await users.create(email, password, display_name or None)
+    await issue_token(db, user, "email_verification")
     await db.commit()
-    resp = RedirectResponse(url="/account", status_code=302)
-    _set_session(resp, user)
-    return resp
+    return templates.TemplateResponse(
+        request, "accounts/message.html",
+        {"title": "Check your email", "message": "Your account is ready. Use the verification link in the queued email to activate login."},
+    )
+
+
+@router.get("/account/email-verification")
+async def verify_email(token: str, request: Request, db: AsyncSession = Depends(get_db)):
+    issued = await consume_token(db, token, "email_verification")
+    if issued is None:
+        return templates.TemplateResponse(
+            request, "accounts/message.html",
+            {"title": "Invalid verification link", "message": "This link is expired, already used, or invalid."}, status_code=400,
+        )
+    user = await db.get(User, issued.user_id)
+    user.email_verified = True
+    await db.commit()
+    return templates.TemplateResponse(
+        request, "accounts/message.html",
+        {"title": "Email verified", "message": "Your email is verified. You can now log in."},
+    )
+
+
+@router.get("/forgot-password")
+async def forgot_password_page(request: Request):
+    return templates.TemplateResponse(request, "accounts/forgot_password.html", {})
+
+
+@router.post("/forgot-password")
+async def forgot_password(request: Request, email: str = Form(...), db: AsyncSession = Depends(get_db)):
+    user = await UserRepository(db).get_by_email(email)
+    if user:
+        await issue_token(db, user, "password_reset")
+        await db.commit()
+    return templates.TemplateResponse(
+        request, "accounts/message.html",
+        {"title": "Check your email", "message": "If an account matches that email, a reset link has been queued."},
+    )
+
+
+@router.get("/reset-password")
+async def reset_password_page(request: Request, token: str):
+    return templates.TemplateResponse(request, "accounts/reset_password.html", {"token": token})
+
+
+@router.post("/reset-password")
+async def reset_password(
+    request: Request, token: str = Form(...), password: str = Form(...), db: AsyncSession = Depends(get_db)
+):
+    if len(password) < 8:
+        return templates.TemplateResponse(request, "accounts/reset_password.html", {"token": token, "error": "Password must be at least 8 characters."}, status_code=400)
+    issued = await consume_token(db, token, "password_reset")
+    if issued is None:
+        return templates.TemplateResponse(request, "accounts/message.html", {"title": "Invalid reset link", "message": "This link is expired, already used, or invalid."}, status_code=400)
+    user = await db.get(User, issued.user_id)
+    user.password_hash = hash_password(password)
+    await db.commit()
+    return templates.TemplateResponse(request, "accounts/message.html", {"title": "Password reset", "message": "Your password has been reset. You can now log in."})
 
 
 @router.get("/logout")
