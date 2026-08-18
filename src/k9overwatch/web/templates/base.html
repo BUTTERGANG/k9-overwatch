@@ -4,6 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}K9-Overwatch{% endblock %}</title>
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
     <!-- Tailwind Play CDN: set window.tailwind BEFORE the script loads -->
     <script>
         window.tailwind = { config: {
@@ -49,7 +54,7 @@
                         }
                     },
                     fontFamily: {
-                        sans: ['-apple-system', 'BlinkMacSystemFont', "'Segoe UI'", 'Roboto', "'Helvetica Neue'", 'Arial', 'sans-serif'],
+                        sans: ['Inter', '-apple-system', 'BlinkMacSystemFont', "'Segoe UI'", 'Roboto', "'Helvetica Neue'", 'Arial', 'sans-serif'],
                     },
                     boxShadow: {
                         card:       '0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06)',
@@ -163,6 +168,44 @@
 
         /* ─── Better checkbox appearance ─────────────────────────────── */
         input[type="checkbox"] { cursor: pointer; }
+
+        /* ─── Status color custom properties ─────────────────────────── */
+        :root {
+            --status-lost:         #dc2626;
+            --status-lost-bg:      #fef2f2;
+            --status-lost-text:    #991b1b;
+            --status-found:        #16a34a;
+            --status-found-bg:     #f0fdf4;
+            --status-found-text:   #14532d;
+            --status-sighting:     #2563eb;
+            --status-sighting-bg:  #eff6ff;
+            --status-sighting-text:#1e3a8a;
+            --status-adoptable:    #d97706;
+            --status-adoptable-bg: #fffbeb;
+            --status-adoptable-text:#92400e;
+        }
+        .dark:root {
+            --status-lost-bg:      #450a0a;
+            --status-lost-text:    #fca5a5;
+            --status-found-bg:     #052e16;
+            --status-found-text:   #86efac;
+            --status-sighting-bg:  #172554;
+            --status-sighting-text:#93c5fd;
+            --status-adoptable-bg: #422006;
+            --status-adoptable-text:#fde68a;
+        }
+
+        /* ─── Frosted-glass card ──────────────────────────────────────── */
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(203, 213, 225, 0.4);
+        }
+        .dark .glass-card {
+            background: rgba(15, 23, 42, 0.8);
+            border-color: rgba(51, 65, 85, 0.5);
+        }
 
         @keyframes fadeIn   { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideUp  { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
