@@ -102,7 +102,7 @@ async def test_geojson_keeps_records_without_date_event(client, db_session):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("path", ["/map", "/pets", "/pets/results", "/matches", "/admin", "/login", "/register", "/report", "/account"])
+@pytest.mark.parametrize("path", ["/", "/how-it-works", "/map", "/pets", "/pets/results", "/matches", "/admin", "/login", "/register", "/report", "/account"])
 async def test_html_pages_render(client, db_session, path):
     """
     Guard against broken TemplateResponse signatures / template syntax:
