@@ -10,6 +10,30 @@ from k9overwatch.web.templates_config import templates
 
 router = APIRouter()
 
+# Keep dashboard health aligned with the scheduler's production intervals.
+SCRAPER_INTERVAL_MINUTES = {
+    "indylostpetalert": 15,
+    "24petconnect": 30,
+    "pawboost": 35,
+    "petfbi": 40,
+    "lostmydoggie": 45,
+}
+
+
+def scraper_health(state: ScraperState, *, now: datetime | None = None) -> str:
+    """Return a small, API/template-friendly health status for one scraper."""
+    if not state.last_run_at:
+        return "pending"
+    if not state.last_run_success:
+        return "error"
+    now = now or datetime.now(UTC).replace(tzinfo=None)
+    interval = SCRAPER_INTERVAL_MINUTES.get(state.source, 60)
+    age_minutes = (now - state.last_run_at).total_seconds() / 60
+    # Allow one missed interval plus a small scheduler/browser grace period.
+    if age_minutes > interval + 15:
+        return "stale"
+    return "healthy"
+
 
 @router.get("/admin", dependencies=[Depends(verify_admin)])
 async def admin_dashboard(
@@ -67,6 +91,8 @@ async def _get_stats(db: AsyncSession) -> dict:
                 "source": s.source,
                 "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None,
                 "last_run_success": s.last_run_success,
+                "health": scraper_health(s),
+                "consecutive_errors": s.consecutive_errors or 0,
                 "records_fetched": s.records_fetched,
                 "records_new": s.records_new,
                 "error_message": s.error_message,

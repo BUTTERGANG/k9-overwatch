@@ -51,85 +51,39 @@ class ScraperScheduler:
         cfg = _config()
         now = datetime.now(UTC)
 
-        # ── Schedule: twice-daily at midnight and noon UTC ────────────────────
-        #
-        # Scrapers fire at HH:MM where HH ∈ {0, 12}.  HTTP scrapers go first
-        # (fast, no browser overhead).  Playwright scrapers are staggered 3 min
-        # apart so only one headless browser runs at a time.
-        #
-        # Stagger map (minutes past the hour):
-        #   :00 — IndyLostPetAlert  (HTTP, fast)
-        #   :01 — 24PetConnect      (HTTP, fast)
-        #   :04 — PawBoost          (Playwright)
-        #   :07 — PetFBI            (Playwright)
-        #   :10 — LostMyDoggie      (Playwright)
-        #   :20 — Matching pass     (after all scrapers have had time to finish)
-        #
-        # Each job fires its initial run immediately on startup (next_run_time=now
-        # + small offset) so fresh data is loaded without waiting for the next
-        # scheduled window.
+        # Production cadence is defined per source in README: 15–45 minutes.
+        # Use interval triggers (rather than the old twice-daily cron) so a
+        # missed web-process tick is coalesced without silently creating a
+        # 12-hour freshness gap.  Initial runs remain staggered at startup.
+        scraper_jobs = [
+            ("indy_lost_pet_alert", IndyLostPetAlertScraper, 15, 0),
+            ("petconnect24", PetConnect24Scraper, 30, 1),
+            ("pawboost", PawBoostScraper, 35, 4),
+            ("petfbi", PetFBIScraper, 40, 7),
+            ("lostmydoggie", LostMyDoggieScraper, 45, 10),
+        ]
+        for job_id, scraper_class, interval_minutes, startup_offset in scraper_jobs:
+            scheduler.add_job(
+                run_scraper,
+                "interval",
+                minutes=interval_minutes,
+                id=job_id,
+                args=[scraper_class, cfg],
+                kwargs={"run_matching": True},
+                max_instances=1,
+                coalesce=True,
+                next_run_time=now + timedelta(minutes=startup_offset),
+            )
 
-        # ── Phase 1: HTTP scrapers ─────────────────────────────────────────────
-        scheduler.add_job(
-            run_scraper,
-            "cron", hour="0,12", minute="0",
-            id="indy_lost_pet_alert",
-            args=[IndyLostPetAlertScraper, cfg],
-            kwargs={"run_matching": True},
-            max_instances=1,
-            coalesce=True,
-            next_run_time=now,                          # run immediately on startup
-        )
-        scheduler.add_job(
-            run_scraper,
-            "cron", hour="0,12", minute="1",
-            id="petconnect24",
-            args=[PetConnect24Scraper, cfg],
-            kwargs={"run_matching": True},
-            max_instances=1,
-            coalesce=True,
-            next_run_time=now + timedelta(minutes=1),
-        )
-
-        # ── Phase 2: Browser scrapers (Playwright — staggered, one at a time) ─
-        scheduler.add_job(
-            run_scraper,
-            "cron", hour="0,12", minute="4",
-            id="pawboost",
-            args=[PawBoostScraper, cfg],
-            kwargs={"run_matching": True},
-            max_instances=1,
-            coalesce=True,
-            next_run_time=now + timedelta(minutes=3),
-        )
-        scheduler.add_job(
-            run_scraper,
-            "cron", hour="0,12", minute="7",
-            id="petfbi",
-            args=[PetFBIScraper, cfg],
-            kwargs={"run_matching": True},
-            max_instances=1,
-            coalesce=True,
-            next_run_time=now + timedelta(minutes=6),
-        )
-        scheduler.add_job(
-            run_scraper,
-            "cron", hour="0,12", minute="10",
-            id="lostmydoggie",
-            args=[LostMyDoggieScraper, cfg],
-            kwargs={"run_matching": True},
-            max_instances=1,
-            coalesce=True,
-            next_run_time=now + timedelta(minutes=9),
-        )
-
-        # ── Matching pass — runs 20 min into each window (after scrapers done) ─
+        # Matching runs every 30 minutes, after startup scraper offsets have
+        # completed.  It is intentionally independent of scraper intervals.
         scheduler.add_job(
             run_matching_pass,
-            "cron", hour="0,12", minute="20",
+            "interval", minutes=30,
             id="matching_pass",
             max_instances=1,
             coalesce=True,
+            next_run_time=now + timedelta(minutes=20),
         )
 
         # ── Full re-match — refreshes scores / surfaces late candidates ───────

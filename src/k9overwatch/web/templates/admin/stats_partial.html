@@ -93,11 +93,15 @@
                            {% if loop.index is even %}bg-slate-50/30 dark:bg-slate-900/20{% else %}bg-white dark:bg-transparent{% endif %}">
                     <td class="px-6 py-4">
                         <div class="flex items-center gap-2.5">
-                            {% if s.last_run_success %}
+                            {% if s.health == "healthy" %}
                                 <span class="w-2 h-2 rounded-full bg-green-400 flex-shrink-0 shadow-sm"
                                       title="Healthy"
                                       style="animation:pulseDot 2.5s ease-in-out infinite;"
                                       aria-label="Status: healthy"></span>
+                            {% elif s.health == "stale" %}
+                                <span class="w-2 h-2 rounded-full bg-amber-400 flex-shrink-0 shadow-sm"
+                                      title="Stale"
+                                      aria-label="Status: stale"></span>
                             {% elif s.last_run_at %}
                                 <span class="w-2 h-2 rounded-full bg-red-500 flex-shrink-0 shadow-sm"
                                       title="Error"
@@ -115,12 +119,16 @@
                         {{ s.last_run_at or "Never" }}
                     </td>
                     <td class="px-6 py-4">
-                        {% if s.last_run_success %}
+                        {% if s.health == "healthy" %}
                             <span class="inline-flex items-center gap-1 px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-bold border border-green-200">
                                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 12 12" fill="currentColor" class="w-3 h-3" aria-hidden="true">
                                     <path d="M10.28 2.28L4.5 8.06 1.72 5.28.28 6.72 4.5 10.94l7-7-1.22-1.66z"/>
                                 </svg>
                                 OK
+                            </span>
+                        {% elif s.health == "stale" %}
+                            <span class="inline-flex items-center gap-1 px-2.5 py-1 bg-amber-100 text-amber-700 rounded-full text-xs font-bold border border-amber-200">
+                                Stale
                             </span>
                         {% elif s.last_run_at %}
                             <span class="inline-flex items-center gap-1 px-2.5 py-1 bg-red-100 text-red-700 rounded-full text-xs font-bold border border-red-200">

@@ -27,7 +27,12 @@ class BrowserBaseScraper(BaseScraper):
     )
 
     async def scrape(self, after: datetime | None = None) -> AsyncIterator[PetRecord]:
-        """Wrap _scrape_with_page in browser lifecycle management."""
+        """Wrap the browser lifecycle and retry a failed browser session once.
+
+        A fresh Playwright process/context is used for each retry.  This recovers
+        from transient Chromium crashes and expired bot-protection sessions while
+        preserving the original exception when all attempts fail.
+        """
         try:
             from playwright.async_api import async_playwright
         except ImportError as err:
@@ -36,36 +41,44 @@ class BrowserBaseScraper(BaseScraper):
                 "Install with: pip install 'k9overwatch[browser]'"
             ) from err
 
-        headless = os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() != "false"
+        retries = max(0, int(os.getenv("BROWSER_SCRAPE_RETRIES", "1")))
+        last_error: Exception | None = None
+        for attempt in range(retries + 1):
+            try:
+                async for record in self._scrape_browser_attempt(async_playwright, after):
+                    yield record
+                return
+            except Exception as exc:
+                last_error = exc
+                self._record_error(exc, f"browser session attempt {attempt + 1}")
+                if attempt < retries:
+                    continue
+        assert last_error is not None
+        raise last_error
 
-        # Allow explicit override, then fall back to system chromium (Nix/PATH), then let
-        # Playwright use its own bundled browser if nothing is found.
+    async def _scrape_browser_attempt(self, async_playwright, after: datetime | None):
+        """Run one isolated browser session; callers decide whether to retry."""
+        headless = os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() != "false"
         chromium_path = (
             os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
             or shutil.which("chromium")
             or shutil.which("chromium-browser")
             or None
         )
-
         async with async_playwright() as p:
             browser = await p.chromium.launch(
-                headless=headless,
-                args=self.BROWSER_ARGS,
+                headless=headless, args=self.BROWSER_ARGS,
                 executable_path=chromium_path,
             )
             context = await browser.new_context(
                 user_agent=self.USER_AGENT,
-                viewport={"width": 1280, "height": 800},
-                locale="en-US",
+                viewport={"width": 1280, "height": 800}, locale="en-US",
             )
-
-            if self.STEALTH_REQUIRED:
-                await self._apply_stealth(context)
-
-            await self._setup_context(context)
-            page = await context.new_page()
-
             try:
+                if self.STEALTH_REQUIRED:
+                    await self._apply_stealth(context)
+                await self._setup_context(context)
+                page = await context.new_page()
                 async for record in self._scrape_with_page(page, after):
                     yield record
             finally:
