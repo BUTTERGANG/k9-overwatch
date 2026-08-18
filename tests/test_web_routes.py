@@ -250,3 +250,78 @@ class TestAdminRoutes:
             headers={"Authorization": _basic_auth_header("testadmin", "testpass")},
         )
         assert response.status_code == 200
+
+
+# ── Onboarding / Landing page ───────────────────────────────────────────────
+
+class TestLandingPage:
+    @pytest.mark.asyncio
+    async def test_landing_page_returns_200(self, client: AsyncClient):
+        """The landing page should render with the welcome/onboarding section."""
+        response = await client.get("/")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+        # Contains key onboarding messaging
+        assert "Helping lost pets find" in response.text or "K9-Overwatch" in response.text
+        assert 'href="/map"' in response.text
+        assert 'href="/how-it-works"' in response.text
+        assert 'href="/report"' in response.text
+        # Contains the three-step user flow
+        assert "Report a pet" in response.text
+        assert "Search the map" in response.text
+        assert "Find matches" in response.text
+
+
+# ── How It Works page ────────────────────────────────────────────────────────
+
+class TestHowItWorksPage:
+    @pytest.mark.asyncio
+    async def test_how_it_works_page_returns_200(self, client: AsyncClient):
+        """The How It Works page should render with step-by-step guidance."""
+        response = await client.get("/how-it-works")
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+        # Contains the three steps
+        assert "Report a lost" in response.text or "report a lost" in response.text.lower()
+        assert "Search" in response.text
+        assert "Get matched" in response.text or "reunited" in response.text
+        # Has CTAs back to the main app
+        assert 'href="/map"' in response.text
+        assert 'href="/report"' in response.text
+
+
+# ── Nav / Help overlay ───────────────────────────────────────────────────────
+
+class TestHelpOverlay:
+    @pytest.mark.asyncio
+    async def test_help_overlay_button_exists_on_pages(self, client: AsyncClient):
+        """The help overlay button should be present in the nav on key pages."""
+        for path in ["/", "/map", "/pets"]:
+            response = await client.get(path)
+            assert response.status_code == 200
+            assert 'id="help-overlay-btn"' in response.text
+
+    @pytest.mark.asyncio
+    async def test_help_overlay_markup_present_on_landing(self, client: AsyncClient):
+        """The help overlay dialog markup should be present in the base template."""
+        response = await client.get("/")
+        assert response.status_code == 200
+        assert 'id="help-overlay"' in response.text
+        assert 'id="help-overlay-close"' in response.text
+        assert "How to use K9 Overwatch" in response.text
+        assert 'href="/how-it-works"' in response.text
+
+
+# ── Map empty state ──────────────────────────────────────────────────────────
+
+class TestMapEmptyState:
+    @pytest.mark.asyncio
+    async def test_map_empty_state_has_warm_messaging(self, client: AsyncClient):
+        """The map empty state should use warm, encouraging language."""
+        response = await client.get("/map")
+        assert response.status_code == 200
+        assert 'id="map-empty-state"' in response.text
+        assert "No pets here yet" in response.text or "No reports" in response.text
+        assert 'href="/pets"' in response.text
+        assert 'href="/report"' in response.text
+        assert 'id="clear-map-filters-btn"' in response.text
