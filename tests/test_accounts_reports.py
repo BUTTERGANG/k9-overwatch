@@ -85,6 +85,12 @@ async def test_register_login_logout_flow(client, db_session):
     assert resp.status_code == 401
 
 
+async def test_flush_digest_requires_admin_authentication(client):
+    response = await client.post("/admin/flush-digest")
+
+    assert response.status_code == 401
+
+
 async def test_report_requires_login(client, db_session):
     resp = await client.get("/report")
     assert resp.status_code in (302, 303)
