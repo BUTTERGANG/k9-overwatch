@@ -18,28 +18,24 @@
 {% macro status_badge(record_type, size="sm") %}
 {% set is_lg = (size == "lg") %}
 {% if record_type == 'lost' %}
-    <span class="inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full
-                 {% if is_lg %}px-4 py-1.5 text-sm{% else %}px-2.5 py-0.5 text-xs{% endif %}"
-          style="background:#fef2f2;color:#991b1b;border:1px solid #fecaca;">
-        <span class="w-1.5 h-1.5 rounded-full bg-red-500 flex-shrink-0 inline-block"></span>Lost
+    <span class="inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full bg-status-lostBg text-status-lostText border border-status-lost
+                 {% if is_lg %}px-4 py-1.5 text-sm{% else %}px-2.5 py-0.5 text-xs{% endif %}">
+        <span class="w-1.5 h-1.5 rounded-full bg-status-lost flex-shrink-0 inline-block"></span>Lost
     </span>
 {% elif record_type == 'found' %}
-    <span class="inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full
-                 {% if is_lg %}px-4 py-1.5 text-sm{% else %}px-2.5 py-0.5 text-xs{% endif %}"
-          style="background:#f0fdf4;color:#14532d;border:1px solid #bbf7d0;">
-        <span class="w-1.5 h-1.5 rounded-full bg-green-500 flex-shrink-0 inline-block"></span>Found
+    <span class="inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full bg-status-foundBg text-status-foundText border border-status-found
+                 {% if is_lg %}px-4 py-1.5 text-sm{% else %}px-2.5 py-0.5 text-xs{% endif %}">
+        <span class="w-1.5 h-1.5 rounded-full bg-status-found flex-shrink-0 inline-block"></span>Found
     </span>
 {% elif record_type == 'sighting' %}
-    <span class="inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full
-                 {% if is_lg %}px-4 py-1.5 text-sm{% else %}px-2.5 py-0.5 text-xs{% endif %}"
-          style="background:#eff6ff;color:#1e3a8a;border:1px solid #bfdbfe;">
-        <span class="w-1.5 h-1.5 rounded-full bg-blue-500 flex-shrink-0 inline-block"></span>Sighting
+    <span class="inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full bg-status-sightingBg text-status-sightingText border border-status-sighting
+                 {% if is_lg %}px-4 py-1.5 text-sm{% else %}px-2.5 py-0.5 text-xs{% endif %}">
+        <span class="w-1.5 h-1.5 rounded-full bg-status-sighting flex-shrink-0 inline-block"></span>Sighting
     </span>
 {% elif record_type == 'adoptable' %}
-    <span class="inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full
-                 {% if is_lg %}px-4 py-1.5 text-sm{% else %}px-2.5 py-0.5 text-xs{% endif %}"
-          style="background:#fffbeb;color:#92400e;border:1px solid #fde68a;">
-        <span class="w-1.5 h-1.5 rounded-full bg-amber-500 flex-shrink-0 inline-block"></span>Adoptable
+    <span class="inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full bg-status-adoptableBg text-status-adoptableText border border-status-adoptable
+                 {% if is_lg %}px-4 py-1.5 text-sm{% else %}px-2.5 py-0.5 text-xs{% endif %}">
+        <span class="w-1.5 h-1.5 rounded-full bg-status-adoptable flex-shrink-0 inline-block"></span>Adoptable
     </span>
 {% endif %}
 {% endmacro %}
