@@ -318,6 +318,55 @@ async def check_stale_records(stale_hours: int = 48) -> dict:
     return {"deactivated": deactivated}
 
 
+async def regeocode_pending_records(limit: int = 100) -> dict:
+    """
+    Retry geocoding for active records that still have no lat/lon.
+
+    Scraped records self-heal: a failed geocode is retried on the source's next
+    full scrape (`needs_geocoding()` stays true until lat is set). User-submitted
+    reports have no such retry — `reports.submit_report` geocodes once, so a
+    transient Nominatim failure (rate limit, timeout) leaves the report
+    permanently off the map and unmatchable. This is the source-agnostic backstop.
+    """
+    regeocoded_ids: list[str] = []
+
+    async with get_session() as session:
+        repo = PetRepository(session)
+        geocoder = _make_geocoder_from_env(session)
+        rows = await repo.get_records_missing_coordinates(limit=limit)
+
+        for row in rows:
+            record = PetRecord(
+                source=row.source,
+                source_id=row.source_id,
+                record_type=row.record_type,
+                animal_type=row.animal_type,
+                location_text=row.location_text,
+                city=row.city,
+                state=row.state,
+                zip=row.zip,
+                country=row.country or "US",
+            )
+            result_record = await geocoder.geocode(record)
+            if result_record.lat is not None:
+                row.lat = result_record.lat
+                row.lon = result_record.lon
+                row.geocode_source = result_record.geocode_source
+                row.geocode_confidence = result_record.geocode_confidence
+                regeocoded_ids.append(row.id)
+
+        await session.commit()
+
+    logger.info(f"Re-geocode sweep: {len(regeocoded_ids)}/{len(rows)} filled in")
+
+    # Newly-coordinated records can now surface geo-matches — run them through
+    # matching immediately rather than waiting for the next full rematch pass.
+    if regeocoded_ids:
+        await run_matching_pass(new_row_ids=regeocoded_ids)
+
+    return {"checked": limit, "regeocoded": len(regeocoded_ids)}
+
+
 async def expire_stale_listings(max_age_days: int = 120) -> dict:
     """
     Source-agnostic fallback so resolved/found pets eventually leave the map.

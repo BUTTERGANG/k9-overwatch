@@ -29,7 +29,7 @@ src/k9overwatch/
   scheduler/     # APScheduler runner and job definitions
   utils/         # HTTP client, logging config, text helpers
   web/
-    routers/     # FastAPI route handlers (map, pets, matches, admin)
+    routers/     # FastAPI route handlers (onboarding, accounts, reports, images, map, pets, matches, admin)
     schemas/     # Pydantic response schemas (GeoJSON, PetSummary, etc.)
     templates/   # Jinja2 HTML templates
     static/      # JS assets (map.js using Leaflet)

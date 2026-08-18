@@ -17,8 +17,6 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from k9overwatch.db.repository import PetRepository
-from k9overwatch.geocoding.geocoder import GeocodingService
-from k9overwatch.geocoding.providers.nominatim import NominatimProvider
 from k9overwatch.models.pet_record import PetRecord
 from k9overwatch.web.dependencies import get_current_user_id, get_db
 from k9overwatch.web.rate_limit import rate_limit
@@ -169,9 +167,14 @@ async def submit_report(
         date_event=date.fromisoformat(date_lost) if date_lost else None,
     )
 
-    # Geocode the free-text location so the pin lands on the map.
+    # Geocode the free-text location so the pin lands on the map. Uses the same
+    # env-configured provider cascade as the scraper jobs (GEOCODE_PROVIDER).
+    # If the provider fails here (rate limit, timeout), the source-agnostic
+    # `regeocode_pending_records` job retries it later — see scheduler/jobs.py.
     if location_text:
-        geocoder = GeocodingService(db, [NominatimProvider()])
+        from k9overwatch.scheduler.jobs import _make_geocoder_from_env
+
+        geocoder = _make_geocoder_from_env(db)
         record = await geocoder.geocode(record)
 
     repo = PetRepository(db)

@@ -302,23 +302,33 @@ src/k9overwatch/
 │   ├── deduplicator.py       # Deduplicator — same pet on multiple platforms
 │   └── lost_found_matcher.py # LostFoundMatcher — lost → found reunification
 ├── scheduler/
-│   ├── jobs.py               # run_scraper(), run_matching_pass(), check_stale_records()
+│   ├── jobs.py               # run_scraper(), run_matching_pass(), check_stale_records(),
+│   │                         # expire_stale_listings(), regeocode_pending_records(),
+│   │                         # flush_digest_notifications(), flush_saved_search_notifications()
 │   └── runner.py             # ScraperScheduler — APScheduler interval jobs
 ├── web/
 │   ├── main.py               # FastAPI app + lifespan (init DB, warm pool, optional scheduler)
 │   ├── dependencies.py       # get_db() — async session injection
 │   ├── templates_config.py   # Jinja2 environment setup
+│   ├── rate_limit.py         # In-process per-IP fixed-window limiter (auth + report routes)
 │   ├── routers/
+│   │   ├── onboarding.py     # / (landing), /how-it-works
+│   │   ├── accounts.py       # /login, /register, /account, /forgot-password, /reset-password, /logout
+│   │   ├── reports.py        # /report — owner-submitted lost/found/sighting with photo uploads
+│   │   ├── images.py         # /img — cached, size-capped image proxy
 │   │   ├── pets.py           # /pets, /pets/{id}, /pets/results (HTMX partial)
-│   │   ├── map.py            # /map, /api/map/geojson (GeoJSON bounding-box endpoint)
+│   │   ├── map.py            # /map, /api/map/geojson, /api/map/buckets
 │   │   ├── matches.py        # /matches (lost→found pairs, dedup pairs)
 │   │   └── admin.py          # /admin, /admin/stats-partial (HTTP Basic auth required)
 │   ├── templates/
 │   │   ├── base.html         # Frosted-glass nav, mobile drawer menu, page transitions, Tailwind config
 │   │   ├── macros.html       # Shared Jinja2 macros (status_badge, species_icon, loading_spinner, etc.)
+│   │   ├── landing.html      # / — marketing landing page
+│   │   ├── how_it_works.html # /how-it-works — onboarding guide
 │   │   ├── map.html          # Leaflet map + responsive filter drawer (FAB toggle on mobile)
 │   │   ├── pets/             # list.html, _results.html (HTMX partial), card.html, detail.html
 │   │   ├── matches/          # list.html — scored match pairs
+│   │   ├── accounts/         # login, register, account, forgot/reset-password, report.html, message.html
 │   │   ├── admin/            # dashboard.html, stats_partial.html
 │   │   └── errors/           # 404.html, 500.html
 │   └── static/
@@ -336,6 +346,7 @@ tests/
 ├── test_geocoding.py         # Geocoding cascade, cache, ZIP centroid fallback
 ├── test_integration.py       # Full pipeline: upsert → geocode → match → save
 ├── test_web_routes.py        # FastAPI TestClient: routes, validation, auth
+├── test_accounts_reports.py  # Accounts, owner reports, contact requests
 └── test_repository_extra.py  # mark_inactive_bulk, get_stale_records, cache savepoint
 docs/
 ├── api-analysis-*.md         # Per-source API analysis
@@ -350,10 +361,16 @@ docs/
 
 | Route | Description |
 |---|---|
+| `/` | Landing page — marketing overview, calls to action |
+| `/how-it-works` | Onboarding guide |
 | `/map` | Interactive Leaflet map — pins colored by record type, amber badge dot on pins with matches, bounding-box "Search this area" button, filter sidebar |
 | `/pets` | Filterable pet card grid — species, type, days; HTMX partial updates; URL-reflected filter state |
 | `/pets/{id}` | Pet detail page — full info, photo gallery, mini-map, matched pets |
 | `/matches` | Lost ↔ Found / dedup match list — confidence-scored pairs, confirm/dismiss review buttons |
+| `/login`, `/register`, `/logout` | Signed-cookie account auth (rate-limited) |
+| `/forgot-password`, `/reset-password` | Single-use, expiring password-reset flow (rate-limited) |
+| `/account` | Notification preferences, saved searches, submitted reports |
+| `/report` | Owner-submitted lost/found/sighting with photo upload (login required, rate-limited) |
 | `/admin` | Scraper health dashboard — live stats, run history, error counts (auth required) |
 
 ### API Endpoints
@@ -361,6 +378,8 @@ docs/
 | Endpoint | Description |
 |---|---|
 | `GET /api/map/geojson` | GeoJSON FeatureCollection filtered by bounding box + type + days; includes `match_count` per feature |
+| `GET /api/map/buckets` | Aggregate counts by type/status for the map filter sidebar |
+| `GET /img` | Cached, size-capped (8MB) image proxy for source-hosted photos |
 | `GET /api/health` | Health check — returns 200 (ok) or 503 (db error) |
 | `GET /admin/stats-partial` | HTMX-polled stats partial (refreshes every 30s) |
 | `POST /api/matches/{id}/review?confirmed=true\|false` | Mark a match as human-reviewed; sets `confirmed` flag |
@@ -474,10 +493,14 @@ Geocoding cost:
 | Pet FBI | every 40 min | Playwright required (WAF token capture) |
 | Lost My Doggie | every 45 min | Playwright required |
 | Matching pass | every 30 min | Dedup + lost→found, both directions, on newly ingested records |
+| Re-geocode backstop | every 20 min | Retries active records with address text but no coordinates (mainly user reports, geocoded once at submit time) — see [Geocoding Strategy](#geocoding-strategy) |
 | Staleness check | every 6 hours | Verifies IndyLostPetAlert records still active |
+| Age-based expiry | every 24 hours | Source-agnostic fallback: deactivates any active listing older than 120 days, regardless of source |
+| Match digest | daily 19:00 UTC | Coalesced per-day email of new matches, respecting per-user notification preferences |
+| Saved-search notifications | every 5 min | Drains the durable notification queue with bounded retry |
 | Re-match pass | daily 04:00 | Idempotent re-scan of recent records (last 120d) so matches improve as more data arrives (e.g. geocoding fills coordinates) |
 
-All scrapers also trigger an immediate targeted matching pass on their newly ingested records (`run_matching=True`), so new pets are matched against the existing pool without waiting for the batch job.
+All scrapers also trigger an immediate targeted matching pass on their newly ingested records (`run_matching=True`), so new pets are matched against the existing pool without waiting for the batch job. The re-geocode backstop does the same for any record it successfully fills in coordinates for.
 
 > `ScraperScheduler` (`scheduler/runner.py`) runs each scraper on the per-source interval shown in the table above, with staggered startup runs and one active run per source. Matching runs every 30 minutes.
 
@@ -578,12 +601,15 @@ unverified here.
       checked by middleware for cookie-authenticated state-changing requests.
 - [x] **Scheduler singleton ownership** — PostgreSQL advisory locks or a
       non-blocking host file lock prevent duplicate scheduler processes.
+- [x] **Rate limiting on sensitive routes** — in-process per-IP fixed-window
+      limiter on login/register/password-reset/report (`web/rate_limit.py`).
 
 ### Phase 6 — Deferred / Not Yet Validated
 - [ ] Real visual embeddings (CLIP/MobileNet generation, storage, and matching)
 - [ ] PostGIS migration and `ST_DWithin()` geo queries at scale
 - [ ] Live browser-source validation and browser-scraper staleness checks
-- [ ] Web/API rate limiting
+- [ ] Broader API rate limiting (map/search/read endpoints beyond auth & report)
+      and a shared (not in-process) store if this ever runs multi-worker
 - [ ] Audit logging
 - [ ] Database migrations and production deployment/operations validation
 - [ ] Adoption listings integration

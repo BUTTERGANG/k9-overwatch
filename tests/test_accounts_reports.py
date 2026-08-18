@@ -14,6 +14,9 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from k9overwatch.db.repository import PetRepository, UserRepository
+from k9overwatch.geocoding.geocoder import GeocodeResult
+from k9overwatch.geocoding.providers.nominatim import NominatimProvider
+from k9overwatch.models.enums import GeocodeConfidence, GeocodeSource
 from k9overwatch.web.auth import COOKIE_NAME, csrf_token_for, make_session_token
 from k9overwatch.web.main import app
 from k9overwatch.web.routers import reports
@@ -163,6 +166,19 @@ def test_save_upload_normalizes_valid_jpeg_to_safe_generated_file(tmp_path, monk
 
 async def test_submit_report_creates_user_row_and_geocodes(client, db_session, tmp_path, monkeypatch):
     monkeypatch.setattr(reports, "UPLOAD_DIR", str(tmp_path))
+
+    # Stub the network boundary instead of hitting live Nominatim: keeps the test
+    # hermetic and avoids flaking on the provider's own rate limiting.
+    async def fake_geocode(self, address):
+        return GeocodeResult(
+            lat=39.7684,
+            lon=-86.1581,
+            geocode_source=GeocodeSource.NOMINATIM,
+            geocode_confidence=GeocodeConfidence.HIGH,
+        )
+
+    monkeypatch.setattr(NominatimProvider, "geocode", fake_geocode)
+
     users = UserRepository(db_session)
     user = await users.create("reporter@example.com", "password123")
     await db_session.commit()

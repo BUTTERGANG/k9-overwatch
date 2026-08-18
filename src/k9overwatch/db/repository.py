@@ -439,6 +439,30 @@ class PetRepository:
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    async def get_records_missing_coordinates(self, limit: int = 100) -> list[PetRow]:
+        """
+        Active records with address text but no lat/lon yet.
+
+        A record ends up here when geocoding failed at ingestion time (e.g. the
+        provider was rate-limited or briefly down) — most commonly a user-submitted
+        report, which is only geocoded once, at submit time. Backs the periodic
+        `regeocode_pending_records` job so a transient provider failure doesn't
+        permanently exclude a listing from the map and from matching.
+        """
+        filters = [
+            PetRow.active == True,
+            PetRow.lat.is_(None),
+            or_(PetRow.location_text.isnot(None), PetRow.zip.isnot(None)),
+        ]
+        stmt = (
+            select(PetRow)
+            .where(and_(*filters))
+            .order_by(PetRow.date_posted.desc())
+            .limit(limit)
+        )
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_unmatched_records(
         self, source: str | None = None, limit: int = 500
     ) -> list[PetRow]:

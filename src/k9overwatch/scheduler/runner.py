@@ -21,6 +21,7 @@ from .jobs import (
     expire_stale_listings,
     flush_digest_notifications,
     flush_saved_search_notifications,
+    regeocode_pending_records,
     run_matching_pass,
     run_scraper,
 )
@@ -106,6 +107,19 @@ class ScraperScheduler:
             id="staleness_check",
             max_instances=1,
             coalesce=True,
+        )
+
+        # ── Re-geocode backstop — retries records left without coordinates by a
+        #    transient provider failure (mainly user reports, geocoded only once
+        #    at submit time). Scraped records self-heal on the source's next scrape. ──
+        scheduler.add_job(
+            regeocode_pending_records,
+            "interval", minutes=20,
+            id="regeocode_pending_records",
+            kwargs={"limit": 100},
+            max_instances=1,
+            coalesce=True,
+            next_run_time=now + timedelta(minutes=5),
         )
 
         # ── Age-based expiry — source-agnostic fallback so resolved/found pets

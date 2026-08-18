@@ -117,7 +117,7 @@ The `/proxy/image` endpoint prevents open proxy abuse:
 
 | Gap | Risk | Recommendation |
 |-----|------|----------------|
-| No rate limiting on web endpoints | DoS vulnerability | **Deferred** — add per-IP rate limiting middleware |
+| ~~No rate limiting on auth/report endpoints~~ | ~~Credential-stuffing / spam DoS on login, register, password reset, report~~ | ✅ Fixed — in-process per-IP fixed-window limiter (`web/rate_limit.py`) on login/register/forgot-password/reset-password/report. Read endpoints (map/pets/matches) remain unguarded; the limiter is in-process only, so a multi-worker deployment needs a shared store (e.g. Redis) instead. |
 | ~~No password hashing~~ | ~~User passwords stored as plaintext~~ | ✅ Fixed — user passwords use stdlib scrypt hashes; admin HTTP Basic credentials remain environment-configured and deployment hardening is deferred. |
 | ~~No session management~~ | ~~HTTP Basic sends credentials every request~~ | ✅ Fixed — signed user sessions use hardened cookies; production secrets are fail-closed. |
 | No audit logging | No record of admin actions | **Deferred** — log all state-changing operations |
@@ -138,7 +138,8 @@ The account flow is implemented with scrypt password hashing, signed sessions,
 email verification, single-use password-reset tokens, CSRF middleware, and
 bounded image upload validation. Remaining hardening is intentionally deferred:
 
-- Add per-IP/per-user rate limiting to web endpoints.
+- Extend per-IP rate limiting beyond auth/report to read endpoints, and back it
+  with a shared store if the app ever runs multi-worker.
 - Add audit logging for state-changing operations.
 - Evaluate MFA, RBAC expansion, PII-at-rest encryption, and data export/deletion.
 - Validate production HTTPS, deployment, migrations, and external providers in a
