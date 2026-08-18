@@ -250,6 +250,7 @@ class NotificationQueue(Base):
     created_at = Column(DateTime, default=_now, nullable=False)
     claimed_at = Column(DateTime)
     sent_at = Column(DateTime)
+    next_attempt_at = Column(DateTime, index=True)
     last_error = Column(Text)
 
     __table_args__ = (

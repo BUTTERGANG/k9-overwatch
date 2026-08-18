@@ -289,19 +289,49 @@ class PetRepository:
         await self.session.flush()
         return queued
 
-    async def claim_notification_queue(self, limit: int = 50) -> list[NotificationQueue]:
-        """Claim pending alerts for a delivery worker without sending anything."""
+    async def claim_notification_queue(
+        self, limit: int = 50, now: datetime | None = None
+    ) -> list[NotificationQueue]:
+        """Atomically claim eligible alerts for one delivery worker."""
+        now = now or datetime.now(UTC).replace(tzinfo=None)
+        eligible = select(NotificationQueue.id).where(
+            NotificationQueue.status.in_(("pending", "failed")),
+            or_(NotificationQueue.next_attempt_at.is_(None), NotificationQueue.next_attempt_at <= now),
+            NotificationQueue.attempts < 5,
+        ).order_by(NotificationQueue.created_at).limit(limit)
+        claim = update(NotificationQueue).where(
+            NotificationQueue.id.in_(eligible),
+            NotificationQueue.status.in_(("pending", "failed")),
+            or_(NotificationQueue.next_attempt_at.is_(None), NotificationQueue.next_attempt_at <= now),
+            NotificationQueue.attempts < 5,
+        ).values(
+            status="processing",
+            claimed_at=now,
+            attempts=NotificationQueue.attempts + 1,
+        ).returning(NotificationQueue.id)
+        claimed_ids = list((await self.session.execute(claim)).scalars().all())
+        if not claimed_ids:
+            return []
         rows = list((await self.session.execute(
-            select(NotificationQueue).where(NotificationQueue.status == "pending")
-            .order_by(NotificationQueue.created_at).limit(limit)
+            select(NotificationQueue).where(NotificationQueue.id.in_(claimed_ids))
+            .order_by(NotificationQueue.created_at)
         )).scalars().all())
-        now = datetime.now(UTC).replace(tzinfo=None)
-        for row in rows:
-            row.status = "processing"
-            row.claimed_at = now
-            row.attempts = (row.attempts or 0) + 1
-        await self.session.flush()
         return rows
+
+    async def mark_notification_failed(
+        self, row: NotificationQueue, error: str, now: datetime | None = None
+    ) -> None:
+        """Record a delivery failure and schedule bounded exponential retry."""
+        now = now or datetime.now(UTC).replace(tzinfo=None)
+        row.status = "failed"
+        row.last_error = error[:2000]
+        row.claimed_at = None
+        if row.attempts >= 5:
+            row.next_attempt_at = None
+        else:
+            delay_seconds = min(3600, 60 * (2 ** (row.attempts - 1)))
+            row.next_attempt_at = now + timedelta(seconds=delay_seconds)
+        await self.session.flush()
 
     async def find_match_candidates(
         self,

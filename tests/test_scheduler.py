@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 import pytest
 
 from k9overwatch.db.models import ScraperState
-from k9overwatch.scheduler.runner import ScraperScheduler
+from k9overwatch.scheduler.runner import SchedulerSingletonLock, ScraperScheduler
 from k9overwatch.scrapers.base import ScraperConfig
 from k9overwatch.scrapers.browser.base_browser import BrowserBaseScraper
 from k9overwatch.web.routers.admin import scraper_health
@@ -95,3 +95,61 @@ async def test_browser_scraper_retries_transient_session_failure(monkeypatch):
     assert records == []
     assert scraper.attempts == 2
     assert len(scraper._errors) == 1
+
+
+@pytest.mark.asyncio
+async def test_sqlite_scheduler_lock_is_exclusive(tmp_path, monkeypatch):
+    lock_path = tmp_path / "scheduler.lock"
+    monkeypatch.setenv("SCHEDULER_LOCK_FILE", str(lock_path))
+    first = SchedulerSingletonLock("sqlite+aiosqlite:///test.db")
+    second = SchedulerSingletonLock("sqlite+aiosqlite:///test.db")
+
+    assert await first.acquire() is True
+    assert await second.acquire() is False
+
+    await first.release()
+    assert await second.acquire() is True
+    await second.release()
+
+
+@pytest.mark.asyncio
+async def test_postgres_scheduler_lock_uses_try_advisory_lock():
+    class FakeResult:
+        def scalar_one(self):
+            return True
+
+    class FakeConnection:
+        def __init__(self):
+            self.statements = []
+
+        async def execute(self, statement, params=None):
+            self.statements.append((str(statement), params))
+            return FakeResult()
+
+        async def close(self):
+            pass
+
+    class FakeConnect:
+        def __init__(self, connection):
+            self.connection = connection
+
+        async def __aenter__(self):
+            return self.connection
+
+        async def __aexit__(self, *args):
+            pass
+
+    class FakeEngine:
+        def __init__(self, connection):
+            self.connection = connection
+
+        def connect(self):
+            return FakeConnect(self.connection)
+
+    connection = FakeConnection()
+    lock = SchedulerSingletonLock("postgresql+asyncpg://db", engine=FakeEngine(connection))
+
+    assert await lock.acquire() is True
+    await lock.release()
+    assert "pg_try_advisory_lock" in connection.statements[0][0]
+    assert "pg_advisory_unlock" in connection.statements[1][0]

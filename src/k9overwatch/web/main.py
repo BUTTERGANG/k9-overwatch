@@ -76,19 +76,28 @@ async def lifespan(app: FastAPI):
     async with get_engine().connect() as conn:
         await conn.execute(text("SELECT 1"))
 
-    # Optionally start the scraper scheduler in-process
+    # Optionally start the scraper scheduler in-process. The singleton lock
+    # prevents duplicate schedulers across web workers and deploy replicas.
     scheduler = None
+    scheduler_lock = None
     if os.getenv("RUN_SCHEDULER", "false").lower() == "true":
-        from k9overwatch.scheduler.runner import ScraperScheduler
-        scheduler = ScraperScheduler().build()
-        scheduler.start()
-        logger.info("Scraper scheduler started")
+        from k9overwatch.scheduler.runner import SchedulerSingletonLock, ScraperScheduler
+
+        scheduler_lock = SchedulerSingletonLock()
+        if await scheduler_lock.acquire():
+            scheduler = ScraperScheduler().build()
+            scheduler.start()
+            logger.info("Scraper scheduler started")
+        else:
+            logger.warning("Scheduler lock is already held; scheduler disabled in this process")
 
     yield
 
     if scheduler is not None:
         scheduler.shutdown()
         logger.info("Scraper scheduler shut down")
+    if scheduler_lock is not None:
+        await scheduler_lock.release()
 
 
 app = FastAPI(title="K9-Overwatch", lifespan=lifespan)

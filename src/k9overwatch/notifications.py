@@ -20,7 +20,7 @@ import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage
 
-from k9overwatch.db.models import ContactRequest, NotificationQueue, PetMatch, PetRow
+from k9overwatch.db.models import ContactRequest, PetMatch, PetRow
 from k9overwatch.db.repository import UserRepository
 
 CONF_RANK = {"low": 0, "medium": 1, "high": 2}
@@ -134,24 +134,19 @@ async def flush_digest() -> int:
 
 
 async def flush_notification_queue(session, limit: int = 50) -> int:
-    """Deliver durable saved-search alerts and mark their delivery outcome."""
+    """Deliver eligible saved-search alerts with atomic claims and retries."""
     from datetime import UTC, datetime
 
-    from sqlalchemy import select
+    from k9overwatch.db.repository import PetRepository
 
-    repo = UserRepository(session)
-    queue_rows = list((await session.execute(
-        select(NotificationQueue).where(NotificationQueue.status == "pending")
-        .order_by(NotificationQueue.created_at).limit(limit)
-    )).scalars().all())
+    user_repo = UserRepository(session)
+    queue_repo = PetRepository(session)
+    queue_rows = await queue_repo.claim_notification_queue(limit=limit)
     now = datetime.now(UTC).replace(tzinfo=None)
     sent = 0
     for row in queue_rows:
-        row.status = "processing"
-        row.claimed_at = now
-        row.attempts = (row.attempts or 0) + 1
-        user = await repo.get_by_id(row.user_id)
-        prefs = await repo.get_prefs(row.user_id)
+        user = await user_repo.get_by_id(row.user_id)
+        prefs = await user_repo.get_prefs(row.user_id)
         if not user or not prefs or prefs.frequency == "off" or not prefs.email_enabled:
             row.status = "skipped"
             continue
@@ -161,9 +156,10 @@ async def flush_notification_queue(session, limit: int = 50) -> int:
         if delivered:
             row.status = "sent"
             row.sent_at = now
+            row.next_attempt_at = None
             sent += 1
         else:
-            row.status = "failed"
+            await queue_repo.mark_notification_failed(row, "notification provider rejected delivery", now=now)
     await session.flush()
     return sent
 

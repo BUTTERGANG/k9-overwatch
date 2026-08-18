@@ -105,6 +105,55 @@ async def test_notification_queue_claims_pending_rows_for_delivery(db_session):
 
 
 @pytest.mark.asyncio
+async def test_notification_queue_retries_failed_delivery_after_backoff(db_session):
+    from datetime import datetime
+
+    user = await UserRepository(db_session).create("retry@example.com", "password123")
+    db_session.add(SavedSearch(id="retry-search", user_id=user.id, name="Retry", days=30))
+    await db_session.flush()
+    repo = PetRepository(db_session)
+    pet = await _pet(repo, source_id="retry-pet")
+    await repo.evaluate_saved_searches([pet])
+
+    now = datetime(2026, 8, 18, 12, 0, 0)
+    claimed = await repo.claim_notification_queue(now=now)
+    await repo.mark_notification_failed(claimed[0], "temporary SMTP failure", now=now)
+    await db_session.commit()
+
+    assert claimed[0].attempts == 1
+    assert claimed[0].status == "failed"
+    assert claimed[0].next_attempt_at == datetime(2026, 8, 18, 12, 1, 0)
+    assert await repo.claim_notification_queue(now=now) == []
+    retried = await repo.claim_notification_queue(now=claimed[0].next_attempt_at)
+    assert len(retried) == 1
+    assert retried[0].attempts == 2
+    assert retried[0].status == "processing"
+
+
+@pytest.mark.asyncio
+async def test_notification_queue_does_not_retry_after_max_attempts(db_session):
+    from datetime import datetime
+
+    user = await UserRepository(db_session).create("dead@example.com", "password123")
+    db_session.add(SavedSearch(id="dead-search", user_id=user.id, name="Dead", days=30))
+    await db_session.flush()
+    repo = PetRepository(db_session)
+    pet = await _pet(repo, source_id="dead-pet")
+    await repo.evaluate_saved_searches([pet])
+
+    now = datetime(2026, 8, 18, 12, 0, 0)
+    for _ in range(5):
+        claimed = await repo.claim_notification_queue(now=now)
+        assert len(claimed) == 1
+        await repo.mark_notification_failed(claimed[0], "permanent SMTP failure", now=now)
+        now = claimed[0].next_attempt_at
+    await db_session.commit()
+
+    assert claimed[0].attempts == 5
+    assert await repo.claim_notification_queue(now=now) == []
+
+
+@pytest.mark.asyncio
 async def test_notification_queue_flush_marks_claimed_alert_sent_without_smtp(db_session, monkeypatch):
     from k9overwatch.notifications import flush_notification_queue
 
