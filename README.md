@@ -189,10 +189,10 @@ Key `.env` settings:
 | `GEOCODE_PROVIDER` | `nominatim` | `nominatim` (free) or `google` |
 | `GOOGLE_MAPS_API_KEY` | — | Required only when `GEOCODE_PROVIDER=google` |
 | `ADMIN_USER` | `admin` | HTTP Basic username for `/admin` routes |
-| `ADMIN_PASSWORD` | `changeme` | HTTP Basic password — **change in production** |
+| `ADMIN_PASSWORD` | `changeme` (development only) | HTTP Basic password — **must be explicitly set to a non-default value in production** |
 | `RUN_SCHEDULER` | `false` | Set `true` to run scrapers inside the web process |
 | `LOG_FORMAT` | `pretty` | `pretty` (dev) or `json` (production) |
-| `SESSION_SECRET` | dev default | Signs user session cookies — **set to a long random value in production** |
+| `SESSION_SECRET` | dev default (development only) | Signs user session cookies — **must be explicitly set to a non-default value in production** |
 | `SMTP_HOST` | — | SMTP server for match emails. If unset, emails are logged (no-op) so dev is never blocked |
 | `SMTP_PORT` | `587` | SMTP port |
 | `SMTP_USER` | — | SMTP username |

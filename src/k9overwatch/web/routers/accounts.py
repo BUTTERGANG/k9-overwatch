@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from k9overwatch.db.models import SavedSearch, User
 from k9overwatch.db.repository import UserRepository
 from k9overwatch.notifications import flush_digest
-from k9overwatch.web.auth import COOKIE_NAME, make_session_token, verify_password
+from k9overwatch.web.auth import COOKIE_NAME, is_production, make_session_token, verify_password
 from k9overwatch.web.dependencies import get_current_user_id, get_db, verify_admin
 from k9overwatch.web.templates_config import templates
 
@@ -52,6 +52,7 @@ def _set_session(resp, user: User) -> None:
         COOKIE_NAME,
         make_session_token(user.id),
         httponly=True,
+        secure=is_production(),
         samesite="lax",
         max_age=60 * 60 * 24 * 30,
     )
