@@ -115,6 +115,11 @@ async def _migrate_existing_db():
             await conn.execute(text("ALTER TABLE pets ADD COLUMN owner_id TEXT"))
         if "owner_report_status" not in existing_cols:
             await conn.execute(text("ALTER TABLE pets ADD COLUMN owner_report_status TEXT"))
+        queue_cols = await conn.run_sync(
+            lambda c: [col["name"] for col in inspect(c).get_columns("notification_queue")]
+        )
+        if "next_attempt_at" not in queue_cols:
+            await conn.execute(text("ALTER TABLE notification_queue ADD COLUMN next_attempt_at TIMESTAMP"))
         # New tables (users, notification_prefs, saved_searches). create_all is
         # idempotent and leaves existing production data untouched.
         await conn.run_sync(Base.metadata.create_all)
