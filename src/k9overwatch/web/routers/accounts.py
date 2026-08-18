@@ -10,7 +10,7 @@ from k9overwatch.db.models import User
 from k9overwatch.db.repository import UserRepository
 from k9overwatch.notifications import flush_digest
 from k9overwatch.web.auth import COOKIE_NAME, make_session_token, verify_password
-from k9overwatch.web.dependencies import get_current_user_id, get_db
+from k9overwatch.web.dependencies import get_current_user_id, get_db, verify_admin
 from k9overwatch.web.templates_config import templates
 
 router = APIRouter()
@@ -249,7 +249,7 @@ async def unsubscribe(token: str, request: Request, db: AsyncSession = Depends(g
     )
 
 
-@router.post("/admin/flush-digest")
+@router.post("/admin/flush-digest", dependencies=[Depends(verify_admin)])
 async def flush_digest_endpoint(db: AsyncSession = Depends(get_db)):
     """Triggers the daily digest send (normally run by the scheduler)."""
     sent = await flush_digest()
