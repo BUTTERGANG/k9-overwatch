@@ -20,7 +20,7 @@ import smtplib
 from dataclasses import dataclass
 from email.message import EmailMessage
 
-from k9overwatch.db.models import ContactRequest, PetMatch, PetRow
+from k9overwatch.db.models import ContactRequest, NotificationQueue, PetMatch, PetRow
 from k9overwatch.db.repository import UserRepository
 
 CONF_RANK = {"low": 0, "medium": 1, "high": 2}
@@ -130,6 +130,41 @@ async def flush_digest() -> int:
             logging.getLogger(__name__).info(f"[notify:digest] would email {email}: {subject}")
             sent += 1
     _digest.clear()
+    return sent
+
+
+async def flush_notification_queue(session, limit: int = 50) -> int:
+    """Deliver durable saved-search alerts and mark their delivery outcome."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import select
+
+    repo = UserRepository(session)
+    queue_rows = list((await session.execute(
+        select(NotificationQueue).where(NotificationQueue.status == "pending")
+        .order_by(NotificationQueue.created_at).limit(limit)
+    )).scalars().all())
+    now = datetime.now(UTC).replace(tzinfo=None)
+    sent = 0
+    for row in queue_rows:
+        row.status = "processing"
+        row.claimed_at = now
+        row.attempts = (row.attempts or 0) + 1
+        user = await repo.get_by_id(row.user_id)
+        prefs = await repo.get_prefs(row.user_id)
+        if not user or not prefs or prefs.frequency == "off" or not prefs.email_enabled:
+            row.status = "skipped"
+            continue
+        delivered = True
+        if _smtp_configured():
+            delivered = _send_email(user.email, row.subject, row.body, prefs.unsubscribe_token)
+        if delivered:
+            row.status = "sent"
+            row.sent_at = now
+            sent += 1
+        else:
+            row.status = "failed"
+    await session.flush()
     return sent
 
 

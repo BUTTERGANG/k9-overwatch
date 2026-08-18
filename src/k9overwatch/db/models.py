@@ -234,6 +234,30 @@ class SavedSearch(Base):
     __table_args__ = (Index("ix_saved_searches_user_enabled", "user_id", "enabled"),)
 
 
+class NotificationQueue(Base):
+    """Durable, provider-independent queue for saved-search alerts."""
+    __tablename__ = "notification_queue"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=False, index=True)
+    saved_search_id = Column(String(36), nullable=False, index=True)
+    pet_id = Column(String(36), nullable=False, index=True)
+    subject = Column(Text, nullable=False)
+    body = Column(Text, nullable=False)
+    confidence = Column(Text)
+    status = Column(Text, nullable=False, default="pending", index=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=_now, nullable=False)
+    claimed_at = Column(DateTime)
+    sent_at = Column(DateTime)
+    last_error = Column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "saved_search_id", "pet_id", name="uq_notification_saved_search_pet"),
+        Index("ix_notification_queue_status_created", "status", "created_at"),
+    )
+
+
 class ContactRequest(Base):
     """Private, authenticated relay between a report owner and another user."""
     __tablename__ = "contact_requests"

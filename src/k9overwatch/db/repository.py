@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..matching.breed_normalizer import normalize_breed
 from ..models.pet_record import PetRecord
-from .models import PetMatch, PetRow, ScraperState
+from .models import NotificationQueue, PetMatch, PetRow, SavedSearch, ScraperState
 
 
 class PetRepository:
@@ -211,6 +211,97 @@ class PetRepository:
             return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
         return [r for r in candidates if haversine(r) <= miles]
+
+    async def evaluate_saved_searches(
+        self, new_rows: list[PetRow], *, confidence: str | None = None
+    ) -> int:
+        """Queue one durable alert for each enabled search matching a new row.
+
+        ``confidence`` is optional because a plain listing has no match score. If
+        supplied (for example by a matching pipeline), the search threshold is
+        enforced before an alert is queued.
+        """
+        if not new_rows:
+            return 0
+        searches = list((await self.session.execute(
+            select(SavedSearch).where(SavedSearch.enabled == True)
+        )).scalars().all())
+        users = {
+            user.id: user
+            for user in (await self.session.execute(select(User).where(
+                User.id.in_({s.user_id for s in searches})
+            ))).scalars().all()
+        } if searches else {}
+        rank = {"low": 0, "medium": 1, "high": 2}
+        queued = 0
+        now = datetime.now(UTC).replace(tzinfo=None)
+
+        def distance(row, search) -> float:
+            if row.lat is None or row.lon is None:
+                return float("inf")
+            phi1, phi2 = math.radians(search.latitude), math.radians(row.lat)
+            d_phi = math.radians(row.lat - search.latitude)
+            d_lam = math.radians(row.lon - search.longitude)
+            a = math.sin(d_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(d_lam / 2) ** 2
+            return 3958.8 * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+        for search in searches:
+            if confidence is not None and rank.get(confidence, 0) < rank.get(search.min_confidence, 1):
+                continue
+            user = users.get(search.user_id)
+            if user is None:
+                continue
+            for row in new_rows:
+                if row.record_type != search.record_type:
+                    continue
+                if search.animal_type and row.animal_type != search.animal_type:
+                    continue
+                if search.species:
+                    wanted = normalize_breed(search.species) or search.species.strip().lower()
+                    actual = row.breed_normalized or normalize_breed(row.breed)
+                    if not actual or not (wanted == actual or wanted in actual or actual in wanted):
+                        continue
+                if search.days and (row.date_event is None or row.date_event < (date.today() - timedelta(days=search.days))):
+                    continue
+                if search.radius_miles is not None:
+                    if search.latitude is None or search.longitude is None or distance(row, search) > search.radius_miles:
+                        continue
+                existing = await self.session.execute(select(NotificationQueue.id).where(
+                    NotificationQueue.user_id == search.user_id,
+                    NotificationQueue.saved_search_id == search.id,
+                    NotificationQueue.pet_id == row.id,
+                ))
+                if existing.scalar_one_or_none() is not None:
+                    continue
+                self.session.add(NotificationQueue(
+                    user_id=user.id,
+                    saved_search_id=search.id,
+                    pet_id=row.id,
+                    subject=f"New {row.record_type} pet matches {search.name}",
+                    body=(f"{row.name or 'A pet'} ({row.breed or 'unknown breed'}) "
+                          f"matches your saved search '{search.name}'. "
+                          f"View it at /pets/{row.id}"),
+                    confidence=confidence,
+                    status="pending",
+                    created_at=now,
+                ))
+                queued += 1
+        await self.session.flush()
+        return queued
+
+    async def claim_notification_queue(self, limit: int = 50) -> list[NotificationQueue]:
+        """Claim pending alerts for a delivery worker without sending anything."""
+        rows = list((await self.session.execute(
+            select(NotificationQueue).where(NotificationQueue.status == "pending")
+            .order_by(NotificationQueue.created_at).limit(limit)
+        )).scalars().all())
+        now = datetime.now(UTC).replace(tzinfo=None)
+        for row in rows:
+            row.status = "processing"
+            row.claimed_at = now
+            row.attempts = (row.attempts or 0) + 1
+        await self.session.flush()
+        return rows
 
     async def find_match_candidates(
         self,
