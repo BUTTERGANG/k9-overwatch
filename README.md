@@ -124,7 +124,8 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 │                       Scheduler (APScheduler)                       │
 │   Each scraper runs on its own interval; matching pass every 30 min │
 │   Staleness check every 6 hours (marks removed listings inactive)   │
-│   Runs inside the web process when RUN_SCHEDULER=true               │
+│   Runs inside the web process when RUN_SCHEDULER=true; a singleton  │
+│   lock prevents duplicate scheduler ownership per database/host     │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
                                ▼
@@ -222,6 +223,10 @@ RUN_SCHEDULER=true PYTHONPATH=src uvicorn k9overwatch.web.main:app --host 0.0.0.
 # As a separate process (alternative to RUN_SCHEDULER=true)
 PYTHONPATH=src python -m k9overwatch.scheduler.runner
 ```
+
+The scheduler takes a singleton lock: PostgreSQL uses an advisory lock, while
+SQLite/local deployments use a non-blocking host file lock. A second scheduler
+process exits without running jobs.
 
 ### Test a Single Scraper
 
@@ -480,16 +485,16 @@ All scrapers also trigger an immediate targeted matching pass on their newly ing
 
 ## Deployment (Replit + NeonDB)
 
-The app is configured for Replit with NeonDB as the production database.
+### Deployment status
 
-1. Add your NeonDB connection string as a Replit secret named `neondb`
-2. Add `ADMIN_USER` and `ADMIN_PASSWORD` secrets for the admin dashboard
-3. Add a random `SESSION_SECRET` secret to sign user session cookies
-4. Optionally add SMTP secrets (`SMTP_HOST`, etc.) to enable match-alert emails
-5. Optionally add `RUN_SCHEDULER=true` to run scrapers inside the web process
-6. Hit **Run** — the workflow installs dependencies, then starts uvicorn on port 5000
-
-The `DATABASE_URL` environment variable is automatically set to `$neondb` by the workflow. The app normalizes `postgres://` URLs to `postgresql+asyncpg://` and handles NeonDB's `sslmode=require` automatically.
+Replit + NeonDB configuration exists as a development/deployment sketch, but
+live deployment and production validation are **deferred**. Do not treat the
+following as completed operational steps: provisioning secrets, running the
+web process, configuring a scheduler owner, applying PostgreSQL migrations,
+or validating external SMTP/browser providers. The application does normalize
+`postgres://` URLs to `postgresql+asyncpg://` and handles NeonDB's
+`sslmode=require` when configured, but those deployment paths remain
+unverified here.
 
 ---
 
@@ -503,7 +508,7 @@ The `DATABASE_URL` environment variable is automatically set to `$neondb` by the
 - [x] Build scraper for Pet FBI (Playwright + GraphQL + AWS WAF bypass)
 - [x] Build scraper for Lost My Doggie (Playwright + Cloudflare stealth)
 - [x] Unified PetRecord schema (Pydantic v2)
-- [x] Source-specific normalizers (all 5 validated against live pages)
+- [x] Source-specific normalizers (fixture-tested; live browser-source validation is deferred)
 
 ### Phase 2 — Storage & Matching ✅ Complete
 - [x] Database schema (SQLAlchemy ORM, SQLite dev / PostgreSQL prod)
@@ -514,7 +519,7 @@ The `DATABASE_URL` environment variable is automatically set to `$neondb` by the
 - [x] APScheduler polling jobs (5 scrapers + matching pass + staleness check)
 - [x] Scraper state tracking (high-water mark for incremental polling)
 - [x] Staleness checks (mark inactive listings)
-- [x] Comprehensive test suite (195 tests — normalizers, matching, geocoding, DB, web routes)
+- [x] Comprehensive test suite (314 passed, 1 skipped in the current baseline)
 
 ### Phase 3 — Web Application ✅ Complete
 - [x] FastAPI + Jinja2 web application
@@ -524,7 +529,7 @@ The `DATABASE_URL` environment variable is automatically set to `$neondb` by the
 - [x] Lost ↔ Found match list with confidence scoring
 - [x] Admin dashboard with live scraper health stats (HTTP Basic auth)
 - [x] Mobile-responsive layout with hamburger nav
-- [x] NeonDB (PostgreSQL) production deployment on Replit
+- [ ] NeonDB/Replit production deployment and migration validation (deferred)
 - [x] UI modernization — frosted-glass navbar, page fade-in transitions, mobile filter drawers
 - [x] Reusable Jinja2 macros (status_badge, species_icon, loading_spinner)
 - [x] Accessibility improvements — ARIA attributes, keyboard-navigable gallery, screen reader support
@@ -556,34 +561,31 @@ The `DATABASE_URL` environment variable is automatically set to `$neondb` by the
 
 ### Phase 5 — Accounts & Owner Reports ✅ Built
 - [x] **User accounts** — register / log in / log out (signed-cookie sessions,
-      scrypt password hashing, no external dependency). Nav shows Sign up /
-      Log in when anonymous and My Account / Log out once signed in.
+      scrypt password hashing, no external dependency). Email verification is
+      required before login; single-use, expiring password-reset tokens are
+      supported.
 - [x] **Owner-submitted reports** — `/report` lets a logged-in person post a
-      lost/found/sighting with photo upload (stored in `data/uploads/`) and
-      contact info. Submitted reports are geocoded from the entered location and
-      appear on the map as `source="user"` listings.
-- [x] **Contact mechanism** — contact info (name/email/phone) is captured on
-      reports and **revealed only to logged-in users** on the pet detail page
-      (anonymous viewers see a "Log in to view" prompt). This protects submitters
-      from scrapers while still making reunification possible.
-- [x] **Opt-in match notifications** (non-spammy by design):
-  - Per-user `NotificationPrefs`: frequency (`off` / `daily` / `immediate`),
-    minimum confidence (`high` / `medium` / `any`), and an opt-out checkbox.
-  - Defaults: **daily digest, medium+ confidence, never spam.**
-  - Only user-submitted LOST pets trigger an email; only when a match clears the
-    user's threshold; `immediate` emails are coalesced into the next daily digest
-    so a person is never blasted. Every email carries a one-click unsubscribe link.
-  - Email is sent via SMTP only if `SMTP_HOST` is configured; otherwise it logs
-    (safe no-op) so the dev environment is never blocked.
-  - Digest job runs daily at 19:00 via the scheduler.
+      lost/found/sighting with bounded, extension- and image-signature-checked
+      photo uploads (stored in `data/uploads/`) and contact info.
+- [x] **Contact mechanism** — contact info is revealed only to logged-in users
+      on the pet detail page.
+- [x] **Saved searches** — authenticated users can create, update, and delete
+      bounded search criteria; newly ingested matches are queued for delivery.
+- [x] **Durable notification delivery** — saved-search notifications are stored
+      in a database queue with atomic claims and bounded retry scheduling; SMTP
+      remains configuration-gated and failures do not block ingestion.
+- [x] **CSRF protection** — signed, user-bound tokens are embedded in forms and
+      checked by middleware for cookie-authenticated state-changing requests.
+- [x] **Scheduler singleton ownership** — PostgreSQL advisory locks or a
+      non-blocking host file lock prevent duplicate scheduler processes.
 
-### Phase 6 — Advanced Features
-- [ ] Saved searches
-- [ ] **Visual similarity matching** — generate CLIP/MobileNet embedding vectors per image,
-      store in DB, use cosine similarity as an additional matching signal to catch
-      same-dog listings with mismatched text descriptions (e.g. "brown mutt" vs "tan terrier")
-- [ ] PostGIS migration for `ST_DWithin()` geo queries at scale
-- [ ] Staleness checks for browser-based scrapers (PawBoost, PetFBI, LostMyDoggie)
+### Phase 6 — Deferred / Not Yet Validated
+- [ ] Real visual embeddings (CLIP/MobileNet generation, storage, and matching)
+- [ ] PostGIS migration and `ST_DWithin()` geo queries at scale
+- [ ] Live browser-source validation and browser-scraper staleness checks
+- [ ] Web/API rate limiting
+- [ ] Audit logging
+- [ ] Database migrations and production deployment/operations validation
 - [ ] Adoption listings integration
 - [ ] Additional sources: Petfinder (official API), Petco Love Lost (facial recognition), Finding Rover
 
