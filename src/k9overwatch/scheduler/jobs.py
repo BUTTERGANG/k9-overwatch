@@ -51,6 +51,7 @@ async def run_scraper(
     records_fetched = 0
     records_new = 0
     errors = 0
+    saved_alerts = 0
     new_rows = []
 
     async with get_session() as session:
@@ -131,6 +132,7 @@ async def run_scraper(
             records_new=records_new,
             last_record_at=highest_date,
         )
+        saved_alerts = await repo.evaluate_saved_searches(new_rows)
 
         logger.info(
             f"[{source}] Done: {records_fetched} fetched, {records_new} new, "
@@ -146,7 +148,21 @@ async def run_scraper(
         "records_fetched": records_fetched,
         "records_new": records_new,
         "errors": errors,
+        "saved_alerts": saved_alerts,
     }
+
+
+async def run_saved_search_alerts(new_row_ids: list[str]) -> int:
+    """Evaluate enabled saved searches for a set of newly ingested rows."""
+    from sqlalchemy import select
+
+    from ..db.models import PetRow
+
+    async with get_session() as session:
+        rows = list((await session.execute(
+            select(PetRow).where(PetRow.id.in_(new_row_ids))
+        )).scalars().all())
+        return await PetRepository(session).evaluate_saved_searches(rows)
 
 
 async def run_matching_pass(
@@ -352,4 +368,14 @@ async def flush_digest_notifications() -> dict:
 
     sent = await flush_digest()
     logger.info(f"Match digest: {sent} email(s) sent")
+    return {"sent": sent}
+
+
+async def flush_saved_search_notifications() -> dict:
+    """Scheduler entry point for durable saved-search notification delivery."""
+    from k9overwatch.notifications import flush_notification_queue
+
+    async with get_session() as session:
+        sent = await flush_notification_queue(session)
+    logger.info(f"Saved-search notifications: {sent} email(s) sent")
     return {"sent": sent}
