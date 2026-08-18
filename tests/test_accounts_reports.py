@@ -68,11 +68,18 @@ async def test_register_login_logout_flow(client, db_session):
         "/register",
         data={"email": "owner@example.com", "password": "supersecret", "display_name": "Sam", "csrf_token": csrf_token_for("anonymous")},
     )
-    assert resp.status_code in (302, 303), resp.status_code
-    # User + default prefs created
+    assert resp.status_code == 200, resp.status_code
+    # User + default prefs created; activate through the queued verification link.
     users = UserRepository(db_session)
     user = await users.get_by_email("owner@example.com")
     assert user is not None
+    from sqlalchemy import select
+
+    from k9overwatch.db.models import EmailQueue
+    queued = (await db_session.execute(select(EmailQueue))).scalar_one()
+    token = queued.body.split("token=", 1)[1]
+    verified = await client.get(f"/account/email-verification?token={token}")
+    assert verified.status_code == 200
     prefs = await users.get_prefs(user.id)
     assert prefs is not None and prefs.frequency == "digest" and prefs.min_confidence == "medium"
 
