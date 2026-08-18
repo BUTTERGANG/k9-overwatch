@@ -56,5 +56,32 @@ def read_session_token(token: str | None) -> str | None:
     return None
 
 
+def make_csrf_token(subject: str) -> str:
+    """Create a stateless CSRF token bound to a session subject."""
+    payload = f"csrf:{subject}"
+    signature = hmac.new(
+        _SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return f"{subject}.{signature}"
+
+
+def csrf_token_for(user_id: str) -> str:
+    """Return the CSRF token to embed in forms for a logged-in user."""
+    return make_csrf_token(user_id)
+
+
+def validate_csrf_token(token: str | None, subject: str) -> bool:
+    if not token or "." not in token:
+        return False
+    token_subject, signature = token.rsplit(".", 1)
+    if token_subject != subject:
+        return False
+    payload = f"csrf:{token_subject}"
+    expected = hmac.new(
+        _SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
+
+
 def new_unsubscribe_token() -> str:
     return secrets.token_urlsafe(24)

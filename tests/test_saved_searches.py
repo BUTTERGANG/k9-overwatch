@@ -9,7 +9,7 @@ from k9overwatch.db import connection as db_conn
 from k9overwatch.db.models import SavedSearch
 from k9overwatch.db.repository import UserRepository
 from k9overwatch.web import dependencies as deps
-from k9overwatch.web.auth import COOKIE_NAME, make_session_token
+from k9overwatch.web.auth import COOKIE_NAME, csrf_token_for, make_session_token
 from k9overwatch.web.main import app
 
 
@@ -49,6 +49,7 @@ async def test_authenticated_user_can_create_and_view_saved_search(client, db_se
             "radius_miles": "25",
             "days": "30",
             "min_confidence": "high",
+            "csrf_token": csrf_token_for(user.id),
         },
         headers=headers,
     )
@@ -78,14 +79,14 @@ async def test_saved_search_update_and_delete_are_owned_by_authenticated_user(cl
     outsider_headers = {"Cookie": f"{COOKIE_NAME}={make_session_token(outsider.id)}"}
     denied = await client.post(
         f"/account/saved-searches/{saved.id}",
-        data={"name": "Hacked", "record_type": "lost", "days": "7"},
+        data={"name": "Hacked", "record_type": "lost", "days": "7", "csrf_token": csrf_token_for(outsider.id)},
         headers=outsider_headers,
     )
     assert denied.status_code == 404
 
     updated = await client.post(
         f"/account/saved-searches/{saved.id}",
-        data={"name": "Updated", "record_type": "lost", "animal_type": "cat", "days": "7"},
+        data={"name": "Updated", "record_type": "lost", "animal_type": "cat", "days": "7", "csrf_token": csrf_token_for(user.id)},
         headers=owner_headers,
     )
     assert updated.status_code in (302, 303)
@@ -95,7 +96,7 @@ async def test_saved_search_update_and_delete_are_owned_by_authenticated_user(cl
     assert saved.animal_type == "cat"
     assert saved.days == 7
 
-    deleted = await client.post(f"/account/saved-searches/{saved.id}/delete", headers=owner_headers)
+    deleted = await client.post(f"/account/saved-searches/{saved.id}/delete", data={"csrf_token": csrf_token_for(user.id)}, headers=owner_headers)
     assert deleted.status_code in (302, 303)
     assert (await db_session.execute(select(SavedSearch).where(SavedSearch.id == saved.id))).scalar_one_or_none() is None
 
@@ -117,7 +118,7 @@ async def test_saved_search_input_is_clamped_to_safe_ranges(client, db_session):
     headers = {"Cookie": f"{COOKIE_NAME}={make_session_token(user.id)}"}
     response = await client.post(
         "/account/saved-searches",
-        data={"name": "Limits", "days": "9999", "radius_miles": "9999", "latitude": "95", "longitude": "-200"},
+        data={"name": "Limits", "days": "9999", "radius_miles": "9999", "latitude": "95", "longitude": "-200", "csrf_token": csrf_token_for(user.id)},
         headers=headers,
     )
     assert response.status_code == 400

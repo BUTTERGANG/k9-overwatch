@@ -101,10 +101,16 @@ _WEB_DIR = Path(__file__).parent
 async def auth_context(request: Request, call_next):
     """Resolve login state once per request and expose it on request.state."""
     from k9overwatch.db.repository import UserRepository
-    from k9overwatch.web.auth import COOKIE_NAME, read_session_token
+    from k9overwatch.web.auth import (
+        COOKIE_NAME,
+        csrf_token_for,
+        read_session_token,
+        validate_csrf_token,
+    )
 
     user_id = read_session_token(request.cookies.get(COOKIE_NAME))
     request.state.is_logged_in = bool(user_id)
+    request.state.csrf_token = csrf_token_for(user_id or "anonymous")
     request.state.current_user_name = None
     if user_id:
         from k9overwatch.db.connection import get_session_factory
@@ -114,6 +120,18 @@ async def auth_context(request: Request, call_next):
             user = await UserRepository(session).get_by_id(user_id)
             if user:
                 request.state.current_user_name = user.display_name
+
+    # Login and registration are intentionally usable without a prior session
+    # token. All cookie-authenticated mutations still require a user-bound token.
+    auth_path = request.url.path in {"/login", "/register"}
+    if user_id and not auth_path and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        token = request.headers.get("X-CSRF-Token")
+        if not token:
+            await request.body()
+            form = await request.form()
+            token = form.get("csrf_token")
+        if not isinstance(token, str) or not validate_csrf_token(token, user_id):
+            return Response("CSRF validation failed", status_code=403, media_type="text/plain")
     return await call_next(request)
 
 
@@ -121,7 +139,8 @@ def _inject_user_state(request: Request):
     """Expose login state to every template via request.state (set by middleware)."""
     is_logged_in = bool(getattr(getattr(request, "state", None), "is_logged_in", False))
     name = getattr(getattr(request, "state", None), "current_user_name", None)
-    return {"is_logged_in": is_logged_in, "current_user_name": name}
+    csrf_token = getattr(getattr(request, "state", None), "csrf_token", "")
+    return {"is_logged_in": is_logged_in, "current_user_name": name, "csrf_token": csrf_token}
 
 
 templates.context_processors.append(_inject_user_state)

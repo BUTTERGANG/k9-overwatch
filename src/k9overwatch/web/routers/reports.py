@@ -28,9 +28,60 @@ router = APIRouter()
 UPLOAD_DIR = os.path.join("data", "uploads")
 ALLOWED_EXT = {".jpg", ".jpeg", ".png", ".webp"}
 MAX_PHOTOS = 3
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024
+
+
+def _has_image_signature(content: bytes, ext: str) -> bool:
+    """Check the image container signature, rather than trusting the filename/MIME."""
+    if ext in {".jpg", ".jpeg"}:
+        return _looks_like_jpeg(content)
+    if ext == ".png":
+        return content.startswith(b"\x89PNG\r\n\x1a\n") and content[12:16] == b"IHDR"
+    if ext == ".webp":
+        return len(content) >= 12 and content.startswith(b"RIFF") and content[8:12] == b"WEBP"
+    return False
+
+
+def _looks_like_jpeg(content: bytes) -> bool:
+    """Validate JPEG markers without decoding pixel data."""
+    if len(content) < 4 or not content.startswith(b"\xff\xd8") or not content.endswith(b"\xff\xd9"):
+        return False
+    pos = 2
+    has_frame = False
+    while pos < len(content) - 2:
+        if content[pos] != 0xFF:
+            return False
+        while pos < len(content) and content[pos] == 0xFF:
+            pos += 1
+        if pos >= len(content):
+            return False
+        marker = content[pos]
+        pos += 1
+        if marker == 0xDA:
+            if pos + 2 > len(content) - 2:
+                return False
+            segment_length = int.from_bytes(content[pos : pos + 2], "big")
+            if segment_length < 2 or pos + segment_length > len(content) - 2:
+                return False
+            return has_frame and content[pos + segment_length :].endswith(b"\xff\xd9")
+        if marker in {0xD8, 0xD9} or 0xD0 <= marker <= 0xD7 or marker == 0x01:
+            return False
+        if pos + 2 > len(content):
+            return False
+        segment_length = int.from_bytes(content[pos : pos + 2], "big")
+        if segment_length < 2 or pos + segment_length > len(content):
+            return False
+        if marker in {
+            0xC0, 0xC1, 0xC2, 0xC3, 0xC5, 0xC6, 0xC7,
+            0xC9, 0xCA, 0xCB, 0xCD, 0xCE, 0xCF,
+        }:
+            has_frame = True
+        pos += segment_length
+    return False
 
 
 def _save_uploads(files: list[UploadFile]) -> list[str]:
+    """Save at most ``MAX_PHOTOS`` bounded, signature-checked image uploads."""
     os.makedirs(UPLOAD_DIR, exist_ok=True)
     paths: list[str] = []
     for f in files:
@@ -39,10 +90,14 @@ def _save_uploads(files: list[UploadFile]) -> list[str]:
         ext = os.path.splitext(f.filename)[1].lower()
         if ext not in ALLOWED_EXT:
             continue
+        f.file.seek(0)
+        content = f.file.read(MAX_UPLOAD_BYTES + 1)
+        if len(content) > MAX_UPLOAD_BYTES or not _has_image_signature(content, ext):
+            continue
         name = f"{uuid.uuid4().hex}{ext}"
         dest = os.path.join(UPLOAD_DIR, name)
         with open(dest, "wb") as out:
-            out.write(f.file.read())
+            out.write(content)
         paths.append(f"/uploads/{name}")
         if len(paths) >= MAX_PHOTOS:
             break
