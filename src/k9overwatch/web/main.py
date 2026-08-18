@@ -7,7 +7,7 @@ from pathlib import Path
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -23,6 +23,7 @@ from k9overwatch.web.routers import admin as admin_router
 from k9overwatch.web.routers import images as images_router
 from k9overwatch.web.routers import map as map_router
 from k9overwatch.web.routers import matches as matches_router
+from k9overwatch.web.routers import onboarding as onboarding_router
 from k9overwatch.web.routers import pets as pets_router
 from k9overwatch.web.routers import reports as reports_router
 from k9overwatch.web.templates_config import templates
@@ -38,7 +39,7 @@ _CSP = (
     "img-src 'self' data: blob: "
     "https://tile.openstreetmap.org https://*.tile.openstreetmap.org "
     "https://*.basemaps.cartocdn.com; "
-    "font-src 'self' https://unpkg.com; "
+    "font-src 'self' https://unpkg.com https://fonts.gstatic.com https://fonts.googleapis.com; "
     "connect-src 'self'; "
     "frame-ancestors 'none';"
 )
@@ -164,6 +165,7 @@ os.makedirs(_uploads_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
 
 # Routers
+app.include_router(onboarding_router.router)
 app.include_router(accounts_router.router)
 app.include_router(reports_router.router)
 app.include_router(images_router.router)
@@ -200,11 +202,6 @@ async def health_check():
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return Response(status_code=204)
-
-
-@app.get("/")
-async def root():
-    return RedirectResponse(url="/map")
 
 
 if __name__ == "__main__":
