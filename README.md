@@ -473,7 +473,7 @@ Geocoding cost:
 
 All scrapers also trigger an immediate targeted matching pass on their newly ingested records (`run_matching=True`), so new pets are matched against the existing pool without waiting for the batch job.
 
-> Note: `ScraperScheduler` (`scheduler/runner.py`) currently runs each scraper on a twice-daily cron (00:00 and 12:00 UTC, staggered by source) rather than the per-source minute intervals in the table above — the table describes the original design intent; the schedule has since been tightened for production load. Update one to match the other next time this area is touched.
+> `ScraperScheduler` (`scheduler/runner.py`) runs each scraper on the per-source interval shown in the table above, with staggered startup runs and one active run per source. Matching runs every 30 minutes.
 
 ---
 
