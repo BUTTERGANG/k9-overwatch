@@ -86,6 +86,40 @@ async def _get_stats(db: AsyncSession) -> dict:
     )
     match_row = match_stats_result.one()
 
+    # Per-source pet stats: counts, geocode fill rate, record type breakdown
+    per_source_result = await db.execute(
+        select(
+            PetRow.source,
+            func.count().label("total_count"),
+            func.count(case((PetRow.active == True, 1))).label("active_count"),
+            func.count(case((PetRow.lat.isnot(None), 1))).label("geocoded_count"),
+            func.count(case((PetRow.record_type == "lost", 1))).label("lost"),
+            func.count(case((PetRow.record_type == "found", 1))).label("found"),
+            func.count(case((PetRow.record_type == "sighting", 1))).label("sighting"),
+            func.count(case((PetRow.record_type == "adoptable", 1))).label("adoptable"),
+        ).group_by(PetRow.source)
+    )
+    per_source_pets = [
+        {
+            "source": row.source,
+            "active_count": row.active_count,
+            "total_count": row.total_count,
+            "geocoded_count": row.geocoded_count,
+            "geocode_rate": (
+                round(row.geocoded_count / row.total_count * 100, 1)
+                if row.total_count > 0
+                else 0.0
+            ),
+            "record_type_breakdown": {
+                "lost": row.lost,
+                "found": row.found,
+                "sighting": row.sighting,
+                "adoptable": row.adoptable,
+            },
+        }
+        for row in per_source_result
+    ]
+
     return {
         "scrapers": [
             {
@@ -96,6 +130,8 @@ async def _get_stats(db: AsyncSession) -> dict:
                 "consecutive_errors": s.consecutive_errors or 0,
                 "records_fetched": s.records_fetched,
                 "records_new": s.records_new,
+                "records_fetched_last": s.records_fetched,
+                "records_new_last": s.records_new,
                 "error_message": s.error_message,
             }
             for s in scrapers
@@ -107,6 +143,7 @@ async def _get_stats(db: AsyncSession) -> dict:
         "no_geocode": pet_row.no_geocode,
         "total_matches": match_row.total_matches,
         "reunification_matches": match_row.reunification_matches,
+        "per_source_pets": per_source_pets,
         "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
     }
 

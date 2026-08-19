@@ -81,6 +81,7 @@ class PetRow(Base):
     # Ownership: links a record to the user who submitted it (source == "user")
     owner_id = Column(String(36), index=True)
     owner_report_status = Column(Text, index=True)
+    stale_notified_at = Column(DateTime, default=None)
 
     # Shelter
     shelter_name = Column(Text)
@@ -107,6 +108,7 @@ class PetRow(Base):
     # Audit
     scraped_at = Column(DateTime, default=_now)
     last_checked_at = Column(DateTime, default=_now)
+    stale_notified_at = Column(DateTime, nullable=True)  # set when auto-stale warning sent to owner
 
     # Raw payload
     raw = Column(JSON)

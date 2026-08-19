@@ -362,6 +362,25 @@ document.addEventListener("DOMContentLoaded", () => {
         const safeDateEvent  = escapeHtml(p.date_event)  || 'Unknown date';
         const safeId         = escapeHtml(p.id);
         const safeThumbnail  = escapeHtml(p.thumbnail_url);
+        const safeGeoSource = p.geocode_source || null;
+        const safeGeoConf   = p.geocode_confidence || null;
+
+        // Geocode confidence badge
+        let geoBadgeHtml = '';
+        if (safeGeoConf) {
+            const geoLabels = { high: 'Exact location', medium: 'Neighborhood', low: 'ZIP code area' };
+            const geoColors = {
+                high: { bg: dark ? 'rgba(22,163,74,0.2)' : '#f0fdf4', border: dark ? '#166534' : '#bbf7d0', text: dark ? '#4ade80' : '#166534' },
+                medium: { bg: dark ? 'rgba(234,179,8,0.2)' : '#fefce8', border: dark ? '#854d0e' : '#fde68a', text: dark ? '#facc15' : '#854d0e' },
+                low: { bg: dark ? 'rgba(239,68,68,0.2)' : '#fef2f2', border: dark ? '#991b1b' : '#fecaca', text: dark ? '#f87171' : '#991b1b' },
+            };
+            const c = geoColors[safeGeoConf] || geoColors.low;
+            const label = geoLabels[safeGeoConf] || safeGeoConf;
+            geoBadgeHtml = `<div style="margin-bottom:8px;padding:3px 7px;border-radius:6px;background:${c.bg};border:1px solid ${c.border};font-size:10px;color:${c.text};display:flex;align-items:center;gap:4px;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" style="width:10px;height:10px;flex-shrink:0;"><path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1115 0z"/></svg>
+                ${label}
+            </div>`;
+        }
 
         const age     = relativeAge(p.date_event);
         const ageDays = daysOld(p.date_event);
@@ -421,6 +440,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         </svg>
                         Listing is ${ageDays > 365 ? 'over a year' : 'over 90 days'} old
                     </div>` : ''}
+                    ${geoBadgeHtml}
                     ${p.match_count > 0 ? `
                     <div style="margin-bottom:8px;">
                         <a href="/matches" style="display:inline-flex;align-items:center;gap:4px;

@@ -24,6 +24,8 @@ class PetSummary(BaseModel):
     active: bool
     match_count: int = 0
     age_bucket: str | None = None   # week | fortnight | month | older
+    geocode_source: str | None = None
+    geocode_confidence: str | None = None  # high | medium | low
 
 class PetDetail(PetSummary):
     breed_secondary: str | None = None

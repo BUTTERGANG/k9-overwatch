@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from ..db.connection import get_session
 from ..db.repository import PetRepository
@@ -367,17 +367,90 @@ async def regeocode_pending_records(limit: int = 100) -> dict:
     return {"checked": limit, "regeocoded": len(regeocoded_ids)}
 
 
-async def expire_stale_listings(max_age_days: int = 120) -> dict:
+async def expire_stale_listings(max_age_days: int = 120, stale_notify_hours: int = 48) -> dict:
     """
     Source-agnostic fallback so resolved/found pets eventually leave the map.
 
     The per-source check_active() path (above) only covers IndyLostPetAlert.
     This expires any active listing whose event date is older than `max_age_days`
     and that has no live match — kept independent of a source's own verification.
+
+    For user-submitted reports, a two-pass approach is used:
+    1. First pass: set `stale_notified_at` to mark that an alert was sent.
+    2. Second pass (already notified, still stale): deactivate the report.
+    Non-user reports are deactivated immediately as before.
     """
+    from datetime import timedelta
+
+    from sqlalchemy import or_, select
+
+    from ..db.models import PetMatch, PetRow
+
+    cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=max_age_days)).date()
+    notified_cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=stale_notify_hours)
+
     async with get_session() as session:
         repo = PetRepository(session)
-        count = await repo.deactivate_stale_by_age(max_age_days=max_age_days)
+        count = 0
+
+        # ── Non-user records: deactivate immediately as before. ──────────────
+        stmt = select(PetRow).where(
+            PetRow.active == True,
+            PetRow.date_event < cutoff,
+            PetRow.source != "user",
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+        if rows:
+            # Don't expire records with a live (unrejected) match.
+            active_match_ids = set()
+            match_stmt = select(PetMatch).where(
+                PetMatch.pet_a_id.in_([r.id for r in rows])
+                | PetMatch.pet_b_id.in_([r.id for r in rows])
+            )
+            for m in (await session.execute(match_stmt)).scalars().all():
+                if m.confirmed is not False:
+                    active_match_ids.add(m.pet_a_id)
+                    active_match_ids.add(m.pet_b_id)
+
+            for r in rows:
+                if r.id in active_match_ids:
+                    continue
+                r.active = False
+                r.last_checked_at = datetime.now(UTC).replace(tzinfo=None)
+                count += 1
+
+        # ── User-submitted records: two-pass approach. ───────────────────────
+        user_stmt = select(PetRow).where(
+            PetRow.active == True,
+            PetRow.date_event < cutoff,
+            PetRow.source == "user",
+        )
+        user_rows = list((await session.execute(user_stmt)).scalars().all())
+        if user_rows:
+            # Build active-match set for user rows too
+            active_user_match_ids = set()
+            user_match_stmt = select(PetMatch).where(
+                PetMatch.pet_a_id.in_([r.id for r in user_rows])
+                | PetMatch.pet_b_id.in_([r.id for r in user_rows])
+            )
+            for m in (await session.execute(user_match_stmt)).scalars().all():
+                if m.confirmed is not False:
+                    active_user_match_ids.add(m.pet_a_id)
+                    active_user_match_ids.add(m.pet_b_id)
+
+            for r in user_rows:
+                if r.id in active_user_match_ids:
+                    continue
+                if r.stale_notified_at is None:
+                    # First pass: flag as notified but don't deactivate yet.
+                    r.stale_notified_at = datetime.now(UTC).replace(tzinfo=None)
+                elif r.stale_notified_at < notified_cutoff:
+                    # Second pass: enough time has passed since notification.
+                    r.active = False
+                    r.last_checked_at = datetime.now(UTC).replace(tzinfo=None)
+                    count += 1
+
+        await session.flush()
     logger.info(f"Age-based expiry: {count} records deactivated")
     return {"deactivated": count}
 

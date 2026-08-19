@@ -615,6 +615,14 @@ unverified here.
 - [ ] Adoption listings integration
 - [ ] Additional sources: Petfinder (official API), Petco Love Lost (facial recognition), Finding Rover
 
+### New features (2026-08-19)
+
+- [x] **Geocode confidence on map pins** — pin popups now show "Exact location", "Neighborhood", or "ZIP code area" badges based on the source's geocode precision. Color-coded (green/yellow/red) with a location icon.
+- [x] **Reunited status path** — pet owners can mark their lost/found/sighting reports as reunited via a "🎉 Reunited" button on the pet detail page. This deactivates the listing, closes active matches, and deactivates the matched counterpart if one exists.
+- [x] **Reactivation path** — if a user report was auto-deactivated (stale flagging or admin action), the owner can reactivate it with a "↻ Reactivate" button to put it back on the map.
+- [x] **Auto-stale flagging with notification window** — expired listings now get a two-phase treatment: user-submitted reports receive a `stale_notified_at` timestamp on the first stale pass, and are only deactivated on the second pass (24h later). Non-user reports are deactivated immediately as before. The `stale_notified_at` column is tracked per-row.
+- [x] **Source health dashboard** — admin dashboard now shows per-source stats: active/total pet counts, geocode fill rate (% with lat/lon), and a record-type breakdown (lost/found/sighting/adoptable). Replaces the previous single-number scraper health view.
+
 ### Planned Sources (Phase 4)
 | Source | Notes |
 |---|---|
