@@ -135,6 +135,8 @@ async def get_map_geojson(
             age_bucket=age_bucket(
                 effective_age_days(pet.date_event, pet.days_since_event, pet.scraped_at)
             ),
+            geocode_source=pet.geocode_source,
+            geocode_confidence=pet.geocode_confidence,
         )
 
         feature = GeoJSONFeature(

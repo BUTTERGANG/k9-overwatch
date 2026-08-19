@@ -93,3 +93,44 @@ async def test_found_side_notification_targets_the_lost_pet_owner(db_session):
 
     assert list(_digest) == [user.email]
     _digest.clear()
+
+
+@pytest.mark.asyncio
+async def test_found_side_notification_uses_other_pet_when_found_is_match_b(db_session):
+    users = UserRepository(db_session)
+    user = await users.create("owner-reversed@example.com", "password123", "Sam")
+    repo = PetRepository(db_session)
+    lost, _ = await repo.upsert(
+        PetRecord(
+            source="user",
+            source_id="lost-reversed",
+            record_type="lost",
+            animal_type="dog",
+            name="Rex",
+            owner_id=user.id,
+            date_event=date.today(),
+        ),
+        owner_id=user.id,
+    )
+    found, _ = await repo.upsert(
+        PetRecord(
+            source="shelter",
+            source_id="found-reversed",
+            record_type="found",
+            animal_type="dog",
+            name="Rex",
+            date_event=date.today(),
+        )
+    )
+    await db_session.commit()
+    _digest.clear()
+
+    result = MatchResult.from_signals(
+        str(lost.id), str(found.id), "lost_found", {"name_exact": 0.40}
+    )
+    from k9overwatch.scheduler.jobs import _maybe_notify
+
+    await _maybe_notify(db_session, found, result, [lost])
+
+    assert list(_digest) == [user.email]
+    _digest.clear()

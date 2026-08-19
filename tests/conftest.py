@@ -7,11 +7,13 @@ from datetime import date
 
 import pytest
 import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from k9overwatch.db.models import Base
 from k9overwatch.models.enums import AnimalType, Gender, RecordType
 from k9overwatch.models.pet_record import PetRecord
+from k9overwatch.web.main import app
 
 # ── Event loop ────────────────────────────────────────────────────────────────
 
@@ -42,6 +44,35 @@ async def db_session() -> AsyncGenerator[AsyncSession, None]:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
+
+
+@pytest_asyncio.fixture
+async def client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, None]:
+    """HTTP client wired to the per-test database for shared web tests."""
+    from k9overwatch.db import connection as db_conn
+    from k9overwatch.web import dependencies as deps
+    from k9overwatch.web import rate_limit
+
+    rate_limit.reset()
+    engine = db_session.bind
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    saved_engine = db_conn._engine
+    saved_factory = db_conn._session_factory
+    db_conn._engine = engine
+    db_conn._session_factory = factory
+
+    async def override_get_db():
+        async with factory() as session:
+            yield session
+
+    app.dependency_overrides[deps.get_db] = override_get_db
+    try:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as http:
+            yield http
+    finally:
+        app.dependency_overrides.clear()
+        db_conn._engine = saved_engine
+        db_conn._session_factory = saved_factory
 
 
 # ── PetRecord factories ───────────────────────────────────────────────────────

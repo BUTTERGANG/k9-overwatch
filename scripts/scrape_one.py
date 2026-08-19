@@ -24,6 +24,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -83,7 +84,7 @@ async def main():
     print(f"{'='*60}\n")
 
     if save:
-        from k9overwatch.db.connection import init_db, get_session
+        from k9overwatch.db.connection import get_session, init_db
         from k9overwatch.db.repository import PetRepository
         from k9overwatch.geocoding.geocoder import GeocodingService
         from k9overwatch.geocoding.providers.nominatim import NominatimProvider

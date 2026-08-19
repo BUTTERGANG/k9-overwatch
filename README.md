@@ -23,7 +23,8 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 | `docs/api-analysis-indylostpetalert.md` | IndyLostPetAlert — Open WordPress REST API |
 | `docs/api-analysis-petfbi.md` | Pet FBI — GraphQL API, AWS WAF protected, provides lat/lon directly |
 | `docs/api-analysis-lostmydoggie.md` | Lost My Doggie — Cloudflare-protected, phone alert service |
-| `docs/unified-data-schema.md` | Canonical pet record schema across all sources |
+|| `docs/unified-data-schema.md` | Canonical pet record schema across all sources |
+|| `docs/visual-similarity.md` | Optional provider-backed visual matching seam and configuration |
 
 ---
 
@@ -123,7 +124,8 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 │                       Scheduler (APScheduler)                       │
 │   Each scraper runs on its own interval; matching pass every 30 min │
 │   Staleness check every 6 hours (marks removed listings inactive)   │
-│   Runs inside the web process when RUN_SCHEDULER=true               │
+│   Runs inside the web process when RUN_SCHEDULER=true; a singleton  │
+│   lock prevents duplicate scheduler ownership per database/host     │
 └──────────────────────────────┬──────────────────────────────────────┘
                                │
                                ▼
@@ -188,10 +190,10 @@ Key `.env` settings:
 | `GEOCODE_PROVIDER` | `nominatim` | `nominatim` (free) or `google` |
 | `GOOGLE_MAPS_API_KEY` | — | Required only when `GEOCODE_PROVIDER=google` |
 | `ADMIN_USER` | `admin` | HTTP Basic username for `/admin` routes |
-| `ADMIN_PASSWORD` | `changeme` | HTTP Basic password — **change in production** |
+| `ADMIN_PASSWORD` | `changeme` (development only) | HTTP Basic password — **must be explicitly set to a non-default value in production** |
 | `RUN_SCHEDULER` | `false` | Set `true` to run scrapers inside the web process |
 | `LOG_FORMAT` | `pretty` | `pretty` (dev) or `json` (production) |
-| `SESSION_SECRET` | dev default | Signs user session cookies — **set to a long random value in production** |
+| `SESSION_SECRET` | dev default (development only) | Signs user session cookies — **must be explicitly set to a non-default value in production** |
 | `SMTP_HOST` | — | SMTP server for match emails. If unset, emails are logged (no-op) so dev is never blocked |
 | `SMTP_PORT` | `587` | SMTP port |
 | `SMTP_USER` | — | SMTP username |
@@ -221,6 +223,10 @@ RUN_SCHEDULER=true PYTHONPATH=src uvicorn k9overwatch.web.main:app --host 0.0.0.
 # As a separate process (alternative to RUN_SCHEDULER=true)
 PYTHONPATH=src python -m k9overwatch.scheduler.runner
 ```
+
+The scheduler takes a singleton lock: PostgreSQL uses an advisory lock, while
+SQLite/local deployments use a non-blocking host file lock. A second scheduler
+process exits without running jobs.
 
 ### Test a Single Scraper
 
@@ -296,23 +302,33 @@ src/k9overwatch/
 │   ├── deduplicator.py       # Deduplicator — same pet on multiple platforms
 │   └── lost_found_matcher.py # LostFoundMatcher — lost → found reunification
 ├── scheduler/
-│   ├── jobs.py               # run_scraper(), run_matching_pass(), check_stale_records()
+│   ├── jobs.py               # run_scraper(), run_matching_pass(), check_stale_records(),
+│   │                         # expire_stale_listings(), regeocode_pending_records(),
+│   │                         # flush_digest_notifications(), flush_saved_search_notifications()
 │   └── runner.py             # ScraperScheduler — APScheduler interval jobs
 ├── web/
 │   ├── main.py               # FastAPI app + lifespan (init DB, warm pool, optional scheduler)
 │   ├── dependencies.py       # get_db() — async session injection
 │   ├── templates_config.py   # Jinja2 environment setup
+│   ├── rate_limit.py         # In-process per-IP fixed-window limiter (auth + report routes)
 │   ├── routers/
+│   │   ├── onboarding.py     # / (landing), /how-it-works
+│   │   ├── accounts.py       # /login, /register, /account, /forgot-password, /reset-password, /logout
+│   │   ├── reports.py        # /report — owner-submitted lost/found/sighting with photo uploads
+│   │   ├── images.py         # /img — cached, size-capped image proxy
 │   │   ├── pets.py           # /pets, /pets/{id}, /pets/results (HTMX partial)
-│   │   ├── map.py            # /map, /api/map/geojson (GeoJSON bounding-box endpoint)
+│   │   ├── map.py            # /map, /api/map/geojson, /api/map/buckets
 │   │   ├── matches.py        # /matches (lost→found pairs, dedup pairs)
 │   │   └── admin.py          # /admin, /admin/stats-partial (HTTP Basic auth required)
 │   ├── templates/
 │   │   ├── base.html         # Frosted-glass nav, mobile drawer menu, page transitions, Tailwind config
 │   │   ├── macros.html       # Shared Jinja2 macros (status_badge, species_icon, loading_spinner, etc.)
+│   │   ├── landing.html      # / — marketing landing page
+│   │   ├── how_it_works.html # /how-it-works — onboarding guide
 │   │   ├── map.html          # Leaflet map + responsive filter drawer (FAB toggle on mobile)
 │   │   ├── pets/             # list.html, _results.html (HTMX partial), card.html, detail.html
 │   │   ├── matches/          # list.html — scored match pairs
+│   │   ├── accounts/         # login, register, account, forgot/reset-password, report.html, message.html
 │   │   ├── admin/            # dashboard.html, stats_partial.html
 │   │   └── errors/           # 404.html, 500.html
 │   └── static/
@@ -330,6 +346,7 @@ tests/
 ├── test_geocoding.py         # Geocoding cascade, cache, ZIP centroid fallback
 ├── test_integration.py       # Full pipeline: upsert → geocode → match → save
 ├── test_web_routes.py        # FastAPI TestClient: routes, validation, auth
+├── test_accounts_reports.py  # Accounts, owner reports, contact requests
 └── test_repository_extra.py  # mark_inactive_bulk, get_stale_records, cache savepoint
 docs/
 ├── api-analysis-*.md         # Per-source API analysis
@@ -344,10 +361,16 @@ docs/
 
 | Route | Description |
 |---|---|
+| `/` | Landing page — marketing overview, calls to action |
+| `/how-it-works` | Onboarding guide |
 | `/map` | Interactive Leaflet map — pins colored by record type, amber badge dot on pins with matches, bounding-box "Search this area" button, filter sidebar |
 | `/pets` | Filterable pet card grid — species, type, days; HTMX partial updates; URL-reflected filter state |
 | `/pets/{id}` | Pet detail page — full info, photo gallery, mini-map, matched pets |
 | `/matches` | Lost ↔ Found / dedup match list — confidence-scored pairs, confirm/dismiss review buttons |
+| `/login`, `/register`, `/logout` | Signed-cookie account auth (rate-limited) |
+| `/forgot-password`, `/reset-password` | Single-use, expiring password-reset flow (rate-limited) |
+| `/account` | Notification preferences, saved searches, submitted reports |
+| `/report` | Owner-submitted lost/found/sighting with photo upload (login required, rate-limited) |
 | `/admin` | Scraper health dashboard — live stats, run history, error counts (auth required) |
 
 ### API Endpoints
@@ -355,6 +378,8 @@ docs/
 | Endpoint | Description |
 |---|---|
 | `GET /api/map/geojson` | GeoJSON FeatureCollection filtered by bounding box + type + days; includes `match_count` per feature |
+| `GET /api/map/buckets` | Aggregate counts by type/status for the map filter sidebar |
+| `GET /img` | Cached, size-capped (8MB) image proxy for source-hosted photos |
 | `GET /api/health` | Health check — returns 200 (ok) or 503 (db error) |
 | `GET /admin/stats-partial` | HTMX-polled stats partial (refreshes every 30s) |
 | `POST /api/matches/{id}/review?confirmed=true\|false` | Mark a match as human-reviewed; sets `confirmed` flag |
@@ -468,10 +493,14 @@ Geocoding cost:
 | Pet FBI | every 40 min | Playwright required (WAF token capture) |
 | Lost My Doggie | every 45 min | Playwright required |
 | Matching pass | every 30 min | Dedup + lost→found, both directions, on newly ingested records |
+| Re-geocode backstop | every 20 min | Retries active records with address text but no coordinates (mainly user reports, geocoded once at submit time) — see [Geocoding Strategy](#geocoding-strategy) |
 | Staleness check | every 6 hours | Verifies IndyLostPetAlert records still active |
+| Age-based expiry | every 24 hours | Source-agnostic fallback: deactivates any active listing older than 120 days, regardless of source |
+| Match digest | daily 19:00 UTC | Coalesced per-day email of new matches, respecting per-user notification preferences |
+| Saved-search notifications | every 5 min | Drains the durable notification queue with bounded retry |
 | Re-match pass | daily 04:00 | Idempotent re-scan of recent records (last 120d) so matches improve as more data arrives (e.g. geocoding fills coordinates) |
 
-All scrapers also trigger an immediate targeted matching pass on their newly ingested records (`run_matching=True`), so new pets are matched against the existing pool without waiting for the batch job.
+All scrapers also trigger an immediate targeted matching pass on their newly ingested records (`run_matching=True`), so new pets are matched against the existing pool without waiting for the batch job. The re-geocode backstop does the same for any record it successfully fills in coordinates for.
 
 > `ScraperScheduler` (`scheduler/runner.py`) runs each scraper on the per-source interval shown in the table above, with staggered startup runs and one active run per source. Matching runs every 30 minutes.
 
@@ -479,16 +508,16 @@ All scrapers also trigger an immediate targeted matching pass on their newly ing
 
 ## Deployment (Replit + NeonDB)
 
-The app is configured for Replit with NeonDB as the production database.
+### Deployment status
 
-1. Add your NeonDB connection string as a Replit secret named `neondb`
-2. Add `ADMIN_USER` and `ADMIN_PASSWORD` secrets for the admin dashboard
-3. Add a random `SESSION_SECRET` secret to sign user session cookies
-4. Optionally add SMTP secrets (`SMTP_HOST`, etc.) to enable match-alert emails
-5. Optionally add `RUN_SCHEDULER=true` to run scrapers inside the web process
-6. Hit **Run** — the workflow installs dependencies, then starts uvicorn on port 5000
-
-The `DATABASE_URL` environment variable is automatically set to `$neondb` by the workflow. The app normalizes `postgres://` URLs to `postgresql+asyncpg://` and handles NeonDB's `sslmode=require` automatically.
+Replit + NeonDB configuration exists as a development/deployment sketch, but
+live deployment and production validation are **deferred**. Do not treat the
+following as completed operational steps: provisioning secrets, running the
+web process, configuring a scheduler owner, applying PostgreSQL migrations,
+or validating external SMTP/browser providers. The application does normalize
+`postgres://` URLs to `postgresql+asyncpg://` and handles NeonDB's
+`sslmode=require` when configured, but those deployment paths remain
+unverified here.
 
 ---
 
@@ -502,7 +531,7 @@ The `DATABASE_URL` environment variable is automatically set to `$neondb` by the
 - [x] Build scraper for Pet FBI (Playwright + GraphQL + AWS WAF bypass)
 - [x] Build scraper for Lost My Doggie (Playwright + Cloudflare stealth)
 - [x] Unified PetRecord schema (Pydantic v2)
-- [x] Source-specific normalizers (all 5 validated against live pages)
+- [x] Source-specific normalizers (fixture-tested; live browser-source validation is deferred)
 
 ### Phase 2 — Storage & Matching ✅ Complete
 - [x] Database schema (SQLAlchemy ORM, SQLite dev / PostgreSQL prod)
@@ -513,7 +542,7 @@ The `DATABASE_URL` environment variable is automatically set to `$neondb` by the
 - [x] APScheduler polling jobs (5 scrapers + matching pass + staleness check)
 - [x] Scraper state tracking (high-water mark for incremental polling)
 - [x] Staleness checks (mark inactive listings)
-- [x] Comprehensive test suite (195 tests — normalizers, matching, geocoding, DB, web routes)
+- [x] Comprehensive test suite (314 passed, 1 skipped in the current baseline)
 
 ### Phase 3 — Web Application ✅ Complete
 - [x] FastAPI + Jinja2 web application
@@ -523,7 +552,7 @@ The `DATABASE_URL` environment variable is automatically set to `$neondb` by the
 - [x] Lost ↔ Found match list with confidence scoring
 - [x] Admin dashboard with live scraper health stats (HTTP Basic auth)
 - [x] Mobile-responsive layout with hamburger nav
-- [x] NeonDB (PostgreSQL) production deployment on Replit
+- [ ] NeonDB/Replit production deployment and migration validation (deferred)
 - [x] UI modernization — frosted-glass navbar, page fade-in transitions, mobile filter drawers
 - [x] Reusable Jinja2 macros (status_badge, species_icon, loading_spinner)
 - [x] Accessibility improvements — ARIA attributes, keyboard-navigable gallery, screen reader support
@@ -555,36 +584,44 @@ The `DATABASE_URL` environment variable is automatically set to `$neondb` by the
 
 ### Phase 5 — Accounts & Owner Reports ✅ Built
 - [x] **User accounts** — register / log in / log out (signed-cookie sessions,
-      scrypt password hashing, no external dependency). Nav shows Sign up /
-      Log in when anonymous and My Account / Log out once signed in.
+      scrypt password hashing, no external dependency). Email verification is
+      required before login; single-use, expiring password-reset tokens are
+      supported.
 - [x] **Owner-submitted reports** — `/report` lets a logged-in person post a
-      lost/found/sighting with photo upload (stored in `data/uploads/`) and
-      contact info. Submitted reports are geocoded from the entered location and
-      appear on the map as `source="user"` listings.
-- [x] **Contact mechanism** — contact info (name/email/phone) is captured on
-      reports and **revealed only to logged-in users** on the pet detail page
-      (anonymous viewers see a "Log in to view" prompt). This protects submitters
-      from scrapers while still making reunification possible.
-- [x] **Opt-in match notifications** (non-spammy by design):
-  - Per-user `NotificationPrefs`: frequency (`off` / `daily` / `immediate`),
-    minimum confidence (`high` / `medium` / `any`), and an opt-out checkbox.
-  - Defaults: **daily digest, medium+ confidence, never spam.**
-  - Only user-submitted LOST pets trigger an email; only when a match clears the
-    user's threshold; `immediate` emails are coalesced into the next daily digest
-    so a person is never blasted. Every email carries a one-click unsubscribe link.
-  - Email is sent via SMTP only if `SMTP_HOST` is configured; otherwise it logs
-    (safe no-op) so the dev environment is never blocked.
-  - Digest job runs daily at 19:00 via the scheduler.
+      lost/found/sighting with bounded, extension- and image-signature-checked
+      photo uploads (stored in `data/uploads/`) and contact info.
+- [x] **Contact mechanism** — contact info is revealed only to logged-in users
+      on the pet detail page.
+- [x] **Saved searches** — authenticated users can create, update, and delete
+      bounded search criteria; newly ingested matches are queued for delivery.
+- [x] **Durable notification delivery** — saved-search notifications are stored
+      in a database queue with atomic claims and bounded retry scheduling; SMTP
+      remains configuration-gated and failures do not block ingestion.
+- [x] **CSRF protection** — signed, user-bound tokens are embedded in forms and
+      checked by middleware for cookie-authenticated state-changing requests.
+- [x] **Scheduler singleton ownership** — PostgreSQL advisory locks or a
+      non-blocking host file lock prevent duplicate scheduler processes.
+- [x] **Rate limiting on sensitive routes** — in-process per-IP fixed-window
+      limiter on login/register/password-reset/report (`web/rate_limit.py`).
 
-### Phase 6 — Advanced Features
-- [ ] Saved searches
-- [ ] **Visual similarity matching** — generate CLIP/MobileNet embedding vectors per image,
-      store in DB, use cosine similarity as an additional matching signal to catch
-      same-dog listings with mismatched text descriptions (e.g. "brown mutt" vs "tan terrier")
-- [ ] PostGIS migration for `ST_DWithin()` geo queries at scale
-- [ ] Staleness checks for browser-based scrapers (PawBoost, PetFBI, LostMyDoggie)
+### Phase 6 — Deferred / Not Yet Validated
+- [ ] Real visual embeddings (CLIP/MobileNet generation, storage, and matching)
+- [ ] PostGIS migration and `ST_DWithin()` geo queries at scale
+- [ ] Live browser-source validation and browser-scraper staleness checks
+- [ ] Broader API rate limiting (map/search/read endpoints beyond auth & report)
+      and a shared (not in-process) store if this ever runs multi-worker
+- [ ] Audit logging
+- [ ] Database migrations and production deployment/operations validation
 - [ ] Adoption listings integration
 - [ ] Additional sources: Petfinder (official API), Petco Love Lost (facial recognition), Finding Rover
+
+### New features (2026-08-19)
+
+- [x] **Geocode confidence on map pins** — pin popups now show "Exact location", "Neighborhood", or "ZIP code area" badges based on the source's geocode precision. Color-coded (green/yellow/red) with a location icon.
+- [x] **Reunited status path** — pet owners can mark their lost/found/sighting reports as reunited via a "🎉 Reunited" button on the pet detail page. This deactivates the listing, closes active matches, and deactivates the matched counterpart if one exists.
+- [x] **Reactivation path** — if a user report was auto-deactivated (stale flagging or admin action), the owner can reactivate it with a "↻ Reactivate" button to put it back on the map.
+- [x] **Auto-stale flagging with notification window** — expired listings now get a two-phase treatment: user-submitted reports receive a `stale_notified_at` timestamp on the first stale pass, and are only deactivated on the second pass (24h later). Non-user reports are deactivated immediately as before. The `stale_notified_at` column is tracked per-row.
+- [x] **Source health dashboard** — admin dashboard now shows per-source stats: active/total pet counts, geocode fill rate (% with lat/lon), and a record-type breakdown (lost/found/sighting/adoptable). Replaces the previous single-number scraper health view.
 
 ### Planned Sources (Phase 4)
 | Source | Notes |

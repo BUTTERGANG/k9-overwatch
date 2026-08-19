@@ -7,7 +7,7 @@ from pathlib import Path
 import uvicorn
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse, RedirectResponse, Response
+from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -23,6 +23,7 @@ from k9overwatch.web.routers import admin as admin_router
 from k9overwatch.web.routers import images as images_router
 from k9overwatch.web.routers import map as map_router
 from k9overwatch.web.routers import matches as matches_router
+from k9overwatch.web.routers import onboarding as onboarding_router
 from k9overwatch.web.routers import pets as pets_router
 from k9overwatch.web.routers import reports as reports_router
 from k9overwatch.web.templates_config import templates
@@ -32,13 +33,13 @@ logger = logging.getLogger(__name__)
 _CSP = (
     "default-src 'self'; "
     "script-src 'self' 'unsafe-inline' 'unsafe-eval' "
-    "https://cdn.tailwindcss.com https://unpkg.com; "
+    "https://unpkg.com; "
     "style-src 'self' 'unsafe-inline' "
-    "https://cdn.tailwindcss.com https://unpkg.com; "
+    "https://unpkg.com; "
     "img-src 'self' data: blob: "
     "https://tile.openstreetmap.org https://*.tile.openstreetmap.org "
     "https://*.basemaps.cartocdn.com; "
-    "font-src 'self' https://unpkg.com; "
+    "font-src 'self' https://unpkg.com https://fonts.gstatic.com https://fonts.googleapis.com; "
     "connect-src 'self'; "
     "frame-ancestors 'none';"
 )
@@ -76,19 +77,28 @@ async def lifespan(app: FastAPI):
     async with get_engine().connect() as conn:
         await conn.execute(text("SELECT 1"))
 
-    # Optionally start the scraper scheduler in-process
+    # Optionally start the scraper scheduler in-process. The singleton lock
+    # prevents duplicate schedulers across web workers and deploy replicas.
     scheduler = None
+    scheduler_lock = None
     if os.getenv("RUN_SCHEDULER", "false").lower() == "true":
-        from k9overwatch.scheduler.runner import ScraperScheduler
-        scheduler = ScraperScheduler().build()
-        scheduler.start()
-        logger.info("Scraper scheduler started")
+        from k9overwatch.scheduler.runner import SchedulerSingletonLock, ScraperScheduler
+
+        scheduler_lock = SchedulerSingletonLock()
+        if await scheduler_lock.acquire():
+            scheduler = ScraperScheduler().build()
+            scheduler.start()
+            logger.info("Scraper scheduler started")
+        else:
+            logger.warning("Scheduler lock is already held; scheduler disabled in this process")
 
     yield
 
     if scheduler is not None:
         scheduler.shutdown()
         logger.info("Scraper scheduler shut down")
+    if scheduler_lock is not None:
+        await scheduler_lock.release()
 
 
 app = FastAPI(title="K9-Overwatch", lifespan=lifespan)
@@ -101,10 +111,16 @@ _WEB_DIR = Path(__file__).parent
 async def auth_context(request: Request, call_next):
     """Resolve login state once per request and expose it on request.state."""
     from k9overwatch.db.repository import UserRepository
-    from k9overwatch.web.auth import COOKIE_NAME, read_session_token
+    from k9overwatch.web.auth import (
+        COOKIE_NAME,
+        csrf_token_for,
+        read_session_token,
+        validate_csrf_token,
+    )
 
     user_id = read_session_token(request.cookies.get(COOKIE_NAME))
     request.state.is_logged_in = bool(user_id)
+    request.state.csrf_token = csrf_token_for(user_id or "anonymous")
     request.state.current_user_name = None
     if user_id:
         from k9overwatch.db.connection import get_session_factory
@@ -114,6 +130,20 @@ async def auth_context(request: Request, call_next):
             user = await UserRepository(session).get_by_id(user_id)
             if user:
                 request.state.current_user_name = user.display_name
+
+    # Login and registration are intentionally usable without a prior session
+    # token. All cookie-authenticated mutations still require a user-bound token.
+    auth_path = request.url.path in {
+        "/login", "/register", "/forgot-password", "/reset-password",
+    }
+    if user_id and not auth_path and request.method in {"POST", "PUT", "PATCH", "DELETE"}:
+        token = request.headers.get("X-CSRF-Token")
+        if not token:
+            await request.body()
+            form = await request.form()
+            token = form.get("csrf_token")
+        if not isinstance(token, str) or not validate_csrf_token(token, user_id):
+            return Response("CSRF validation failed", status_code=403, media_type="text/plain")
     return await call_next(request)
 
 
@@ -121,7 +151,8 @@ def _inject_user_state(request: Request):
     """Expose login state to every template via request.state (set by middleware)."""
     is_logged_in = bool(getattr(getattr(request, "state", None), "is_logged_in", False))
     name = getattr(getattr(request, "state", None), "current_user_name", None)
-    return {"is_logged_in": is_logged_in, "current_user_name": name}
+    csrf_token = getattr(getattr(request, "state", None), "csrf_token", "")
+    return {"is_logged_in": is_logged_in, "current_user_name": name, "csrf_token": csrf_token}
 
 
 templates.context_processors.append(_inject_user_state)
@@ -134,6 +165,7 @@ os.makedirs(_uploads_dir, exist_ok=True)
 app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
 
 # Routers
+app.include_router(onboarding_router.router)
 app.include_router(accounts_router.router)
 app.include_router(reports_router.router)
 app.include_router(images_router.router)
@@ -170,11 +202,6 @@ async def health_check():
 @app.get("/favicon.ico", include_in_schema=False)
 async def favicon():
     return Response(status_code=204)
-
-
-@app.get("/")
-async def root():
-    return RedirectResponse(url="/map")
 
 
 if __name__ == "__main__":

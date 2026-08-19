@@ -81,6 +81,7 @@ class PetRow(Base):
     # Ownership: links a record to the user who submitted it (source == "user")
     owner_id = Column(String(36), index=True)
     owner_report_status = Column(Text, index=True)
+    stale_notified_at = Column(DateTime, default=None)
 
     # Shelter
     shelter_name = Column(Text)
@@ -107,6 +108,7 @@ class PetRow(Base):
     # Audit
     scraped_at = Column(DateTime, default=_now)
     last_checked_at = Column(DateTime, default=_now)
+    stale_notified_at = Column(DateTime, nullable=True)  # set when auto-stale warning sent to owner
 
     # Raw payload
     raw = Column(JSON)
@@ -176,6 +178,36 @@ class GeocodeCache(Base):
     hit_count = Column(Integer, default=1)
 
 
+class AccountToken(Base):
+    """Hashed, expiring, single-use account action token."""
+    __tablename__ = "account_tokens"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=False, index=True)
+    purpose = Column(String(40), nullable=False, index=True)
+    token_hash = Column(String(64), nullable=False, unique=True)
+    expires_at = Column(DateTime, nullable=False, index=True)
+    used_at = Column(DateTime)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+    __table_args__ = (Index("ix_account_tokens_lookup", "user_id", "purpose", "used_at"),)
+
+
+class EmailQueue(Base):
+    """Provider-independent outbound email queue for local/dev delivery adapters."""
+    __tablename__ = "email_queue"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=False, index=True)
+    recipient = Column(Text, nullable=False)
+    kind = Column(String(40), nullable=False)
+    subject = Column(Text, nullable=False)
+    body = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    created_at = Column(DateTime, default=_now, nullable=False)
+    sent_at = Column(DateTime)
+
+
 class User(Base):
     """A person with an account (submits reports, receives match alerts)."""
     __tablename__ = "users"
@@ -187,6 +219,7 @@ class User(Base):
     password_hash = Column(Text, nullable=False)
     created_at = Column(DateTime, default=_now)
     is_active = Column(Boolean, default=True, nullable=False)
+    email_verified = Column(Boolean, default=False, nullable=False)
 
 
 class NotificationPrefs(Base):
@@ -212,6 +245,53 @@ class NotificationPrefs(Base):
     updated_at = Column(DateTime, default=_now)
 
 
+class SavedSearch(Base):
+    """A user's persisted listing criteria for future alerts and quick reuse."""
+    __tablename__ = "saved_searches"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=False, index=True)
+    name = Column(String(120), nullable=False)
+    record_type = Column(Text, nullable=False, default="lost")
+    animal_type = Column(Text)
+    species = Column(Text)
+    latitude = Column(Float)
+    longitude = Column(Float)
+    radius_miles = Column(Integer)
+    days = Column(Integer, nullable=False, default=30)
+    min_confidence = Column(Text, nullable=False, default="medium")
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_at = Column(DateTime, default=_now, nullable=False)
+    updated_at = Column(DateTime, default=_now, onupdate=_now, nullable=False)
+
+    __table_args__ = (Index("ix_saved_searches_user_enabled", "user_id", "enabled"),)
+
+
+class NotificationQueue(Base):
+    """Durable, provider-independent queue for saved-search alerts."""
+    __tablename__ = "notification_queue"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(String(36), nullable=False, index=True)
+    saved_search_id = Column(String(36), nullable=False, index=True)
+    pet_id = Column(String(36), nullable=False, index=True)
+    subject = Column(Text, nullable=False)
+    body = Column(Text, nullable=False)
+    confidence = Column(Text)
+    status = Column(Text, nullable=False, default="pending", index=True)
+    attempts = Column(Integer, nullable=False, default=0)
+    created_at = Column(DateTime, default=_now, nullable=False)
+    claimed_at = Column(DateTime)
+    sent_at = Column(DateTime)
+    next_attempt_at = Column(DateTime, index=True)
+    last_error = Column(Text)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "saved_search_id", "pet_id", name="uq_notification_saved_search_pet"),
+        Index("ix_notification_queue_status_created", "status", "created_at"),
+    )
+
+
 class ContactRequest(Base):
     """Private, authenticated relay between a report owner and another user."""
     __tablename__ = "contact_requests"
@@ -228,3 +308,42 @@ class ContactRequest(Base):
     __table_args__ = (
         Index("ix_contact_requests_pair_pet_status", "pet_id", "requester_id", "recipient_id", "status"),
     )
+
+
+class ContactMessage(Base):
+    """Threaded messages inside a contact relay conversation."""
+    __tablename__ = "contact_messages"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    contact_id = Column(String(36), nullable=False, index=True)
+    sender_id = Column(String(36), nullable=False)
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_contact_messages_contact_created", "contact_id", "created_at"),
+    )
+
+
+class ContactBlock(Base):
+    """Users can block others to stop contact relay abuse."""
+    __tablename__ = "contact_blocks"
+
+    blocker_id = Column(String(36), primary_key=True)
+    blocked_id = Column(String(36), primary_key=True)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+class ContentReport(Base):
+    """User-flagged content (reports, contact requests) for admin review."""
+    __tablename__ = "content_reports"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    reporter_id = Column(String(36), nullable=False, index=True)
+    target_type = Column(String(40), nullable=False, index=True)  # "report" | "contact_request"
+    target_id = Column(String(36), nullable=False, index=True)
+    reason = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="pending", index=True)  # pending | reviewed | dismissed
+    created_at = Column(DateTime, default=_now, nullable=False)
+    reviewed_at = Column(DateTime)
+    reviewed_by = Column(String(36))

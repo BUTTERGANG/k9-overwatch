@@ -74,7 +74,7 @@ async def _fetch(request: Request, url: str) -> bytes:
     async with scraping_session() as client:
         resp = await client.get(url, timeout=15)
         resp.raise_for_status()
-        return resp.content
+        return await resp.read()
 
 
 @router.get("/img")

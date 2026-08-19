@@ -243,3 +243,62 @@ async def pet_matches_partial(
         "pets/matches_partial.html",
         {"match_pairs": match_pairs},
     )
+
+
+@router.post("/pets/{pet_id}/reactivate")
+async def reactivate_pet(
+    pet_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Owner reactivates their own report (was previously closed/reunited)."""
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url=f"/login?next=/pets/{pet_id}", status_code=303)
+    pet = (await db.execute(select(PetRow).where(PetRow.id == pet_id))).scalar_one_or_none()
+    if pet is None:
+        raise HTTPException(status_code=404, detail="Pet not found")
+    if pet.owner_id != user_id:
+        raise HTTPException(status_code=403, detail="You are not the owner of this report.")
+    if pet.source != "user":
+        raise HTTPException(status_code=400, detail="Only user-submitted reports can be reactivated.")
+    pet.active = True
+    pet.owner_report_status = "open"
+    await db.commit()
+    return RedirectResponse(url=f"/pets/{pet_id}", status_code=303)
+
+
+@router.post("/pets/{pet_id}/reunited")
+async def mark_reunited(
+    pet_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Owner marks their pet as reunited. Deactivates the pet and any matched counterpart."""
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url=f"/login?next=/pets/{pet_id}", status_code=303)
+    pet = (await db.execute(select(PetRow).where(PetRow.id == pet_id))).scalar_one_or_none()
+    if pet is None:
+        raise HTTPException(status_code=404, detail="Pet not found")
+    if pet.owner_id != user_id:
+        raise HTTPException(status_code=403, detail="You are not the owner of this report.")
+    if pet.source != "user":
+        raise HTTPException(status_code=400, detail="Only user-submitted reports can be marked reunited.")
+    pet.active = False
+    pet.owner_report_status = "reunited"
+
+    # Deactivate the matched counterpart if the match is lost_found type.
+    match_result = await db.execute(
+        select(PetMatch).where(
+            or_(PetMatch.pet_a_id == pet_id, PetMatch.pet_b_id == pet_id),
+            PetMatch.match_type == "lost_found",
+        )
+    )
+    for match in match_result.scalars().all():
+        counterpart_id = match.pet_b_id if match.pet_a_id == pet_id else match.pet_a_id
+        counterpart = await db.get(PetRow, counterpart_id)
+        if counterpart is not None and counterpart.active:
+            counterpart.active = False
+    await db.commit()
+    return RedirectResponse(url=f"/pets/{pet_id}", status_code=303)

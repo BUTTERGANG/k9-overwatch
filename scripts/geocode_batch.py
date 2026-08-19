@@ -23,6 +23,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from dotenv import load_dotenv
+
 load_dotenv()
 
 
@@ -55,13 +56,13 @@ async def main() -> None:
         else:
             i += 1
 
-    from k9overwatch.db.connection import init_db, get_session
-    from k9overwatch.db.models import Base, PetRow
-    from k9overwatch.geocoding.geocoder import GeocodingService, _ZIP_CENTROIDS
-    from k9overwatch.geocoding.providers.nominatim import NominatimProvider
-    from k9overwatch.models.enums import GeocodeConfidence, GeocodeSource
-    from k9overwatch.models.pet_record import PetRecord
     from sqlalchemy import and_, select, update
+
+    from k9overwatch.db.connection import get_session, init_db
+    from k9overwatch.db.models import PetRow
+    from k9overwatch.geocoding.geocoder import GeocodingService
+    from k9overwatch.geocoding.providers.nominatim import NominatimProvider
+    from k9overwatch.models.pet_record import PetRecord
 
     # Build provider list
     providers = []
@@ -79,7 +80,7 @@ async def main() -> None:
     await init_db()
 
     print(f"\n{'='*60}")
-    print(f"  Batch Geocoder")
+    print("  Batch Geocoder")
     print(f"  Provider:  {provider_name}")
     print(f"  Source:    {source_filter or 'all'}")
     print(f"  Limit:     {limit}")

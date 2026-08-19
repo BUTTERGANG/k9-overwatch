@@ -6,6 +6,7 @@ in-memory session, and signed-cookie auth simulated via the app's own helpers.
 """
 from __future__ import annotations
 
+import base64
 import io
 
 import pytest
@@ -13,8 +14,18 @@ from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from k9overwatch.db.repository import PetRepository, UserRepository
-from k9overwatch.web.auth import COOKIE_NAME, make_session_token
+from k9overwatch.geocoding.geocoder import GeocodeResult
+from k9overwatch.geocoding.providers.nominatim import NominatimProvider
+from k9overwatch.models.enums import GeocodeConfidence, GeocodeSource
+from k9overwatch.web.auth import COOKIE_NAME, csrf_token_for, make_session_token
 from k9overwatch.web.main import app
+from k9overwatch.web.routers import reports
+
+# Small real JPEG fixture: unlike a filename or client MIME header, these bytes
+# can be decoded and validated by the upload pipeline.
+VALID_JPEG = base64.b64decode(
+    "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAH/AP/EABQQAQAAAAAAAAAAAAAAAAAAACD/2gAIAQEAAT8Af//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQIBAT8Af//EABQRAQAAAAAAAAAAAAAAAAAAABD/2gAIAQMBAT8Af//Z"
+)
 
 
 @pytest.fixture
@@ -58,18 +69,25 @@ async def test_register_login_logout_flow(client, db_session):
     # Register
     resp = await client.post(
         "/register",
-        data={"email": "owner@example.com", "password": "supersecret", "display_name": "Sam"},
+        data={"email": "owner@example.com", "password": "supersecret", "display_name": "Sam", "csrf_token": csrf_token_for("anonymous")},
     )
-    assert resp.status_code in (302, 303), resp.status_code
-    # User + default prefs created
+    assert resp.status_code == 200, resp.status_code
+    # User + default prefs created; activate through the queued verification link.
     users = UserRepository(db_session)
     user = await users.get_by_email("owner@example.com")
     assert user is not None
+    from sqlalchemy import select
+
+    from k9overwatch.db.models import EmailQueue
+    queued = (await db_session.execute(select(EmailQueue))).scalar_one()
+    token = queued.body.split("token=", 1)[1]
+    verified = await client.get(f"/account/email-verification?token={token}")
+    assert verified.status_code == 200
     prefs = await users.get_prefs(user.id)
     assert prefs is not None and prefs.frequency == "digest" and prefs.min_confidence == "medium"
 
     # Log in with right password
-    resp = await client.post("/login", data={"email": "owner@example.com", "password": "supersecret"})
+    resp = await client.post("/login", data={"email": "owner@example.com", "password": "supersecret", "csrf_token": csrf_token_for("anonymous")})
     assert resp.status_code in (302, 303)
     cookie = resp.cookies.get(COOKIE_NAME)
     assert cookie
@@ -81,8 +99,14 @@ async def test_register_login_logout_flow(client, db_session):
     assert "My account" in resp.text
 
     # Wrong password rejected
-    resp = await client.post("/login", data={"email": "owner@example.com", "password": "wrong"})
+    resp = await client.post("/login", data={"email": "owner@example.com", "password": "wrong", "csrf_token": csrf_token_for("anonymous")})
     assert resp.status_code == 401
+
+
+async def test_flush_digest_requires_admin_authentication(client):
+    response = await client.post("/admin/flush-digest")
+
+    assert response.status_code == 401
 
 
 async def test_report_requires_login(client, db_session):
@@ -91,12 +115,75 @@ async def test_report_requires_login(client, db_session):
     assert "/login" in str(resp.headers.get("location", ""))
 
 
-async def test_submit_report_creates_user_row_and_geocodes(client, db_session):
+def test_save_upload_rejects_content_that_only_claims_to_be_jpeg(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "UPLOAD_DIR", str(tmp_path))
+
+    upload = reports.UploadFile(
+        filename="not-an-image.jpg", file=io.BytesIO(b"not a jpeg"), headers={"content-type": "image/jpeg"}
+    )
+
+    assert reports._save_uploads([upload]) == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_save_upload_rejects_jpeg_markers_without_jpeg_structure(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "UPLOAD_DIR", str(tmp_path))
+
+    upload = reports.UploadFile(
+        filename="fake.jpg", file=io.BytesIO(b"\xff\xd8\xff\xe0\x00\x02\xff\xd9")
+    )
+
+    assert reports._save_uploads([upload]) == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_save_upload_rejects_oversize_input_before_decode(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "UPLOAD_DIR", str(tmp_path))
+
+    upload = reports.UploadFile(
+        filename="too-large.jpg", file=io.BytesIO(b"x" * (reports.MAX_UPLOAD_BYTES + 1))
+    )
+
+    assert reports._save_uploads([upload]) == []
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_save_upload_normalizes_valid_jpeg_to_safe_generated_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "UPLOAD_DIR", str(tmp_path))
+
+    upload = reports.UploadFile(
+        filename="../../unsafe-name.jpg", file=io.BytesIO(VALID_JPEG), headers={"content-type": "image/jpeg"}
+    )
+
+    paths = reports._save_uploads([upload])
+
+    assert len(paths) == 1
+    saved_name = paths[0].removeprefix("/uploads/")
+    assert saved_name.endswith(".jpg")
+    assert saved_name != "unsafe-name.jpg"
+    assert (tmp_path / saved_name).is_file()
+
+
+async def test_submit_report_creates_user_row_and_geocodes(client, db_session, tmp_path, monkeypatch):
+    monkeypatch.setattr(reports, "UPLOAD_DIR", str(tmp_path))
+
+    # Stub the network boundary instead of hitting live Nominatim: keeps the test
+    # hermetic and avoids flaking on the provider's own rate limiting.
+    async def fake_geocode(self, address):
+        return GeocodeResult(
+            lat=39.7684,
+            lon=-86.1581,
+            geocode_source=GeocodeSource.NOMINATIM,
+            geocode_confidence=GeocodeConfidence.HIGH,
+        )
+
+    monkeypatch.setattr(NominatimProvider, "geocode", fake_geocode)
+
     users = UserRepository(db_session)
     user = await users.create("reporter@example.com", "password123")
     await db_session.commit()
 
-    files = [("files", ("dog.jpg", io.BytesIO(b"\xff\xd8\xff\xe0fakejpg"), "image/jpeg"))]
+    files = [("files", ("dog.jpg", io.BytesIO(VALID_JPEG), "image/jpeg"))]
     resp = await client.post(
         "/report",
         data={
@@ -108,6 +195,7 @@ async def test_submit_report_creates_user_row_and_geocodes(client, db_session):
             "location_text": "Indianapolis, IN",
             "contact_name": "Pat",
             "contact_email": "pat@example.com",
+            "csrf_token": csrf_token_for(user.id),
         },
         files=files,
         headers={"Cookie": f"{COOKIE_NAME}={make_session_token(user.id)}"},
@@ -122,6 +210,9 @@ async def test_submit_report_creates_user_row_and_geocodes(client, db_session):
     assert row.owner_id == user.id
     assert row.name == "Rex"
     assert row.contact_email == "pat@example.com"
+    assert row.photos and len(row.photos) == 1
+    saved_name = row.photos[0].removeprefix("/uploads/")
+    assert (tmp_path / saved_name).is_file()
     # geocoded from location_text
     assert row.lat is not None and row.lon is not None
 
@@ -152,7 +243,7 @@ async def test_contact_request_creates_private_handoff(client, db_session):
 
     resp = await client.post(
         f"/pets/{row.id}/contact",
-        data={"message": "I may have found Buddy near the park."},
+        data={"message": "I may have found Buddy near the park.", "csrf_token": csrf_token_for(requester.id)},
         headers={"Cookie": f"{COOKIE_NAME}={make_session_token(requester.id)}"},
     )
 
@@ -177,8 +268,8 @@ async def test_contact_request_rejects_duplicate_open_request(client, db_session
     ), owner_id=owner.id)
     await db_session.commit()
     headers = {"Cookie": f"{COOKIE_NAME}={make_session_token(requester.id)}"}
-    first = await client.post(f"/pets/{row.id}/contact", data={"message": "First message"}, headers=headers)
-    second = await client.post(f"/pets/{row.id}/contact", data={"message": "Second message"}, headers=headers)
+    first = await client.post(f"/pets/{row.id}/contact", data={"message": "First message", "csrf_token": csrf_token_for(requester.id)}, headers=headers)
+    second = await client.post(f"/pets/{row.id}/contact", data={"message": "Second message", "csrf_token": csrf_token_for(requester.id)}, headers=headers)
 
     assert first.status_code in (302, 303)
     assert second.status_code == 409
@@ -195,7 +286,7 @@ async def test_contact_request_cannot_target_own_report(client, db_session):
 
     resp = await client.post(
         f"/pets/{row.id}/contact",
-        data={"message": "My own report."},
+        data={"message": "My own report.", "csrf_token": csrf_token_for(user.id)},
         headers={"Cookie": f"{COOKIE_NAME}={make_session_token(user.id)}"},
     )
 
@@ -219,11 +310,11 @@ async def test_contact_request_participants_can_update_status(client, db_session
     await db_session.commit()
 
     denied = await client.post(
-        f"/contact-requests/{contact.id}/status", data={"status": "in_conversation"},
+        f"/contact-requests/{contact.id}/status", data={"status": "in_conversation", "csrf_token": csrf_token_for(outsider.id)},
         headers={"Cookie": f"{COOKIE_NAME}={make_session_token(outsider.id)}"},
     )
     allowed = await client.post(
-        f"/contact-requests/{contact.id}/status", data={"status": "in_conversation"},
+        f"/contact-requests/{contact.id}/status", data={"status": "in_conversation", "csrf_token": csrf_token_for(owner.id)},
         headers={"Cookie": f"{COOKIE_NAME}={make_session_token(owner.id)}"},
     )
 
@@ -381,7 +472,7 @@ async def test_report_owner_can_mark_report_reunited(client, db_session):
     await db_session.commit()
     response = await client.post(
         f"/reports/{row.id}/status",
-        data={"status": "reunited"},
+        data={"status": "reunited", "csrf_token": csrf_token_for(owner.id)},
         headers={"Cookie": f"{COOKIE_NAME}={make_session_token(owner.id)}"},
     )
     assert response.status_code in (302, 303)
@@ -403,7 +494,7 @@ async def test_report_status_cannot_be_changed_by_another_user(client, db_sessio
     await db_session.commit()
     response = await client.post(
         f"/reports/{row.id}/status",
-        data={"status": "closed"},
+        data={"status": "closed", "csrf_token": csrf_token_for(outsider.id)},
         headers={"Cookie": f"{COOKIE_NAME}={make_session_token(outsider.id)}"},
     )
     assert response.status_code == 404

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from ..db.connection import get_session
 from ..db.repository import PetRepository
@@ -51,6 +51,7 @@ async def run_scraper(
     records_fetched = 0
     records_new = 0
     errors = 0
+    saved_alerts = 0
     new_rows = []
 
     async with get_session() as session:
@@ -131,6 +132,7 @@ async def run_scraper(
             records_new=records_new,
             last_record_at=highest_date,
         )
+        saved_alerts = await repo.evaluate_saved_searches(new_rows)
 
         logger.info(
             f"[{source}] Done: {records_fetched} fetched, {records_new} new, "
@@ -146,7 +148,21 @@ async def run_scraper(
         "records_fetched": records_fetched,
         "records_new": records_new,
         "errors": errors,
+        "saved_alerts": saved_alerts,
     }
+
+
+async def run_saved_search_alerts(new_row_ids: list[str]) -> int:
+    """Evaluate enabled saved searches for a set of newly ingested rows."""
+    from sqlalchemy import select
+
+    from ..db.models import PetRow
+
+    async with get_session() as session:
+        rows = list((await session.execute(
+            select(PetRow).where(PetRow.id.in_(new_row_ids))
+        )).scalars().all())
+        return await PetRepository(session).evaluate_saved_searches(rows)
 
 
 async def run_matching_pass(
@@ -302,17 +318,139 @@ async def check_stale_records(stale_hours: int = 48) -> dict:
     return {"deactivated": deactivated}
 
 
-async def expire_stale_listings(max_age_days: int = 120) -> dict:
+async def regeocode_pending_records(limit: int = 100) -> dict:
+    """
+    Retry geocoding for active records that still have no lat/lon.
+
+    Scraped records self-heal: a failed geocode is retried on the source's next
+    full scrape (`needs_geocoding()` stays true until lat is set). User-submitted
+    reports have no such retry — `reports.submit_report` geocodes once, so a
+    transient Nominatim failure (rate limit, timeout) leaves the report
+    permanently off the map and unmatchable. This is the source-agnostic backstop.
+    """
+    regeocoded_ids: list[str] = []
+
+    async with get_session() as session:
+        repo = PetRepository(session)
+        geocoder = _make_geocoder_from_env(session)
+        rows = await repo.get_records_missing_coordinates(limit=limit)
+
+        for row in rows:
+            record = PetRecord(
+                source=row.source,
+                source_id=row.source_id,
+                record_type=row.record_type,
+                animal_type=row.animal_type,
+                location_text=row.location_text,
+                city=row.city,
+                state=row.state,
+                zip=row.zip,
+                country=row.country or "US",
+            )
+            result_record = await geocoder.geocode(record)
+            if result_record.lat is not None:
+                row.lat = result_record.lat
+                row.lon = result_record.lon
+                row.geocode_source = result_record.geocode_source
+                row.geocode_confidence = result_record.geocode_confidence
+                regeocoded_ids.append(row.id)
+
+        await session.commit()
+
+    logger.info(f"Re-geocode sweep: {len(regeocoded_ids)}/{len(rows)} filled in")
+
+    # Newly-coordinated records can now surface geo-matches — run them through
+    # matching immediately rather than waiting for the next full rematch pass.
+    if regeocoded_ids:
+        await run_matching_pass(new_row_ids=regeocoded_ids)
+
+    return {"checked": limit, "regeocoded": len(regeocoded_ids)}
+
+
+async def expire_stale_listings(max_age_days: int = 120, stale_notify_hours: int = 48) -> dict:
     """
     Source-agnostic fallback so resolved/found pets eventually leave the map.
 
     The per-source check_active() path (above) only covers IndyLostPetAlert.
     This expires any active listing whose event date is older than `max_age_days`
     and that has no live match — kept independent of a source's own verification.
+
+    For user-submitted reports, a two-pass approach is used:
+    1. First pass: set `stale_notified_at` to mark that an alert was sent.
+    2. Second pass (already notified, still stale): deactivate the report.
+    Non-user reports are deactivated immediately as before.
     """
+    from datetime import timedelta
+
+    from sqlalchemy import or_, select
+
+    from ..db.models import PetMatch, PetRow
+
+    cutoff = (datetime.now(UTC).replace(tzinfo=None) - timedelta(days=max_age_days)).date()
+    notified_cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=stale_notify_hours)
+
     async with get_session() as session:
         repo = PetRepository(session)
-        count = await repo.deactivate_stale_by_age(max_age_days=max_age_days)
+        count = 0
+
+        # ── Non-user records: deactivate immediately as before. ──────────────
+        stmt = select(PetRow).where(
+            PetRow.active == True,
+            PetRow.date_event < cutoff,
+            PetRow.source != "user",
+        )
+        rows = list((await session.execute(stmt)).scalars().all())
+        if rows:
+            # Don't expire records with a live (unrejected) match.
+            active_match_ids = set()
+            match_stmt = select(PetMatch).where(
+                PetMatch.pet_a_id.in_([r.id for r in rows])
+                | PetMatch.pet_b_id.in_([r.id for r in rows])
+            )
+            for m in (await session.execute(match_stmt)).scalars().all():
+                if m.confirmed is not False:
+                    active_match_ids.add(m.pet_a_id)
+                    active_match_ids.add(m.pet_b_id)
+
+            for r in rows:
+                if r.id in active_match_ids:
+                    continue
+                r.active = False
+                r.last_checked_at = datetime.now(UTC).replace(tzinfo=None)
+                count += 1
+
+        # ── User-submitted records: two-pass approach. ───────────────────────
+        user_stmt = select(PetRow).where(
+            PetRow.active == True,
+            PetRow.date_event < cutoff,
+            PetRow.source == "user",
+        )
+        user_rows = list((await session.execute(user_stmt)).scalars().all())
+        if user_rows:
+            # Build active-match set for user rows too
+            active_user_match_ids = set()
+            user_match_stmt = select(PetMatch).where(
+                PetMatch.pet_a_id.in_([r.id for r in user_rows])
+                | PetMatch.pet_b_id.in_([r.id for r in user_rows])
+            )
+            for m in (await session.execute(user_match_stmt)).scalars().all():
+                if m.confirmed is not False:
+                    active_user_match_ids.add(m.pet_a_id)
+                    active_user_match_ids.add(m.pet_b_id)
+
+            for r in user_rows:
+                if r.id in active_user_match_ids:
+                    continue
+                if r.stale_notified_at is None:
+                    # First pass: flag as notified but don't deactivate yet.
+                    r.stale_notified_at = datetime.now(UTC).replace(tzinfo=None)
+                elif r.stale_notified_at < notified_cutoff:
+                    # Second pass: enough time has passed since notification.
+                    r.active = False
+                    r.last_checked_at = datetime.now(UTC).replace(tzinfo=None)
+                    count += 1
+
+        await session.flush()
     logger.info(f"Age-based expiry: {count} records deactivated")
     return {"deactivated": count}
 
@@ -324,8 +462,9 @@ async def _maybe_notify(session, record, result, candidates) -> None:
     from k9overwatch.db.models import PetRow as _PetRow
     from k9overwatch.notifications import MatchEvent, notify_new_match
 
-    # Identify the other pet in the pair.
-    other_id = result.pet_b_id if result.pet_a_id == str(record.id) else result.pet_b_id
+    # Identify the other pet in the pair, regardless of match orientation.
+    current_is_a = result.pet_a_id == str(record.id)
+    other_id = result.pet_b_id if current_is_a else result.pet_a_id
     other = next((c for c in candidates if str(c.id) == other_id), None)
     if other is None:
         stmt = select(_PetRow).where(_PetRow.id == other_id)
@@ -351,4 +490,14 @@ async def flush_digest_notifications() -> dict:
 
     sent = await flush_digest()
     logger.info(f"Match digest: {sent} email(s) sent")
+    return {"sent": sent}
+
+
+async def flush_saved_search_notifications() -> dict:
+    """Scheduler entry point for durable saved-search notification delivery."""
+    from k9overwatch.notifications import flush_notification_queue
+
+    async with get_session() as session:
+        sent = await flush_notification_queue(session)
+    logger.info(f"Saved-search notifications: {sent} email(s) sent")
     return {"sent": sent}

@@ -1,0 +1,43 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-50: #f0f4ff;
+  --color-brand-100: #e0eaff;
+  --color-brand-200: #c2d4fe;
+  --color-brand-300: #93b4fd;
+  --color-brand-400: #6089fa;
+  --color-brand-500: #3b60f5;
+  --color-brand-600: #2540eb;
+  --color-brand-700: #1d32d0;
+  --color-brand-800: #1e2ba9;
+  --color-brand-900: #1e2987;
+
+  --color-accent-50: #fff7ed;
+  --color-accent-100: #ffedd5;
+  --color-accent-200: #fed7aa;
+  --color-accent-300: #fdba74;
+  --color-accent-400: #fb923c;
+  --color-accent-500: #f97316;
+  --color-accent-600: #ea6c0a;
+  --color-accent-700: #c2570a;
+
+  --color-status-lost: #dc2626;
+  --color-status-lostBg: #fef2f2;
+  --color-status-lostText: #991b1b;
+  --color-status-found: #16a34a;
+  --color-status-foundBg: #f0fdf4;
+  --color-status-foundText: #14532d;
+  --color-status-sighting: #2563eb;
+  --color-status-sightingBg: #eff6ff;
+  --color-status-sightingText: #1e3a8a;
+  --color-status-adoptable: #d97706;
+  --color-status-adoptableBg: #fffbeb;
+  --color-status-adoptableText: #92400e;
+
+  --font-family-sans: Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+
+  --shadow-card: 0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06);
+  --shadow-card-hover: 0 8px 24px -4px rgb(0 0 0 / 0.10), 0 2px 8px -2px rgb(0 0 0 / 0.06);
+  --shadow-nav: 0 1px 0 0 rgb(0 0 0 / 0.06);
+  --shadow-glow-brand: 0 0 0 3px rgb(59 96 245 / 0.15);
+}

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+{% block title %}How It Works | K9-Overwatch{% endblock %}
+
+{% block content %}
+<div class="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12 sm:py-16">
+    <!-- ── Hero ─────────────────────────────────────────────────────── -->
+    <div class="text-center mb-12 sm:mb-16">
+        <div class="mx-auto mb-5 w-16 h-16 rounded-2xl bg-brand-50 dark:bg-brand-900/30 flex items-center justify-center shadow-sm" aria-hidden="true">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-8 h-8 text-brand-600 dark:text-brand-400">
+                <ellipse cx="8.5"  cy="7"  rx="1.5" ry="2"/>
+                <ellipse cx="15.5" cy="7"  rx="1.5" ry="2"/>
+                <ellipse cx="5.5"  cy="11" rx="1.5" ry="2"/>
+                <ellipse cx="18.5" cy="11" rx="1.5" ry="2"/>
+                <path d="M12 10c-2.5 0-5 2-5 4.5 0 1.5.5 2.5 1.5 3.5.8.8 1.5 1 3.5 1s2.7-.2 3.5-1c1-1 1.5-2 1.5-3.5C17 12 14.5 10 12 10z"/>
+            </svg>
+        </div>
+        <h1 class="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+            How K9<span class="text-brand-600">Overwatch</span> Works
+        </h1>
+        <p class="mt-3 text-lg text-slate-600 dark:text-slate-400 max-w-xl mx-auto leading-relaxed">
+            We know how stressful it is when a pet goes missing — or when you find one that needs to get home.
+            Let us help bring them back together.
+        </p>
+    </div>
+
+    <!-- ── Steps ────────────────────────────────────────────────────── -->
+    <div class="space-y-12 sm:space-y-16">
+
+        <!-- Step 1: Report -->
+        <div class="relative flex flex-col sm:flex-row items-start gap-6 sm:gap-8 bg-white dark:bg-slate-800/80 rounded-2xl p-6 sm:p-8 shadow-card border border-slate-100 dark:border-slate-700/60">
+            <!-- Step number badge -->
+            <div class="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-xl bg-brand-100 dark:bg-brand-900/40 text-brand-700 dark:text-brand-400 text-lg font-extrabold shadow-sm ring-1 ring-brand-200 dark:ring-brand-700/50" aria-hidden="true">
+                <span>1</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-start gap-4 sm:gap-6">
+                    <div class="flex-1">
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                            <span aria-hidden="true">📢</span>
+                            Report a lost or found pet
+                        </h2>
+                        <p class="mt-2 text-slate-600 dark:text-slate-400 leading-relaxed">
+                            Tell us about the pet — name, breed, color, where you last saw them, and any special features.
+                            Upload a photo so others can recognize them faster. It only takes a couple of minutes.
+                        </p>
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <a href="/report" class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 transition-colors">
+                                <span aria-hidden="true">＋</span> Report a lost pet
+                            </a>
+                            <a href="/report" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-750 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 transition-colors">
+                                <span aria-hidden="true">🐾</span> I found a pet
+                            </a>
+                        </div>
+                    </div>
+                    <div class="hidden sm:flex flex-shrink-0 w-20 h-20 rounded-2xl bg-brand-50 dark:bg-brand-900/20 items-center justify-center text-3xl" aria-hidden="true">
+                        🐕
+                    </div>
+                </div>
+            </div>
+            <!-- Connector line -->
+            <div class="absolute left-[1.35rem] top-[4.5rem] bottom-[-2rem] w-0.5 bg-gradient-to-b from-brand-200 to-transparent dark:from-brand-700/50 dark:to-transparent hidden sm:block" aria-hidden="true"></div>
+        </div>
+
+        <!-- Step 2: Search -->
+        <div class="relative flex flex-col sm:flex-row items-start gap-6 sm:gap-8 bg-white dark:bg-slate-800/80 rounded-2xl p-6 sm:p-8 shadow-card border border-slate-100 dark:border-slate-700/60">
+            <div class="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-xl bg-accent-100 dark:bg-accent-900/40 text-accent-700 dark:text-accent-400 text-lg font-extrabold shadow-sm ring-1 ring-accent-200 dark:ring-accent-700/50" aria-hidden="true">
+                <span>2</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-start gap-4 sm:gap-6">
+                    <div class="flex-1">
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                            <span aria-hidden="true">🔍</span>
+                            Search for found pets
+                        </h2>
+                        <p class="mt-2 text-slate-600 dark:text-slate-400 leading-relaxed">
+                            Browse the interactive map to see all reported pets in your area.
+                            Filter by status (lost, found, sighting), species, and how recently they were reported.
+                            The map updates as you pan and zoom, so you can search your whole neighborhood.
+                        </p>
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <a href="/map" class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z"/>
+                                </svg>
+                                Open the map
+                            </a>
+                            <a href="/pets" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-750 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 transition-colors">
+                                Browse all pets
+                            </a>
+                        </div>
+                    </div>
+                    <div class="hidden sm:flex flex-shrink-0 w-20 h-20 rounded-2xl bg-accent-50 dark:bg-accent-900/20 items-center justify-center text-3xl" aria-hidden="true">
+                        🗺️
+                    </div>
+                </div>
+            </div>
+            <!-- Connector line -->
+            <div class="absolute left-[1.35rem] top-[4.5rem] bottom-[-2rem] w-0.5 bg-gradient-to-b from-accent-200 to-transparent dark:from-accent-700/50 dark:to-transparent hidden sm:block" aria-hidden="true"></div>
+        </div>
+
+        <!-- Step 3: Get matched -->
+        <div class="relative flex flex-col sm:flex-row items-start gap-6 sm:gap-8 bg-white dark:bg-slate-800/80 rounded-2xl p-6 sm:p-8 shadow-card border border-slate-100 dark:border-slate-700/60">
+            <div class="flex-shrink-0 flex items-center justify-center w-12 h-12 rounded-xl bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-400 text-lg font-extrabold shadow-sm ring-1 ring-green-200 dark:ring-green-700/50" aria-hidden="true">
+                <span>3</span>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="flex items-start gap-4 sm:gap-6">
+                    <div class="flex-1">
+                        <h2 class="text-xl font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                            <span aria-hidden="true">🤝</span>
+                            Get matched &amp; reunited
+                        </h2>
+                        <p class="mt-2 text-slate-600 dark:text-slate-400 leading-relaxed">
+                            Our matching engine automatically compares lost and found reports by breed, color, location, and
+                            distinctive features. When a potential match is found, you'll see it highlighted on the map and
+                            in your <strong>Matches</strong> page. Reach out through our privacy-preserving contact system —
+                            no emails revealed until you're ready.
+                        </p>
+                        <div class="mt-4 flex flex-wrap gap-2">
+                            <a href="/matches" class="inline-flex items-center gap-1.5 rounded-lg bg-brand-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 transition-colors">
+                                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244"/>
+                                </svg>
+                                View matches
+                            </a>
+                            <a href="/register" class="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 dark:border-slate-600 px-4 py-2 text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-750 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 transition-colors">
+                                <span aria-hidden="true">📧</span> Create an account
+                            </a>
+                        </div>
+                    </div>
+                    <div class="hidden sm:flex flex-shrink-0 w-20 h-20 rounded-2xl bg-green-50 dark:bg-green-900/20 items-center justify-center text-3xl" aria-hidden="true">
+                        🎉
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ── Tip box ─────────────────────────────────────────────────── -->
+    <div class="mt-12 rounded-2xl bg-brand-50 dark:bg-brand-900/20 border border-brand-100 dark:border-brand-800 p-6 text-center">
+        <div class="flex items-center justify-center gap-2 mb-2">
+            <span class="text-xl" aria-hidden="true">💡</span>
+            <span class="font-bold text-brand-800 dark:text-brand-300">Pro tip</span>
+        </div>
+        <p class="text-sm text-brand-700 dark:text-brand-300 leading-relaxed">
+            The sooner you report a missing pet, the better the chance of finding them.
+            Check the map daily — new found pets are being added all the time by shelters
+            and good Samaritans in your community.
+        </p>
+    </div>
+
+    <!-- ── Call to action ──────────────────────────────────────────── -->
+    <div class="mt-10 text-center">
+        <a href="/map" class="inline-flex items-center gap-2 rounded-xl bg-brand-600 px-6 py-3 text-base font-semibold text-white shadow-md hover:bg-brand-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 focus-visible:ring-offset-2 transition-all active:scale-95">
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor" class="w-5 h-5" aria-hidden="true">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z"/>
+            </svg>
+            Start exploring the map
+        </a>
+        <p class="mt-3 text-sm text-slate-500 dark:text-slate-400">No account needed to search — just to report or contact.</p>
+    </div>
+</div>
+{% endblock %}

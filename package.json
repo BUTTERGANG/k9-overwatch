@@ -1,0 +1,29 @@
+{
+  "name": "k9-overwatch",
+  "version": "1.0.0",
+  "description": "A pet aggregation platform that consolidates lost, found, and adoptable animal listings from multiple sources into a single geographic view — helping owners reunite with their pets faster.",
+  "main": "index.js",
+  "directories": {
+    "doc": "docs",
+    "test": "tests"
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/BUTTERGANG/k9-overwatch.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/BUTTERGANG/k9-overwatch/issues"
+  },
+  "homepage": "https://github.com/BUTTERGANG/k9-overwatch#readme",
+  "dependencies": {
+    "@tailwindcss/cli": "^4.3.3",
+    "tailwindcss": "^4.3.3"
+  }
+}

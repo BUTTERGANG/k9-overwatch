@@ -20,13 +20,15 @@ from .jobs import (
     check_stale_records,
     expire_stale_listings,
     flush_digest_notifications,
+    flush_saved_search_notifications,
+    regeocode_pending_records,
     run_matching_pass,
     run_scraper,
 )
+from .lock import SchedulerSingletonLock
 
 load_dotenv()
 logger = logging.getLogger(__name__)
-
 
 def _config() -> ScraperConfig:
     return ScraperConfig(
@@ -107,6 +109,19 @@ class ScraperScheduler:
             coalesce=True,
         )
 
+        # ── Re-geocode backstop — retries records left without coordinates by a
+        #    transient provider failure (mainly user reports, geocoded only once
+        #    at submit time). Scraped records self-heal on the source's next scrape. ──
+        scheduler.add_job(
+            regeocode_pending_records,
+            "interval", minutes=20,
+            id="regeocode_pending_records",
+            kwargs={"limit": 100},
+            max_instances=1,
+            coalesce=True,
+            next_run_time=now + timedelta(minutes=5),
+        )
+
         # ── Age-based expiry — source-agnostic fallback so resolved/found pets
         #    eventually leave the map (the per-source check only covers Indy). ──
         scheduler.add_job(
@@ -127,6 +142,15 @@ class ScraperScheduler:
             coalesce=True,
         )
 
+        # ── Saved-search queue — frequent delivery with durable retries ──────
+        scheduler.add_job(
+            flush_saved_search_notifications,
+            "interval", minutes=5,
+            id="saved_search_notifications",
+            max_instances=1,
+            coalesce=True,
+        )
+
         return scheduler
 
 
@@ -139,8 +163,12 @@ async def main():
     logger.info("Initializing database...")
     await init_db()
 
-    scheduler = ScraperScheduler().build()
+    lock = SchedulerSingletonLock()
+    if not await lock.acquire():
+        logger.error("Another scheduler instance already holds the singleton lock")
+        return
 
+    scheduler = ScraperScheduler().build()
     logger.info("Starting scheduler...")
     scheduler.start()
 
@@ -149,7 +177,9 @@ async def main():
             await asyncio.sleep(60)
     except (KeyboardInterrupt, SystemExit):
         logger.info("Shutting down...")
+    finally:
         scheduler.shutdown()
+        await lock.release()
 
 
 if __name__ == "__main__":

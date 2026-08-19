@@ -14,7 +14,19 @@ import os
 import secrets
 
 COOKIE_NAME = "k9_session"
-_SESSION_SECRET = os.getenv("SESSION_SECRET", "dev-insecure-secret-change-me")
+_DEFAULT_SESSION_SECRET = "dev-insecure-secret-change-me"
+_ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("APP_ENV", "development")).lower()
+_IS_PRODUCTION = _ENVIRONMENT in {"production", "prod"}
+_SESSION_SECRET = os.getenv("SESSION_SECRET", "")
+if _IS_PRODUCTION and (not _SESSION_SECRET or _SESSION_SECRET == _DEFAULT_SESSION_SECRET):
+    raise RuntimeError("SESSION_SECRET must be explicitly configured in production")
+if not _SESSION_SECRET:
+    _SESSION_SECRET = _DEFAULT_SESSION_SECRET
+
+
+def is_production() -> bool:
+    """Return whether the application is running in a production environment."""
+    return _IS_PRODUCTION
 
 
 def hash_password(password: str) -> str:
@@ -54,6 +66,33 @@ def read_session_token(token: str | None) -> str | None:
     if hmac.compare_digest(sig, expected):
         return user_id
     return None
+
+
+def make_csrf_token(subject: str) -> str:
+    """Create a stateless CSRF token bound to a session subject."""
+    payload = f"csrf:{subject}"
+    signature = hmac.new(
+        _SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return f"{subject}.{signature}"
+
+
+def csrf_token_for(user_id: str) -> str:
+    """Return the CSRF token to embed in forms for a logged-in user."""
+    return make_csrf_token(user_id)
+
+
+def validate_csrf_token(token: str | None, subject: str) -> bool:
+    if not token or "." not in token:
+        return False
+    token_subject, signature = token.rsplit(".", 1)
+    if token_subject != subject:
+        return False
+    payload = f"csrf:{token_subject}"
+    expected = hmac.new(
+        _SESSION_SECRET.encode("utf-8"), payload.encode("utf-8"), hashlib.sha256
+    ).hexdigest()
+    return hmac.compare_digest(signature, expected)
 
 
 def new_unsubscribe_token() -> str:

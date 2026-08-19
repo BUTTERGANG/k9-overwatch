@@ -133,6 +133,37 @@ async def flush_digest() -> int:
     return sent
 
 
+async def flush_notification_queue(session, limit: int = 50) -> int:
+    """Deliver eligible saved-search alerts with atomic claims and retries."""
+    from datetime import UTC, datetime
+
+    from k9overwatch.db.repository import PetRepository
+
+    user_repo = UserRepository(session)
+    queue_repo = PetRepository(session)
+    queue_rows = await queue_repo.claim_notification_queue(limit=limit)
+    now = datetime.now(UTC).replace(tzinfo=None)
+    sent = 0
+    for row in queue_rows:
+        user = await user_repo.get_by_id(row.user_id)
+        prefs = await user_repo.get_prefs(row.user_id)
+        if not user or not prefs or prefs.frequency == "off" or not prefs.email_enabled:
+            row.status = "skipped"
+            continue
+        delivered = True
+        if _smtp_configured():
+            delivered = _send_email(user.email, row.subject, row.body, prefs.unsubscribe_token)
+        if delivered:
+            row.status = "sent"
+            row.sent_at = now
+            row.next_attempt_at = None
+            sent += 1
+        else:
+            await queue_repo.mark_notification_failed(row, "notification provider rejected delivery", now=now)
+    await session.flush()
+    return sent
+
+
 async def notify_contact_request(session, contact: ContactRequest, pet: PetRow) -> bool:
     """Notify a report owner of a relay message without exposing either address."""
     repo = UserRepository(session)
