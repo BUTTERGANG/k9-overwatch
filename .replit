@@ -1,4 +1,12 @@
-modules = ["python-3.11"]
+modules = ["python-3.11", "nodejs-20"]
+
+[env]
+# Persists the Claude Code CLI (install + login) across workspace restarts.
+# .local/bin holds a launcher pointing at the version under .local/share/claude,
+# both under the persistent workspace disk instead of the ephemeral home dir.
+PATH = "/home/runner/workspace/.local/bin:${PATH}"
+CLAUDE_CONFIG_DIR = "/home/runner/workspace/.local/share/claude-config"
+
 [deployment]
 run = "DATABASE_URL=$neondb LD_LIBRARY_PATH=/home/runner/.nix-profile/lib PYTHONPATH=src .venv/bin/uvicorn k9overwatch.web.main:app --host 0.0.0.0 --port 8080"
 
