@@ -306,3 +306,42 @@ class ContactRequest(Base):
     __table_args__ = (
         Index("ix_contact_requests_pair_pet_status", "pet_id", "requester_id", "recipient_id", "status"),
     )
+
+
+class ContactMessage(Base):
+    """Threaded messages inside a contact relay conversation."""
+    __tablename__ = "contact_messages"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    contact_id = Column(String(36), nullable=False, index=True)
+    sender_id = Column(String(36), nullable=False)
+    message = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+    __table_args__ = (
+        Index("ix_contact_messages_contact_created", "contact_id", "created_at"),
+    )
+
+
+class ContactBlock(Base):
+    """Users can block others to stop contact relay abuse."""
+    __tablename__ = "contact_blocks"
+
+    blocker_id = Column(String(36), primary_key=True)
+    blocked_id = Column(String(36), primary_key=True)
+    created_at = Column(DateTime, default=_now, nullable=False)
+
+
+class ContentReport(Base):
+    """User-flagged content (reports, contact requests) for admin review."""
+    __tablename__ = "content_reports"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    reporter_id = Column(String(36), nullable=False, index=True)
+    target_type = Column(String(40), nullable=False, index=True)  # "report" | "contact_request"
+    target_id = Column(String(36), nullable=False, index=True)
+    reason = Column(Text, nullable=False)
+    status = Column(String(20), nullable=False, default="pending", index=True)  # pending | reviewed | dismissed
+    created_at = Column(DateTime, default=_now, nullable=False)
+    reviewed_at = Column(DateTime)
+    reviewed_by = Column(String(36))

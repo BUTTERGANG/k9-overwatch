@@ -1,0 +1,14 @@
+{% if messages %}
+<div class="space-y-2 max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-700 rounded-lg p-2 bg-white dark:bg-slate-800/50">
+  {% for msg in messages %}
+  <div class="flex {% if msg.sender_id == current_user_id %}justify-end{% endif %}">
+    <div class="max-w-[80%] rounded-lg px-3 py-2 text-sm {% if msg.sender_id == current_user_id %}bg-brand-600 text-white{% else %}bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300{% endif %}">
+      <p>{{ msg.message }}</p>
+      <p class="text-xs mt-0.5 opacity-60">{{ msg.created_at.strftime('%b %d, %H:%M') }}</p>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-xs text-slate-400 dark:text-slate-500 italic">No messages yet.</p>
+{% endif %}

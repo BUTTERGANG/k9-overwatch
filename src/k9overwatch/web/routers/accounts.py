@@ -333,6 +333,27 @@ async def delete_saved_search(search_id: str, request: Request, db: AsyncSession
     return RedirectResponse(url="/account?saved_search=1", status_code=303)
 
 
+@router.post("/account/saved-searches/{search_id}/toggle")
+async def toggle_saved_search(
+    search_id: str,
+    request: Request,
+    enabled: bool = Form(False),
+    db: AsyncSession = Depends(get_db),
+):
+    """Enable or disable a saved search without deleting it."""
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    saved = (await db.execute(select(SavedSearch).where(
+        SavedSearch.id == search_id, SavedSearch.user_id == user_id
+    ))).scalar_one_or_none()
+    if saved is None:
+        raise HTTPException(status_code=404, detail="Saved search not found")
+    saved.enabled = enabled
+    await db.commit()
+    return RedirectResponse(url="/account?saved_search=1", status_code=303)
+
+
 @router.post("/contact-requests/{contact_id}/status")
 async def update_contact_status(
     contact_id: str,
@@ -409,7 +430,257 @@ async def unsubscribe(token: str, request: Request, db: AsyncSession = Depends(g
 
 @router.post("/admin/flush-digest", dependencies=[Depends(verify_admin)])
 async def flush_digest_endpoint(db: AsyncSession = Depends(get_db)):
-    """Triggers the daily digest send (normally run by the scheduler)."""
+    """Triggers the daily digest send (normally by the scheduler)."""
     sent = await flush_digest()
     return {"sent": sent}
+
+
+# ── Contact request reply ───────────────────────────────────────────────
+
+
+@router.post("/contact-requests/{contact_id}/reply")
+async def reply_to_contact_request(
+    contact_id: str,
+    request: Request,
+    message: str = Form(..., min_length=1, max_length=2000),
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a threaded reply inside a contact relay conversation."""
+    from k9overwatch.db.models import ContactBlock, ContactMessage, ContactRequest
+
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    contact = await db.get(ContactRequest, contact_id)
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Contact request not found")
+    if user_id not in (contact.requester_id, contact.recipient_id):
+        raise HTTPException(status_code=403, detail="You are not a participant in this contact request.")
+    # Check blocks: if either party has blocked the other, deny the reply
+    blocked = await db.execute(
+        select(ContactBlock).where(
+            ContactBlock.blocker_id == contact.recipient_id,
+            ContactBlock.blocked_id == user_id,
+        )
+    )
+    if blocked.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="You have been blocked by the recipient.")
+    msg = ContactMessage(contact_id=contact_id, sender_id=user_id, message=message.strip())
+    db.add(msg)
+    if contact.status in ("open",):
+        contact.status = "in_conversation"
+    await db.commit()
+    return RedirectResponse(url="/account", status_code=303)
+
+
+# ── Block user on contact ──────────────────────────────────────────────
+
+
+@router.post("/contact-requests/{contact_id}/block")
+async def block_user_on_contact(
+    contact_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Block the other party on a contact request and close it."""
+    from k9overwatch.db.models import ContactBlock, ContactRequest
+
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    contact = await db.get(ContactRequest, contact_id)
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Contact request not found")
+    if user_id not in (contact.requester_id, contact.recipient_id):
+        raise HTTPException(status_code=403, detail="You are not a participant in this contact request.")
+    blocked_id = contact.recipient_id if user_id == contact.requester_id else contact.requester_id
+    existing = await db.get(ContactBlock, (user_id, blocked_id))
+    if not existing:
+        db.add(ContactBlock(blocker_id=user_id, blocked_id=blocked_id))
+    contact.status = "closed"
+    await db.commit()
+    return RedirectResponse(url="/account", status_code=303)
+
+
+# ── Messages for a contact request (HTMX JSON) ─────────────────────────
+
+
+@router.get("/contact-requests/{contact_id}/messages")
+async def get_contact_request_messages(
+    contact_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Return messages for a contact request as an HTML partial for HTMX."""
+    from k9overwatch.db.models import ContactMessage, ContactRequest
+
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Login required")
+    contact = await db.get(ContactRequest, contact_id)
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Contact request not found")
+    if user_id not in (contact.requester_id, contact.recipient_id):
+        raise HTTPException(status_code=403, detail="You are not a participant.")
+    stmt = (
+        select(ContactMessage)
+        .where(ContactMessage.contact_id == contact_id)
+        .order_by(ContactMessage.created_at.asc())
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return templates.TemplateResponse(
+        request, "accounts/_messages.html",
+        {"messages": rows, "current_user_id": user_id},
+    )
+
+
+# ── Edit report form ────────────────────────────────────────────────────
+
+
+@router.get("/reports/{report_id}/edit")
+async def edit_report_form(
+    report_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Pre-populated edit form for the report owner."""
+    from k9overwatch.db.models import PetRow
+
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    report = (await db.execute(
+        select(PetRow).where(PetRow.id == report_id, PetRow.owner_id == user_id)
+    )).scalar_one_or_none()
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    return templates.TemplateResponse(request, "accounts/edit_report.html", {"report": report})
+
+
+# ── Edit report submission ──────────────────────────────────────────────
+
+
+@router.post("/reports/{report_id}/edit")
+async def edit_report(
+    report_id: str,
+    request: Request,
+    name: str = Form(default=""),
+    breed: str = Form(default=""),
+    color_primary: str = Form(default=""),
+    gender: str = Form(default=""),
+    distinctive_features: str = Form(default=""),
+    description: str = Form(default=""),
+    location_text: str = Form(default=""),
+    contact_name: str = Form(default=""),
+    contact_email: str = Form(default=""),
+    contact_phone: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+):
+    """Owner updates report fields; re-geocode if location changed."""
+    from k9overwatch.db.models import PetRow
+
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    report = (await db.execute(
+        select(PetRow).where(PetRow.id == report_id, PetRow.owner_id == user_id)
+    )).scalar_one_or_none()
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    location_changed = location_text.strip() != (report.location_text or "")
+    report.name = name.strip() or None
+    report.breed = breed.strip() or None
+    report.color_primary = color_primary.strip() or None
+    report.gender = gender.strip() or None
+    report.distinctive_features = distinctive_features.strip() or None
+    report.description = description.strip() or None
+    report.location_text = location_text.strip() or None
+    report.contact_name = contact_name.strip() or None
+    report.contact_email = contact_email.strip() or None
+    report.contact_phone = contact_phone.strip() or None
+
+    if location_changed and report.location_text:
+        from k9overwatch.scheduler.jobs import _make_geocoder_from_env
+
+        from k9overwatch.models.pet_record import PetRecord
+
+        # Convert PetRow → PetRecord for the geocoder, then copy coords back
+        pr = PetRecord(
+            source=report.source,
+            source_id=report.source_id,
+            record_type=report.record_type,
+            location_text=report.location_text,
+            city=report.city,
+            state=report.state,
+            zip=report.zip,
+            country=report.country or "US",
+        )
+        geocoder = _make_geocoder_from_env(db)
+        pr = await geocoder.geocode(pr)
+        report.lat = pr.lat
+        report.lon = pr.lon
+        report.geocode_source = pr.geocode_source
+        report.geocode_confidence = pr.geocode_confidence
+
+    await db.commit()
+    return RedirectResponse(url=f"/pets/{report_id}", status_code=303)
+
+
+# ── Flag report (as ContentReport) ─────────────────────────────────────
+
+
+@router.post("/reports/{report_id}/flag")
+async def flag_report(
+    report_id: str,
+    request: Request,
+    reason: str = Form(..., min_length=1, max_length=1000),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a ContentReport targeting a pet report."""
+    from k9overwatch.db.models import ContentReport, PetRow
+
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    pet = await db.get(PetRow, report_id)
+    if pet is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    db.add(ContentReport(
+        reporter_id=user_id,
+        target_type="report",
+        target_id=report_id,
+        reason=reason.strip(),
+    ))
+    await db.commit()
+    return RedirectResponse(url=f"/pets/{report_id}?flagged=1", status_code=303)
+
+
+# ── Flag contact request ───────────────────────────────────────────────
+
+
+@router.post("/contact-requests/{contact_id}/flag")
+async def flag_contact_request(
+    contact_id: str,
+    request: Request,
+    reason: str = Form(..., min_length=1, max_length=1000),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a ContentReport targeting a contact request."""
+    from k9overwatch.db.models import ContactRequest, ContentReport
+
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url="/login", status_code=303)
+    contact = await db.get(ContactRequest, contact_id)
+    if contact is None:
+        raise HTTPException(status_code=404, detail="Contact request not found")
+    db.add(ContentReport(
+        reporter_id=user_id,
+        target_type="contact_request",
+        target_id=contact_id,
+        reason=reason.strip(),
+    ))
+    await db.commit()
+    return RedirectResponse(url="/account", status_code=303)
 

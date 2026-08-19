@@ -1,6 +1,7 @@
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -108,3 +109,70 @@ async def _get_stats(db: AsyncSession) -> dict:
         "reunification_matches": match_row.reunification_matches,
         "generated_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
     }
+
+
+# ── Admin: Content Reports ────────────────────────────────────────────
+
+
+@router.get("/admin/reports", dependencies=[Depends(verify_admin)])
+async def admin_reports_page(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """List pending ContentReports with dismiss/action buttons."""
+    from k9overwatch.db.models import ContentReport
+
+    stmt = select(ContentReport).where(ContentReport.status == "pending").order_by(ContentReport.created_at.desc())
+    reports = list((await db.execute(stmt)).scalars().all())
+    return templates.TemplateResponse(request, "admin/reports.html", {"reports": reports})
+
+
+@router.post("/admin/reports/{report_id}/dismiss", dependencies=[Depends(verify_admin)])
+async def dismiss_report(
+    report_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Set a ContentReport status to dismissed."""
+    from k9overwatch.db.models import ContentReport
+
+    report = await db.get(ContentReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+    report.status = "dismissed"
+    report.reviewed_at = datetime.now(UTC).replace(tzinfo=None)
+    report.reviewed_by = "admin"
+    await db.commit()
+    return RedirectResponse(url="/admin/reports", status_code=303)
+
+
+@router.post("/admin/reports/{report_id}/action", dependencies=[Depends(verify_admin)])
+async def action_report(
+    report_id: str,
+    request: Request,
+    deactivate: str = Form(default="false"),
+    db: AsyncSession = Depends(get_db),
+):
+    """Review a ContentReport; optionally deactivate the target."""
+    from k9overwatch.db.models import ContentReport, ContactRequest, PetRow
+
+    report = await db.get(ContentReport, report_id)
+    if report is None:
+        raise HTTPException(status_code=404, detail="Report not found")
+
+    do_deactivate = deactivate.lower() in ("true", "1", "yes", "on")
+
+    if do_deactivate and report.target_type == "report":
+        pet = await db.get(PetRow, report.target_id)
+        if pet is not None:
+            pet.active = False
+            pet.owner_report_status = "closed"
+    elif do_deactivate and report.target_type == "contact_request":
+        contact = await db.get(ContactRequest, report.target_id)
+        if contact is not None:
+            contact.status = "closed"
+
+    report.status = "reviewed"
+    report.reviewed_at = datetime.now(UTC).replace(tzinfo=None)
+    report.reviewed_by = "admin"
+    await db.commit()
+    return RedirectResponse(url="/admin/reports", status_code=303)
