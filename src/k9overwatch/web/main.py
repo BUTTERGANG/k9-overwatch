@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import text
+from sqlalchemy import func as sa_func, select as sa_select, text
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
@@ -197,6 +197,43 @@ async def health_check():
     if db_status != "ok":
         return JSONResponse(content=payload, status_code=503)
     return payload
+
+
+@app.get("/api/stats")
+async def api_stats():
+    """Return aggregate stats: reunifications, active pets, total pets, per-source counts."""
+    from k9overwatch.db.connection import get_session_factory
+    from k9overwatch.db.models import PetMatch, PetRow
+
+    async with get_session_factory()() as session:
+        # Total reunifications: count of lost_found matches
+        reunif_result = await session.execute(
+            sa_select(sa_func.count()).where(PetMatch.match_type == "lost_found")
+        )
+        total_reunifications = reunif_result.scalar_one()
+
+        # Total active pets
+        active_result = await session.execute(
+            sa_select(sa_func.count()).where(PetRow.active == True)
+        )
+        total_active_pets = active_result.scalar_one()
+
+        # Total pets
+        total_result = await session.execute(sa_select(sa_func.count()).select_from(PetRow))
+        total_pets = total_result.scalar_one()
+
+        # Per-source counts
+        source_result = await session.execute(
+            sa_select(PetRow.source, sa_func.count()).group_by(PetRow.source)
+        )
+        per_source = {row[0]: row[1] for row in source_result.all()}
+
+    return {
+        "total_reunifications": total_reunifications,
+        "total_active_pets": total_active_pets,
+        "total_pets": total_pets,
+        "per_source": per_source,
+    }
 
 
 @app.get("/favicon.ico", include_in_schema=False)

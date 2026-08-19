@@ -50,6 +50,12 @@
         <!-- Status badge — prominent -->
         <div class="flex-shrink-0 pt-1 flex items-center gap-2 flex-wrap">
             {{ status_badge(pet.record_type, size="lg") }}
+            {% if pet.owner_report_status == 'reunited' %}
+            <span class="inline-flex items-center gap-1 rounded-full bg-emerald-100 dark:bg-emerald-900/30 border border-emerald-300 dark:border-emerald-700 px-3 py-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider">
+                <span aria-hidden="true">🎉</span>
+                Reunited
+            </span>
+            {% endif %}
             {% if match_count > 0 %}
             <span class="inline-flex items-center gap-1 font-bold uppercase tracking-wider rounded-full px-4 py-1.5 text-sm"
                   style="background:#f0f9ff;color:#075985;border:1px solid #bae6fd;"
@@ -224,6 +230,22 @@
 
                     {% if not pet.contact_phone and not pet.contact_email and not pet.source_url %}
                     <p class="text-sm text-slate-400 dark:text-slate-500 italic">No contact info available.</p>
+                    {% endif %}
+
+                    {% if not pet.owner_id and tip_sent %}
+                    <p class="mb-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2" role="status">Your tip has been recorded. Thank you!</p>
+                    {% endif %}
+                    {% if not pet.owner_id and not pet.contact_phone and not pet.contact_email %}
+                    <div class="mt-4 rounded-xl border border-amber-200 bg-amber-50/60 p-3 dark:border-amber-800 dark:bg-amber-900/20">
+                        <p class="text-sm font-semibold text-slate-800 dark:text-slate-100">Submit a tip</p>
+                        <p class="mt-1 text-xs text-slate-500 dark:text-slate-400">Do you know who this pet belongs to? Share what you know and an admin will follow up.</p>
+                        <form method="post" action="/pets/{{ pet.id }}/tip" class="mt-3 space-y-2">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                            <label for="tip-message" class="sr-only">Your tip about this pet</label>
+                            <textarea id="tip-message" name="message" required maxlength="2000" rows="3" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="I know this pet&#39;s owner — they live at..."></textarea>
+                            <button type="submit" class="w-full rounded-lg bg-amber-600 px-3 py-2 text-sm font-semibold text-white hover:bg-amber-700">Submit tip</button>
+                        </form>
+                    </div>
                     {% endif %}
                 </div>
                 {% endif %}

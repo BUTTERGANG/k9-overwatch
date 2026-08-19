@@ -64,6 +64,22 @@
             <p class="mt-4 text-sm text-slate-500 dark:text-slate-400">
                 No account needed to search &middot; Free for everyone
             </p>
+
+            <!-- Reunification counter (loaded via HTMX) -->
+            <div class="mt-6">
+                <div hx-get="/api/stats" hx-trigger="load" hx-swap="innerHTML" class="inline-flex items-center gap-2 px-5 py-2 rounded-full bg-emerald-50 dark:bg-emerald-900/20 border border-emerald-200 dark:border-emerald-700/50 text-emerald-700 dark:text-emerald-400 text-sm font-semibold">
+                    <span class="htmx-indicator">Loading…</span>
+                    <span class="htmx-indicator-hide">🐾 <span class="tabular-nums reunified-count"></span> pets reunited</span>
+                </div>
+            </div>
+            <script>
+            document.addEventListener('htmx:afterSwap', function(evt) {
+                if (evt.detail.target.classList.contains('inline-flex')) {
+                    var data = JSON.parse(evt.detail.xhr.responseText);
+                    evt.detail.target.innerHTML = '🐾 <span class="tabular-nums font-bold text-lg">' + data.total_reunifications + '</span> pets reunited';
+                }
+            });
+            </script>
         </div>
     </section>
 

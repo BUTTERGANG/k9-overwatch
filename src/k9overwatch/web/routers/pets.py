@@ -160,6 +160,7 @@ async def pet_detail(
             "match_count": match_count,
             "current_user_id": current_user_id,
             "contact_sent": request.query_params.get("contact_sent") == "1",
+            "tip_sent": request.query_params.get("tip_sent") == "1",
         },
     )
 
@@ -208,6 +209,49 @@ async def contact_pet_owner(
     await notify_contact_request(db, contact, pet)
     await db.commit()
     return RedirectResponse(url=f"/pets/{pet_id}?contact_sent=1", status_code=303)
+
+
+@router.post("/pets/{pet_id}/tip")
+async def submit_scraped_tip(
+    pet_id: str,
+    request: Request,
+    message: str = Form(..., min_length=1, max_length=2000),
+    db: AsyncSession = Depends(get_db),
+):
+    """Submit a tip for a scraped pet listing that has no owner contact info."""
+    user_id = await get_current_user_id(request)
+    if not user_id:
+        return RedirectResponse(url=f"/login?next=/pets/{pet_id}", status_code=303)
+    pet = (await db.execute(select(PetRow).where(PetRow.id == pet_id))).scalar_one_or_none()
+    if pet is None:
+        raise HTTPException(status_code=404, detail="Pet not found")
+    message = message.strip()
+    if not message:
+        raise HTTPException(status_code=400, detail="Message cannot be empty.")
+    if pet.owner_id:
+        raise HTTPException(status_code=400, detail="This pet already has an owner contact channel. Use the contact form instead.")
+    # Fetch the user's email to include in the tip for admin follow-up.
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=400, detail="Your account was not found.")
+    # Check for existing tip from this user on this pet to prevent duplicates.
+    existing = (await db.execute(select(ContactRequest).where(
+        ContactRequest.pet_id == pet_id,
+        ContactRequest.requester_id == user_id,
+        ContactRequest.recipient_id == "__scraped_tip__",
+        ContactRequest.status.in_(["open", "in_conversation"]),
+    ))).scalar_one_or_none()
+    if existing:
+        raise HTTPException(status_code=409, detail="You already submitted a tip for this listing.")
+    contact = ContactRequest(
+        pet_id=pet_id,
+        requester_id=user_id,
+        recipient_id="__scraped_tip__",
+        message=f"[Tip submitted by {user.email}]\n\n{message}",
+    )
+    db.add(contact)
+    await db.commit()
+    return RedirectResponse(url=f"/pets/{pet_id}?tip_sent=1", status_code=303)
 
 
 @router.get("/pets/{pet_id}/matches")
