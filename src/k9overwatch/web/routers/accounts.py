@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from k9overwatch.db.models import SavedSearch, User
 from k9overwatch.db.repository import UserRepository
-from k9overwatch.notifications import flush_digest
+from k9overwatch.scheduler.jobs import flush_digest_notifications
 from k9overwatch.web.account_tokens import consume_token, issue_token
 from k9overwatch.web.auth import (
     COOKIE_NAME,
@@ -429,10 +429,9 @@ async def unsubscribe(token: str, request: Request, db: AsyncSession = Depends(g
 
 
 @router.post("/admin/flush-digest", dependencies=[Depends(verify_admin)])
-async def flush_digest_endpoint(db: AsyncSession = Depends(get_db)):
+async def flush_digest_endpoint():
     """Triggers the daily digest send (normally by the scheduler)."""
-    sent = await flush_digest()
-    return {"sent": sent}
+    return await flush_digest_notifications()
 
 
 # ── Contact request reply ───────────────────────────────────────────────
@@ -601,9 +600,8 @@ async def edit_report(
     report.contact_phone = contact_phone.strip() or None
 
     if location_changed and report.location_text:
-        from k9overwatch.scheduler.jobs import _make_geocoder_from_env
-
         from k9overwatch.models.pet_record import PetRecord
+        from k9overwatch.scheduler.jobs import _make_geocoder_from_env
 
         # Convert PetRow → PetRecord for the geocoder, then copy coords back
         pr = PetRecord(

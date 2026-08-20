@@ -190,7 +190,7 @@ async def action_report(
     db: AsyncSession = Depends(get_db),
 ):
     """Review a ContentReport; optionally deactivate the target."""
-    from k9overwatch.db.models import ContentReport, ContactRequest, PetRow
+    from k9overwatch.db.models import ContactRequest, ContentReport, PetRow
 
     report = await db.get(ContentReport, report_id)
     if report is None:

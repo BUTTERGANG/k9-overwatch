@@ -5,7 +5,7 @@ from __future__ import annotations
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from k9overwatch.db.models import ContentReport, ContactRequest, PetRow
+from k9overwatch.db.models import ContactRequest, ContentReport
 from k9overwatch.db.repository import PetRepository, UserRepository
 from k9overwatch.models.pet_record import PetRecord
 from k9overwatch.web.auth import COOKIE_NAME, csrf_token_for, make_session_token
@@ -118,7 +118,6 @@ async def test_action_report_deactivate_pet(client: AsyncClient, db_session: Asy
 
 async def test_action_report_deactivate_contact_request(client: AsyncClient, db_session: AsyncSession):
     """POST /admin/reports/{id}/action with deactivate closes the contact request."""
-    from k9overwatch.db.models import ContactRequest
 
     owner = await UserRepository(db_session).create("action-contact-owner@example.com", "password123")
     requester = await UserRepository(db_session).create("action-contact-req@example.com", "password123")
@@ -180,7 +179,6 @@ async def test_flag_report_creates_content_report(client: AsyncClient, db_sessio
 
 async def test_flag_contact_request_creates_content_report(client: AsyncClient, db_session: AsyncSession):
     """POST /contact-requests/{id}/flag creates a ContentReport."""
-    from k9overwatch.db.models import ContactRequest
 
     owner = await UserRepository(db_session).create("flag3-owner@example.com", "password123")
     requester = await UserRepository(db_session).create("flag3-req@example.com", "password123")
