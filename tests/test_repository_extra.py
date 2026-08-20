@@ -6,7 +6,7 @@ Additional repository tests covering previously untested code paths:
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 from sqlalchemy import select
@@ -14,9 +14,10 @@ from sqlalchemy import select
 from k9overwatch.db.models import GeocodeCache
 from k9overwatch.db.repository import PetRepository
 from k9overwatch.geocoding.geocoder import GeocodeResult, GeocodingService
-from k9overwatch.models.enums import GeocodeConfidence, GeocodeSource
+from k9overwatch.models.enums import AnimalType, GeocodeConfidence, GeocodeSource, RecordType
+from k9overwatch.models.pet_record import PetRecord
 
-from .conftest import make_indy_record
+from .conftest import make_indy_record, make_pawboost_record
 
 # ── mark_inactive_bulk ────────────────────────────────────────────────────────
 
@@ -223,3 +224,327 @@ class TestGetStaleRecords:
         stale_rows = await repo.get_stale_records("indylostpetalert", older_than_hours=1)
         sources = {r.source for r in stale_rows}
         assert sources == {"indylostpetalert"}
+
+
+# ── Cross-source deduplication ──────────────────────────────────────────────
+
+
+class TestCrossSourceDedup:
+    """find_cross_source_duplicates identifies the same pet on different sources."""
+
+    @pytest.mark.asyncio
+    async def test_finds_duplicate_from_other_source(self, db_session):
+        """A new PawBoost lost dog that matches an existing IndyLostPetAlert lost dog
+        by animal_type, breed, color, location, and date should be found as a duplicate."""
+        repo = PetRepository(db_session)
+
+        # Seed an existing record from indylostpetalert
+        existing = await repo.upsert(
+            make_indy_record(
+                source="indylostpetalert",
+                source_id="EXIST001",
+                animal_type=AnimalType.DOG,
+                breed="Labrador Mix",
+                breed_normalized="labrador retriever",
+                color_primary="Black",
+                lat=39.7684,
+                lon=-86.1581,
+                date_event=date(2026, 3, 20),
+            )
+        )
+        existing_row, _ = existing
+
+        # New record from pawboost — same details, different source
+        new_record = make_pawboost_record(
+            source="pawboost",
+            source_id="PB-DUP001",
+            animal_type=AnimalType.DOG,
+            breed="Labrador Retriever Mix",
+            color_primary="Black",
+            lat=39.7700,
+            lon=-86.1600,
+            date_event=date(2026, 3, 20),
+        )
+        new_row, _ = await repo.upsert(new_record)
+
+        # Search from the new record's perspective
+        duplicates = await repo.find_cross_source_duplicates(new_record, new_row)
+
+        # Should find the existing record
+        dup_ids = {r.id for r, _ in duplicates}
+        assert existing_row.id in dup_ids
+
+        # Should have scored it >0
+        score = next(s for r, s in duplicates if r.id == existing_row.id)
+        assert score > 0.0
+
+    @pytest.mark.asyncio
+    async def test_does_not_match_different_breed(self, db_session):
+        """Different breed should not produce a match."""
+        repo = PetRepository(db_session)
+
+        # Seed a cat
+        existing, _ = await repo.upsert(
+            make_indy_record(
+                source="indylostpetalert",
+                source_id="EXIST002",
+                animal_type=AnimalType.CAT,
+                breed="Domestic Shorthair",
+                color_primary="Black",
+                lat=39.7684,
+                lon=-86.1581,
+                date_event=date(2026, 3, 20),
+            )
+        )
+
+        # New record — same type/location but different breed
+        new_record = make_indy_record(
+            source="pawboost",
+            source_id="PB-DUP002",
+            animal_type=AnimalType.CAT,
+            breed="Siamese",
+            color_primary="Black",
+            lat=39.7700,
+            lon=-86.1600,
+            date_event=date(2026, 3, 20),
+        )
+        new_row, _ = await repo.upsert(new_record)
+
+        duplicates = await repo.find_cross_source_duplicates(new_record, new_row)
+        dup_ids = {r.id for r, _ in duplicates}
+
+        # Siamese vs Domestic Shorthair — no breed match
+        assert existing.id not in dup_ids
+
+    @pytest.mark.asyncio
+    async def test_does_not_match_same_source(self, db_session):
+        """Records from the same source should not be flagged as cross-source duplicates."""
+        repo = PetRepository(db_session)
+
+        existing, _ = await repo.upsert(
+            make_indy_record(source="indylostpetalert", source_id="EXIST003")
+        )
+        new_record = make_indy_record(
+            source="indylostpetalert",
+            source_id="EXIST003B",  # different source_id, same source
+            breed="Labrador Mix",
+            color_primary="Black",
+            lat=39.7684,
+            lon=-86.1581,
+            date_event=date(2026, 3, 20),
+        )
+        new_row, _ = await repo.upsert(new_record)
+
+        duplicates = await repo.find_cross_source_duplicates(new_record, new_row)
+        dup_ids = {r.id for r, _ in duplicates}
+        assert existing.id not in dup_ids
+
+    @pytest.mark.asyncio
+    async def test_does_not_match_different_record_type(self, db_session):
+        """Lost↔Found should NOT be matched by cross-source dedup (that's lost→found matching)."""
+        repo = PetRepository(db_session)
+
+        # Seed a LOST record
+        existing, _ = await repo.upsert(
+            make_indy_record(
+                source="indylostpetalert",
+                source_id="EXIST004",
+                record_type=RecordType.LOST,
+                animal_type=AnimalType.DOG,
+                breed="Beagle",
+                color_primary="Brown",
+                lat=39.7684,
+                lon=-86.1581,
+                date_event=date(2026, 3, 20),
+            )
+        )
+
+        # New FOUND record — same animal, different type
+        new_record = make_indy_record(
+            source="pawboost",
+            source_id="PB-DUP004",
+            record_type=RecordType.FOUND,  # different type!
+            animal_type=AnimalType.DOG,
+            breed="Beagle",
+            color_primary="Brown",
+            lat=39.7700,
+            lon=-86.1600,
+            date_event=date(2026, 3, 20),
+        )
+        new_row, _ = await repo.upsert(new_record)
+
+        duplicates = await repo.find_cross_source_duplicates(new_record, new_row)
+        dup_ids = {r.id for r, _ in duplicates}
+        assert existing.id not in dup_ids
+
+    @pytest.mark.asyncio
+    async def test_does_not_match_outside_date_window(self, db_session):
+        """Records with date_event outside 48h window should not match."""
+        repo = PetRepository(db_session)
+
+        existing, _ = await repo.upsert(
+            make_indy_record(
+                source="indylostpetalert",
+                source_id="EXIST005",
+                animal_type=AnimalType.DOG,
+                breed="Labrador Mix",
+                color_primary="Black",
+                lat=39.7684,
+                lon=-86.1581,
+                date_event=date(2026, 3, 1),  # 19 days before
+            )
+        )
+
+        new_record = make_indy_record(
+            source="pawboost",
+            source_id="PB-DUP005",
+            animal_type=AnimalType.DOG,
+            breed="Labrador Mix",
+            color_primary="Black",
+            lat=39.7700,
+            lon=-86.1600,
+            date_event=date(2026, 3, 20),  # 19 days later
+        )
+        new_row, _ = await repo.upsert(new_record)
+
+        duplicates = await repo.find_cross_source_duplicates(
+            new_record, new_row, date_window_hours=48
+        )
+        dup_ids = {r.id for r, _ in duplicates}
+        assert existing.id not in dup_ids
+
+    @pytest.mark.asyncio
+    async def test_does_not_match_outside_radius(self, db_session):
+        """Records beyond the search radius should not match."""
+        repo = PetRepository(db_session)
+
+        # Indianapolis
+        existing, _ = await repo.upsert(
+            make_indy_record(
+                source="indylostpetalert",
+                source_id="EXIST006",
+                animal_type=AnimalType.DOG,
+                breed="Poodle",
+                color_primary="White",
+                lat=39.7684,
+                lon=-86.1581,
+                date_event=date(2026, 3, 20),
+            )
+        )
+
+        # Chicago (far away)
+        new_record = make_indy_record(
+            source="pawboost",
+            source_id="PB-DUP006",
+            animal_type=AnimalType.DOG,
+            breed="Poodle",
+            color_primary="White",
+            lat=41.8781,
+            lon=-87.6298,
+            date_event=date(2026, 3, 20),
+        )
+        new_row, _ = await repo.upsert(new_record)
+
+        duplicates = await repo.find_cross_source_duplicates(
+            new_record, new_row, search_radius_miles=5.0
+        )
+        dup_ids = {r.id for r, _ in duplicates}
+        assert existing.id not in dup_ids
+
+    @pytest.mark.asyncio
+    async def test_link_duplicates_creates_match(self, db_session):
+        """link_duplicates should create a PetMatch with match_type='dedup'."""
+        repo = PetRepository(db_session)
+
+        row_a, _ = await repo.upsert(
+            make_indy_record(source="indylostpetalert", source_id="LINK_A")
+        )
+        row_b, _ = await repo.upsert(
+            make_pawboost_record(source="pawboost", source_id="LINK_B")
+        )
+
+        linked = await repo.link_duplicates(row_a, row_b, score=0.65)
+        assert linked is True
+
+        # Verify the match was persisted
+        matches = await repo.get_matches_for_pet(row_a.id)
+        assert len(matches) == 1
+        assert matches[0].match_type == "dedup"
+        assert matches[0].score == pytest.approx(0.65, abs=0.1)
+        # score is passed through from_signals with cap at 1.0, but the signals_fired
+        # dict has cross_source_dedup=0.65, so score should be ~0.65
+        assert "cross_source_dedup" in matches[0].signals_fired
+
+    @pytest.mark.asyncio
+    async def test_link_duplicates_idempotent(self, db_session):
+        """Linking the same pair twice should update, not duplicate."""
+        repo = PetRepository(db_session)
+
+        row_a, _ = await repo.upsert(
+            make_indy_record(source="indylostpetalert", source_id="IDEM_A")
+        )
+        row_b, _ = await repo.upsert(
+            make_pawboost_record(source="pawboost", source_id="IDEM_B")
+        )
+
+        # Link twice
+        await repo.link_duplicates(row_a, row_b, score=0.50)
+        linked = await repo.link_duplicates(row_a, row_b, score=0.70)
+
+        # Second call returns False (updated, not created)
+        assert linked is False
+
+        matches = await repo.get_matches_for_pet(row_a.id)
+        assert len(matches) == 1
+        # Score should be refreshed to the higher value
+        assert matches[0].score == pytest.approx(0.70, abs=0.1)
+
+    @pytest.mark.asyncio
+    async def test_end_to_end_scraper_pipeline(self, db_session):
+        """Simulate the scraper pipeline: upsert two matching records from different
+        sources and verify the cross-source dedup links them."""
+        repo = PetRepository(db_session)
+
+        # Step 1: Upsert a record from indylostpetalert
+        record_a = make_indy_record(
+            source="indylostpetalert",
+            source_id="E2E_INDY",
+            animal_type=AnimalType.DOG,
+            breed="Golden Retriever",
+            color_primary="Golden",
+            lat=39.7684,
+            lon=-86.1581,
+            date_event=date(2026, 3, 20),
+        )
+        row_a, created_a = await repo.upsert(record_a)
+        assert created_a is True
+
+        # Step 2: Upsert a matching record from pawboost
+        record_b = make_pawboost_record(
+            source="pawboost",
+            source_id="E2E_PAW",
+            breed="Golden Retriever",
+            color_primary="Golden",
+            lat=39.7700,
+            lon=-86.1600,
+            date_event=date(2026, 3, 20),
+        )
+        row_b, created_b = await repo.upsert(record_b)
+        assert created_b is True
+
+        # Step 3: Run cross-source dedup from the new record's perspective
+        duplicates = await repo.find_cross_source_duplicates(record_b, row_b)
+        assert len(duplicates) >= 1
+        dup_ids = {r.id for r, _ in duplicates}
+        assert row_a.id in dup_ids
+
+        # Step 4: Link the duplicates
+        score = next(s for r, s in duplicates if r.id == row_a.id)
+        linked = await repo.link_duplicates(row_b, row_a, score)
+        assert linked is True
+
+        # Step 5: Verify the match
+        matches = await repo.get_matches_for_pet(row_a.id)
+        assert len(matches) == 1
+        assert matches[0].match_type == "dedup"
+        assert matches[0].score > 0.0

@@ -48,6 +48,7 @@ class ScraperScheduler:
         from ..scrapers.browser.petfbi import PetFBIScraper
         from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
         from ..scrapers.http.petconnect24 import PetConnect24Scraper
+        from ..scrapers.http.petfinder import PetfinderScraper
 
         scheduler = AsyncIOScheduler(timezone="UTC")
         cfg = _config()
@@ -60,6 +61,7 @@ class ScraperScheduler:
         scraper_jobs = [
             ("indy_lost_pet_alert", IndyLostPetAlertScraper, 15, 0),
             ("petconnect24", PetConnect24Scraper, 30, 1),
+            ("petfinder", PetfinderScraper, 60, 3),
             ("pawboost", PawBoostScraper, 35, 4),
             ("petfbi", PetFBIScraper, 40, 7),
             ("lostmydoggie", LostMyDoggieScraper, 45, 10),

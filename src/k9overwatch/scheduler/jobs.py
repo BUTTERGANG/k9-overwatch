@@ -92,6 +92,19 @@ async def run_scraper(
                         records_new += 1
                         new_rows.append(row)
 
+                        # ── Cross-source dedup check ─────────────────────
+                        # For newly created records, check if the same pet
+                        # exists from another source and link them.
+                        duplicates = await repo.find_cross_source_duplicates(record, row)
+                        for dup_row, dup_score in duplicates:
+                            linked = await repo.link_duplicates(row, dup_row, dup_score)
+                            if linked:
+                                logger.info(
+                                    f"CROSS-SOURCE DEDUP [{source}/{record.source_id}] "
+                                    f"→ [{dup_row.source}/{dup_row.source_id}] "
+                                    f"score={dup_score:.2f}"
+                                )
+
                 except Exception as exc:
                     errors += 1
                     logger.error(f"[{source}] Error processing record {record.source_id}: {exc}")

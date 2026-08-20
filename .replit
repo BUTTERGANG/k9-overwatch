@@ -48,3 +48,6 @@ waitForPort = 5000
 
 [agent]
 expertMode = true
+
+[env]
+CLAUDE_CONFIG_DIR = "/home/runner/workspace/.local/state/claude"

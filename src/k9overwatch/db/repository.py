@@ -590,6 +590,168 @@ class PetRepository:
         await self.session.flush()
         return count
 
+    # ── Cross-source deduplication ──────────────────────────────────────────
+
+    async def find_cross_source_duplicates(
+        self,
+        record: PetRecord,
+        new_row: PetRow,
+        search_radius_miles: float = 5.0,
+        date_window_hours: int = 48,
+    ) -> list[tuple[PetRow, float]]:
+        """Find existing records from OTHER sources that likely represent the
+        same physical pet as the newly-upserted ``new_row``.
+
+        Matching criteria:
+          * Same record_type (lost↔lost, found↔found)
+          * Same animal_type
+          * Same breed_normalized (or fuzzy match via rapidfuzz)
+          * Same color_primary (or partial match)
+          * Within ``search_radius_miles`` (haversine)
+          * ``date_event`` within ``date_window_hours`` of each other
+
+        Returns ``[(PetRow, similarity_score), ...]`` where similarity_score
+        is 0.0–1.0 based on the number of matching criteria.
+        """
+        if not new_row.id:
+            return []
+
+        # ── Build DB query for candidates from other sources ────────────────
+        filters: list = [
+            PetRow.source != record.source,
+            PetRow.active == True,
+        ]
+        if record.record_type:
+            filters.append(PetRow.record_type == str(record.record_type))
+        if record.animal_type:
+            filters.append(PetRow.animal_type == str(record.animal_type))
+
+        # Breed filter — prefer exact breed_normalized, fall back to no pre-filter
+        breed_norm = new_row.breed_normalized or normalize_breed(record.breed)
+        if breed_norm:
+            filters.append(
+                or_(
+                    PetRow.breed_normalized == breed_norm,
+                    PetRow.breed_normalized.is_(None),
+                )
+            )
+
+        # Date window: only consider records with date_event within window
+        if record.date_event:
+            from datetime import timedelta as _td
+
+            window = _td(hours=date_window_hours)
+            lower = record.date_event - window
+            upper = record.date_event + window
+            filters.append(PetRow.date_event.between(lower, upper))
+
+        # Geo bounding box pre-filter (fast)
+        if record.lat is not None and record.lon is not None:
+            lat_delta = search_radius_miles / 69.0
+            lon_delta = search_radius_miles / (
+                69.0 * math.cos(math.radians(record.lat))
+            )
+            filters.append(
+                or_(
+                    PetRow.lat.is_(None),
+                    and_(
+                        PetRow.lat.between(
+                            record.lat - lat_delta, record.lat + lat_delta
+                        ),
+                        PetRow.lon.between(
+                            record.lon - lon_delta, record.lon + lon_delta
+                        ),
+                    ),
+                )
+            )
+
+        stmt = select(PetRow).where(and_(*filters))
+        result = await self.session.execute(stmt)
+        candidates = result.scalars().all()
+
+        # ── Score each candidate ────────────────────────────────────────────
+        from ..matching.signals import geo_distance_miles, score_breed_match, score_color_match
+
+        scored: list[tuple[PetRow, float]] = []
+        record_lat = record.lat
+        record_lon = record.lon
+        record_color = (record.color_primary or "").lower().strip()
+        record_breed = new_row.breed_normalized or normalize_breed(record.breed) or (record.breed or "").lower().strip()
+
+        for candidate in candidates:
+            score_parts: list[float] = []
+
+            # 1) Breed match (weight: 0.35)
+            cand_breed = candidate.breed_normalized or normalize_breed(candidate.breed) or (candidate.breed or "").lower().strip()
+            if record_breed and cand_breed:
+                breed_sigs = score_breed_match(record_breed, cand_breed)
+                if "breed_exact" in breed_sigs:
+                    score_parts.append(0.35)
+                elif "breed_fuzzy_high" in breed_sigs:
+                    score_parts.append(0.20)
+                elif "breed_fuzzy_med" in breed_sigs:
+                    score_parts.append(0.10)
+
+            # 2) Color match (weight: 0.25)
+            cand_color = (candidate.color_primary or "").lower().strip()
+            if record_color and cand_color:
+                color_sigs = score_color_match(record_color, cand_color, weight=0.25)
+                if "color_primary_match" in color_sigs:
+                    score_parts.append(0.25)
+                elif "color_partial_match" in color_sigs:
+                    score_parts.append(0.12)
+
+            # 3) Geo proximity (weight: 0.25)
+            if record_lat is not None and record_lon is not None and candidate.lat is not None and candidate.lon is not None:
+                dist = geo_distance_miles(record_lat, record_lon, candidate.lat, candidate.lon)
+                if dist is not None and dist <= search_radius_miles:
+                    # Score inversely proportional to distance: 0.25 at 0mi → 0.05 at 5mi
+                    geo_score = max(0.05, 0.25 * (1 - dist / search_radius_miles))
+                    score_parts.append(geo_score)
+
+            # 4) Date proximity (weight: 0.15)
+            if record.date_event and candidate.date_event:
+                delta = abs((record.date_event - candidate.date_event).days)
+                if delta == 0:
+                    score_parts.append(0.15)
+                elif delta <= 1:
+                    score_parts.append(0.10)
+                elif delta <= 3:
+                    score_parts.append(0.05)
+
+            if score_parts:
+                scored.append((candidate, sum(score_parts)))
+
+        # Sort by score descending
+        scored.sort(key=lambda x: x[1], reverse=True)
+        return scored
+
+    async def link_duplicates(
+        self,
+        new_row: PetRow,
+        duplicate: PetRow,
+        score: float,
+    ) -> bool:
+        """Create a ``PetMatch`` record with ``match_type='dedup'`` between
+        ``new_row`` and ``duplicate``.
+
+        Returns True if a new match row was created, False if an existing one
+        was updated or already exists.
+        """
+        from ..matching.signals import MatchResult
+
+        # Build a MatchResult so save_match can persist it consistently
+        signals: dict[str, float] = {
+            "cross_source_dedup": score,
+        }
+        result = MatchResult.from_signals(
+            pet_a_id=new_row.id,
+            pet_b_id=duplicate.id,
+            match_type="dedup",
+            signals_fired=signals,
+        )
+        return await self.save_match(result)
+
     async def save_match(self, match) -> bool:
         """
         Save (or update) a MatchResult.
