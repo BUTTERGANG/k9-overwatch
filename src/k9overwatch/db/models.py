@@ -268,13 +268,31 @@ class SavedSearch(Base):
 
 
 class NotificationQueue(Base):
-    """Durable, provider-independent queue for saved-search alerts."""
+    """Durable, provider-independent outbound notification queue.
+
+    Serves saved-search alerts, lost↔found match alerts, contact-relay
+    notifications, and the coalesced daily digest. Each row is atomically
+    claimed by a delivery worker and retried with bounded exponential backoff
+    (see claim_notification_queue / mark_notification_failed), so a transient
+    mail-provider failure never silently drops the alert.
+    """
+
     __tablename__ = "notification_queue"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String(36), nullable=False, index=True)
-    saved_search_id = Column(String(36), nullable=False, index=True)
-    pet_id = Column(String(36), nullable=False, index=True)
+
+    # One of: saved_search | match | contact | digest.
+    kind = Column(String(24), nullable=False, default="saved_search", index=True)
+
+    # Saved-search specific (NULL for other kinds).
+    saved_search_id = Column(String(36), nullable=True, index=True)
+    pet_id = Column(String(36), nullable=True, index=True)
+
+    # Opaque dedupe key so repeated matching passes never re-queue the same
+    # alert for the same user + event.
+    dedupe_key = Column(String(160), nullable=True, index=True)
+
     subject = Column(Text, nullable=False)
     body = Column(Text, nullable=False)
     confidence = Column(Text)
@@ -287,7 +305,6 @@ class NotificationQueue(Base):
     last_error = Column(Text)
 
     __table_args__ = (
-        UniqueConstraint("user_id", "saved_search_id", "pet_id", name="uq_notification_saved_search_pet"),
         Index("ix_notification_queue_status_created", "status", "created_at"),
     )
 

@@ -20,7 +20,7 @@ from .jobs import (
     check_stale_records,
     expire_stale_listings,
     flush_digest_notifications,
-    flush_saved_search_notifications,
+    flush_notifications,
     regeocode_pending_records,
     run_matching_pass,
     run_scraper,
@@ -144,11 +144,12 @@ class ScraperScheduler:
             coalesce=True,
         )
 
-        # ── Saved-search queue — frequent delivery with durable retries ──────
+        # ── Notification queue — durable delivery for saved-search, match,
+        #    contact, and digest alerts with retries ────────────────────────
         scheduler.add_job(
-            flush_saved_search_notifications,
+            flush_notifications,
             "interval", minutes=5,
-            id="saved_search_notifications",
+            id="notification_queue",
             max_instances=1,
             coalesce=True,
         )

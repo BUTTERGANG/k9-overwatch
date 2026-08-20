@@ -333,6 +333,50 @@ class PetRepository:
             row.next_attempt_at = now + timedelta(seconds=delay_seconds)
         await self.session.flush()
 
+    async def enqueue_notification(
+        self,
+        *,
+        user_id: str,
+        subject: str,
+        body: str,
+        kind: str,
+        dedupe_key: str | None = None,
+        confidence: str | None = None,
+        now: datetime | None = None,
+    ) -> NotificationQueue | None:
+        """Persist an outbound notification for durable, retried delivery.
+
+        Any of the notification kinds (match, contact, digest, saved_search)
+        can be enqueued here; a worker later delivers it through
+        `claim_notification_queue` / `flush_notification_queue` with bounded
+        backoff, so a transient mail-provider outage never drops the alert.
+
+        Idempotent by `dedupe_key`: if a pending/failed/sent row with that key
+        already exists for the same user+event, no duplicate is created and
+        None is returned.
+        """
+        now = now or datetime.now(UTC).replace(tzinfo=None)
+        if dedupe_key is not None:
+            existing = await self.session.execute(
+                select(NotificationQueue.id).where(
+                    NotificationQueue.dedupe_key == dedupe_key
+                )
+            )
+            if existing.scalar_one_or_none() is not None:
+                return None
+        row = NotificationQueue(
+            user_id=user_id,
+            kind=kind,
+            dedupe_key=dedupe_key,
+            subject=subject,
+            body=body,
+            confidence=confidence,
+            created_at=now,
+        )
+        self.session.add(row)
+        await self.session.flush()
+        return row
+
     async def find_match_candidates(
         self,
         record: PetRecord,

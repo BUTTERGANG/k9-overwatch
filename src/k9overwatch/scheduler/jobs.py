@@ -395,7 +395,7 @@ async def expire_stale_listings(max_age_days: int = 120, stale_notify_hours: int
     """
     from datetime import timedelta
 
-    from sqlalchemy import or_, select
+    from sqlalchemy import select
 
     from ..db.models import PetMatch, PetRow
 
@@ -403,7 +403,6 @@ async def expire_stale_listings(max_age_days: int = 120, stale_notify_hours: int
     notified_cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=stale_notify_hours)
 
     async with get_session() as session:
-        repo = PetRepository(session)
         count = 0
 
         # ── Non-user records: deactivate immediately as before. ──────────────
@@ -498,19 +497,47 @@ async def _maybe_notify(session, record, result, candidates) -> None:
 
 
 async def flush_digest_notifications() -> dict:
-    """Scheduler entry point: send the per-day match digest emails."""
-    from k9overwatch.notifications import flush_digest
+    """Scheduler entry point: persist the buffered daily digest into the durable
+    notification queue (so it isn't lost across restarts or split across
+    workers), then deliver the queue."""
+    from datetime import date as _date
 
-    sent = await flush_digest()
-    logger.info(f"Match digest: {sent} email(s) sent")
-    return {"sent": sent}
+    from k9overwatch.notifications import drain_digest, flush_notification_queue
+
+    async with get_session() as session:
+        repo = PetRepository(session)
+        today = _date.today().isoformat()
+        enqueued = 0
+        # items are (subject, body, unsubscribe_token, user_id).
+        for items in drain_digest().values():
+            user_id = items[0][3]
+            body = "\n---\n".join(b for _, b, _, _ in items)
+            subject = f"{len(items)} possible match(es) for your lost pet"
+            row = await repo.enqueue_notification(
+                user_id=user_id,
+                subject=subject,
+                body=body,
+                kind="digest",
+                dedupe_key=f"digest:{user_id}:{today}",
+            )
+            if row is not None:
+                enqueued += 1
+        await session.flush()
+        sent = await flush_notification_queue(session)
+    logger.info(f"Match digest: {enqueued} digest(s) enqueued, {sent} delivered")
+    return {"enqueued": enqueued, "sent": sent}
 
 
-async def flush_saved_search_notifications() -> dict:
-    """Scheduler entry point for durable saved-search notification delivery."""
+async def flush_notifications() -> dict:
+    """Scheduler entry point for durable delivery of every queued notification
+    (saved search, match, contact, digest) with atomic claims and retries."""
     from k9overwatch.notifications import flush_notification_queue
 
     async with get_session() as session:
         sent = await flush_notification_queue(session)
-    logger.info(f"Saved-search notifications: {sent} email(s) sent")
+    logger.info(f"Notification queue: {sent} email(s) sent")
     return {"sent": sent}
+
+
+# Backward-compatible alias: the queue now serves all notification kinds.
+flush_saved_search_notifications = flush_notifications

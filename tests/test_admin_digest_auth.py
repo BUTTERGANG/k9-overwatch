@@ -29,9 +29,11 @@ async def client() -> AsyncGenerator[AsyncClient, None]:
 @pytest.mark.asyncio
 async def test_flush_digest_requires_admin_basic_auth(client: AsyncClient, monkeypatch):
     async def fake_flush_digest():
-        return 0
+        return {"enqueued": 0, "sent": 0}
 
-    monkeypatch.setattr("k9overwatch.web.routers.accounts.flush_digest", fake_flush_digest)
+    monkeypatch.setattr(
+        "k9overwatch.web.routers.accounts.flush_digest_notifications", fake_flush_digest
+    )
     monkeypatch.setenv("ADMIN_USER", "testadmin")
     monkeypatch.setenv("ADMIN_PASSWORD", "testpass")
 
@@ -43,4 +45,4 @@ async def test_flush_digest_requires_admin_basic_auth(client: AsyncClient, monke
         headers={"Authorization": _basic_auth_header("testadmin", "testpass")},
     )
     assert authorized.status_code == 200
-    assert authorized.json() == {"sent": 0}
+    assert authorized.json() == {"enqueued": 0, "sent": 0}
