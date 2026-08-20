@@ -18,29 +18,20 @@
 | Reunification success metrics | `/api/stats` endpoint + landing page counter |
 | PostGIS migration plan | `docs/postgis-migration.md` + migration script |
 | PR #4 merged | Scheduler cadence fix (interval triggers) |
-| PLAN.md created | Development plan at repo root |
-
-## 🔄 In Progress
-
-| Feature | Owner | Notes |
-|---------|-------|-------|
-| Cross-source deduplication | — | Same pet on different sources = duplicate pins |
-| Petfinder.com API integration | — | Official structured JSON API |
+| PLAN.md + KANBAN.md created | Development plan + sprint board |
+| Cross-source deduplication | In progress |
+| Petfinder.com API integration | In progress |
 
 ## 📋 Backlog
 
 | Feature | Priority | Notes |
 |---------|----------|-------|
-| Contact relay email delivery | Medium | Actually send emails for scraped tips |
-| Petfinder.com scraper | High | Cleanest data source available |
-| Cross-source dedup | High | Most visible user-facing issue |
 | Saved search radius queries | Medium | Already have SavedSearch model with lat/lon/radius |
 | Google Maps geocoding provider | Low | Env var exists, needs testing |
-| Bulk geocode for existing null-coord records | Low | One-time backfill script |
 | Mobile app | Low | Responsive web works; no demand yet |
 
 ---
 
 ## How to use this board
 
-Update the tables above as work progresses. Move items between columns by editing this file. Create a new Sprint section when the current one ends.
+Update the tables above as work progresses. Move items between columns by editing this file.
