@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Users | K9-Overwatch{% endblock %}
+
+{% block content %}
+<div class="max-w-4xl mx-auto px-4 py-10">
+  <h1 class="text-2xl font-bold text-gray-900 mb-6">Users</h1>
+  <table class="w-full text-sm border border-gray-100 rounded-lg overflow-hidden">
+    <thead class="bg-gray-50 text-left text-gray-600">
+      <tr><th class="px-4 py-2">Email</th><th class="px-4 py-2">Name</th><th class="px-4 py-2">Group admin</th><th></th></tr>
+    </thead>
+    <tbody>
+      {% for u in users %}
+      <tr class="border-t border-gray-100">
+        <td class="px-4 py-2">{{ u.email }}</td>
+        <td class="px-4 py-2">{{ u.display_name or "—" }}</td>
+        <td class="px-4 py-2">{{ "Yes" if u.is_group_admin else "No" }}</td>
+        <td class="px-4 py-2 text-right">
+          <form method="post" action="/admin/users/{{ u.id }}/group-admin" class="inline">
+            <button type="submit" class="rounded-lg border border-slate-300 px-3 py-1 text-xs font-semibold hover:bg-slate-50">
+              {{ "Disable digest" if u.is_group_admin else "Enable digest" }}
+            </button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

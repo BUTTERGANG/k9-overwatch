@@ -24,6 +24,7 @@ from .jobs import (
     regeocode_pending_records,
     run_matching_pass,
     run_scraper,
+    send_group_admin_digests,
 )
 from .lock import SchedulerSingletonLock
 
@@ -144,6 +145,15 @@ class ScraperScheduler:
             flush_digest_notifications,
             "cron", hour=19, minute=0,
             id="match_digest",
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # ── Group-admin daily digest — env-gated (GROUP_ADMIN_DIGEST_ENABLED) ─
+        scheduler.add_job(
+            send_group_admin_digests,
+            "cron", hour=17, minute=30,
+            id="group_admin_digest",
             max_instances=1,
             coalesce=True,
         )

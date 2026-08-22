@@ -88,6 +88,11 @@
               <button type="button" class="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors" onclick="var r=prompt('Reason for flagging this report:');if(r&&r.trim()){var f=this.closest('form');var i=document.createElement('input');i.type='hidden';i.name='reason';i.value=r.trim();f.appendChild(i);f.submit();}">🚩 Flag</button>
             </form>
             {% endif %}
+            {% if pet.record_type in ('lost', 'found', 'sighting') %}
+            <button type="button" id="copy-share-post"
+                    class="inline-flex items-center gap-1 rounded-lg border border-slate-300 dark:border-slate-600 px-3 py-1.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors">📋 Copy share post</button>
+            <span id="share-toast" class="hidden text-xs text-emerald-700 dark:text-emerald-400 font-semibold">Copied!</span>
+            {% endif %}
         </div>
     </div>
 
@@ -435,6 +440,23 @@
 {% endblock %}
 
 {% block extra_scripts %}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+    var shareBtn = document.getElementById("copy-share-post");
+    if (shareBtn) {
+        shareBtn.addEventListener("click", async function () {
+            try {
+                var resp = await fetch("/pets/{{ pet.id }}/share-pack");
+                if (!resp.ok) throw new Error("fetch failed");
+                var data = await resp.json();
+                await navigator.clipboard.writeText(data.text);
+                var toast = document.getElementById("share-toast");
+                if (toast) { toast.classList.remove("hidden"); setTimeout(function(){ toast.classList.add("hidden"); }, 2500); }
+            } catch (e) { /* clipboard unavailable or fetch failed — do nothing */ }
+        });
+    }
+});
+</script>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 {% if pet.lat and pet.lon %}
 <script>

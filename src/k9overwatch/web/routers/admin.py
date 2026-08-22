@@ -273,3 +273,26 @@ async def admin_edit_pet(
             setattr(pet, field, value.strip())
     await db.commit()
     return RedirectResponse(url="/admin/reports", status_code=303)
+
+
+# ── User management: group-admin digest opt-in toggle ────────────────────────
+
+@router.get("/admin/users", dependencies=[Depends(verify_admin)])
+async def admin_users_page(request: Request, db: AsyncSession = Depends(get_db)):
+    from k9overwatch.db.models import User
+
+    users = (await db.execute(select(User).order_by(User.email))).scalars().all()
+    return templates.TemplateResponse(request, "admin/users.html", {"users": users})
+
+
+@router.post("/admin/users/{user_id}/group-admin", dependencies=[Depends(verify_admin)])
+async def admin_toggle_group_admin(user_id: str, db: AsyncSession = Depends(get_db)):
+    """Flip a user's group-admin digest opt-in flag."""
+    from k9overwatch.db.models import User
+
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_group_admin = not user.is_group_admin
+    await db.commit()
+    return RedirectResponse(url="/admin/users", status_code=303)

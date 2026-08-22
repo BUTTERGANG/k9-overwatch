@@ -168,6 +168,13 @@ class TestRealDataSanity:
         url = os.getenv(
             "DATABASE_URL", "sqlite+aiosqlite:///data/k9overwatch.db"
         )
+        # The real-data audit only makes sense against a populated dev DB.
+        # In CI (or any checkout without data/), the sqlite file doesn't exist
+        # and the query would raise OperationalError instead of skipping — so
+        # probe for the file first and skip when absent.
+        db_path = url.split("///")[-1]
+        if not os.path.exists(db_path):
+            pytest.skip(f"dev DB not present at {db_path} — nothing to audit")
         engine = create_async_engine(url)
         factory = async_sessionmaker(engine, expire_on_commit=False)
         try:
