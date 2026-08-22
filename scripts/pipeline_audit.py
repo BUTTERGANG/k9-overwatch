@@ -45,12 +45,10 @@ def _build_scrapers(config: ScraperConfig) -> tuple[list, list[dict]]:
     from k9overwatch.scrapers.browser.petfbi import PetFBIScraper
     from k9overwatch.scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
     from k9overwatch.scrapers.http.petconnect24 import PetConnect24Scraper
-    from k9overwatch.scrapers.http.petfinder import PetfinderScraper
 
     classes = [
         IndyLostPetAlertScraper,
         PetConnect24Scraper,
-        PetfinderScraper,
         PawBoostScraper,
         PetFBIScraper,
         LostMyDoggieScraper,
@@ -58,17 +56,6 @@ def _build_scrapers(config: ScraperConfig) -> tuple[list, list[dict]]:
     out = []
     disabled: list[dict] = []
     for cls in classes:
-        if cls is PetfinderScraper and not (
-            os.getenv("PETFINDER_API_KEY") and os.getenv("PETFINDER_API_SECRET")
-        ):
-            disabled.append({
-                "source": cls.SOURCE_NAME,
-                "status": "DISABLED_NO_CREDS",
-                "count": 0,
-                "rates": {},
-                "error": "PETFINDER_API_KEY / PETFINDER_API_SECRET not set",
-            })
-            continue
         try:
             out.append(cls(config))
         except Exception as exc:  # e.g. missing API key

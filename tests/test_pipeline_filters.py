@@ -20,7 +20,6 @@ from k9overwatch.normalizers.lostmydoggie import LostMyDoggieNormalizer
 from k9overwatch.normalizers.pawboost import PawBoostNormalizer
 from k9overwatch.normalizers.petconnect24 import PetConnect24Normalizer
 from k9overwatch.normalizers.petfbi import PetFBINormalizer
-from k9overwatch.normalizers.petfinder import PetfinderNormalizer
 from tests.conftest import make_indy_record
 from tests.test_normalizers import (
     CARD_HTML_ADOPT,
@@ -200,10 +199,6 @@ def _petconnect_card(html: str):
          lambda: LostMyDoggieNormalizer().normalize(
              {"pet_id": "lmd2", "details": ["Siamese", "White", "Found: 2026-03-21"],
               "status_line": "Found \xa0Female Cat"}, "cat", "found")),
-        ("petfinder adoptable default", "adoptable",
-         lambda: PetfinderNormalizer().normalize(
-             {"id": 42, "type": "Dog", "status": "adoptable",
-              "breeds": {"primary": "Labrador Retriever"}, "photos": []})),
     ],
 )
 def test_record_type_categorization(label, expected, produce):
