@@ -167,11 +167,19 @@ def from_signals_v2(
     """
     penalties = penalties or {}
     raw = sum(signals_fired.values())
-    score = max(0.0, raw - sum(penalties.values()))
+    # Round to 6dp so float noise (e.g. 0.85 - 0.45 = 0.39999...97) can't
+    # push a boundary score below the medium threshold.
+    score = round(max(0.0, raw - sum(penalties.values())), 6)
 
     families: dict[str, list[str]] = {}
     for sig in signals_fired:
-        families.setdefault(SIGNAL_FAMILIES.get(sig, "narrative"), []).append(sig)
+        fam = SIGNAL_FAMILIES.get(sig)
+        if fam is None:
+            # Unknown signal names contribute to the score but are isolated
+            # from corroboration counting / coincidence detection — an
+            # unrecognized signal must never impersonate narrative evidence.
+            continue
+        families.setdefault(fam, []).append(sig)
     families_present = set(families)
 
     # Identity evidence (microchip/phone/name) is conclusive: a narrative

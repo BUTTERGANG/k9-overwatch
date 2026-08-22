@@ -272,6 +272,29 @@ class TestNarrativeVetoIdentitySemantics:
         assert result.confidence != "high"
 
 
+class TestUnknownSignalFamilyIsolation:
+    def test_unknown_names_do_not_inflate_corroboration(self):
+        # 1 known description signal + 2 unknown-name signals. Score crosses
+        # 0.40 but unknowns must not count as corroborating evidence families.
+        signals = {
+            "distinctive_feature_match": 0.08,
+            "mystery_signal_a": 0.20,
+            "mystery_signal_b": 0.20,
+        }
+        result = MatchResult.from_signals_v2("a", "b", "lost_found", signals)
+        assert result.score == pytest.approx(0.48)
+        assert result.confidence == "low"
+
+    def test_unknown_names_still_contribute_to_score(self):
+        result = MatchResult.from_signals_v2(
+            "a", "b", "lost_found",
+            {"geo_very_close": 0.25, "mystery_signal": 0.20,
+             "date_within_1_day": 0.10},
+        )
+        assert result.score == pytest.approx(0.55)
+        assert result.confidence == "medium"  # 2 real families, not 3
+
+
 # ── Matcher integration ───────────────────────────────────────────────────────
 
 def _pet(**kw):
