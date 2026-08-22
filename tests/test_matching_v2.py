@@ -243,6 +243,8 @@ class TestFromSignalsV2Corroboration:
         assert any("gender" in r.lower() for r in penalized.reasons)
 
 
+# ── Reviewed-gap regressions (2026-08-22) ─────────────────────────────────────
+
 class TestNarrativeVetoIdentitySemantics:
     def test_microchip_with_narrative_veto_still_high(self):
         # Narrative conflict = misdescription, not a different animal.
@@ -293,6 +295,18 @@ class TestUnknownSignalFamilyIsolation:
         )
         assert result.score == pytest.approx(0.55)
         assert result.confidence == "medium"  # 2 real families, not 3
+
+
+class TestFloatThresholdRounding:
+    def test_penalized_score_at_medium_boundary_is_medium(self):
+        # 0.45 + 0.40 - 0.45 = 0.39999999999999997 in float; must round to 0.40.
+        result = MatchResult.from_signals_v2(
+            "a", "b", "lost_found",
+            {"zip_match": 0.45, "geo_close": 0.40},
+            penalties={"narrative": 0.45},
+        )
+        assert result.score == pytest.approx(0.40)
+        assert result.confidence == "medium"
 
 
 # ── Matcher integration ───────────────────────────────────────────────────────
