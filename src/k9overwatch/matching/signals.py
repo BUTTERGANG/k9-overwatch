@@ -132,6 +132,14 @@ V2_MEDIUM_SCORE = 0.40
 VETO_PENALTY = 0.45
 COINCIDENCE_MAX_GENERIC_DESC_SIGNALS = 2
 
+# Human-readable names for veto families shown in match reasons.
+_VETO_FAMILY_LABELS = {
+    "gender": "gender",
+    "size": "size",
+    "color": "color",
+    "narrative": "markings/description",
+}
+
 
 @classmethod
 def from_signals_v2(
