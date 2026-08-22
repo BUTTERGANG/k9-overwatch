@@ -121,10 +121,19 @@ def _store_stripped(images: list[tuple[str, bytes]]) -> list[str]:
 
 @router.get("/report")
 async def report_page(request: Request, db: AsyncSession = Depends(get_db)):
+    from urllib.parse import quote
+
+    from k9overwatch.web.report_prefill import parse_prefill_token
+
     user_id = await get_current_user_id(request)
     if not user_id:
-        return RedirectResponse(url="/login?next=/report", status_code=302)
-    return templates.TemplateResponse(request, "accounts/report.html", {})
+        # Preserve a prefill token through the login redirect so a group-admin
+        # link still lands on a prefilled form after sign-in.
+        prefill = request.query_params.get("prefill")
+        next_url = "/report" + (f"?prefill={quote(prefill)}" if prefill else "")
+        return RedirectResponse(url=f"/login?next={quote(next_url, safe='')}", status_code=302)
+    prefill = parse_prefill_token(request.query_params.get("prefill")) or {}
+    return templates.TemplateResponse(request, "accounts/report.html", {"prefill": prefill})
 
 
 @router.post("/report", dependencies=[Depends(rate_limit("report", limit=10))])
