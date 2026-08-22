@@ -422,7 +422,7 @@ async def expire_stale_listings(max_age_days: int = 120, stale_notify_hours: int
     """
     from datetime import timedelta
 
-    from sqlalchemy import or_, select
+    from sqlalchemy import select
 
     from ..db.models import PetMatch, PetRow
 
@@ -430,7 +430,6 @@ async def expire_stale_listings(max_age_days: int = 120, stale_notify_hours: int
     notified_cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(hours=stale_notify_hours)
 
     async with get_session() as session:
-        repo = PetRepository(session)
         count = 0
 
         # ── Non-user records: deactivate immediately as before. ──────────────
