@@ -243,6 +243,35 @@ class TestFromSignalsV2Corroboration:
         assert any("gender" in r.lower() for r in penalized.reasons)
 
 
+class TestNarrativeVetoIdentitySemantics:
+    def test_microchip_with_narrative_veto_still_high(self):
+        # Narrative conflict = misdescription, not a different animal.
+        result = MatchResult.from_signals_v2(
+            "a", "b", "lost_found",
+            {"microchip_match": 0.50},
+            penalties={"narrative": 0.45},
+        )
+        assert result.confidence == "high"
+        assert any("conflict" in r.lower() for r in result.reasons)
+
+    def test_microchip_with_gender_veto_not_high(self):
+        # Gender is physically exclusive — veto still suppresses identity.
+        result = MatchResult.from_signals_v2(
+            "a", "b", "lost_found",
+            {"microchip_match": 0.50},
+            penalties={"gender": 0.45},
+        )
+        assert result.confidence != "high"
+
+    def test_microchip_with_narrative_and_gender_veto_not_high(self):
+        result = MatchResult.from_signals_v2(
+            "a", "b", "lost_found",
+            {"microchip_match": 0.50},
+            penalties={"narrative": 0.45, "gender": 0.45},
+        )
+        assert result.confidence != "high"
+
+
 # ── Matcher integration ───────────────────────────────────────────────────────
 
 def _pet(**kw):

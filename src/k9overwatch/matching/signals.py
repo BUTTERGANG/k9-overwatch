@@ -174,9 +174,12 @@ def from_signals_v2(
         families.setdefault(SIGNAL_FAMILIES.get(sig, "narrative"), []).append(sig)
     families_present = set(families)
 
+    # Identity evidence (microchip/phone/name) is conclusive: a narrative
+    # conflict means someone misdescribed the animal, not a different one.
+    # Physically exclusive vetoes (gender/size/color) still suppress identity.
     identity_hit = any(
         fam == "identity" for fam in families_present
-    ) and not penalties
+    ) and set(penalties) <= {"narrative"}
 
     coincidence = (
         families_present and families_present <= {"circumstance", "description"}
