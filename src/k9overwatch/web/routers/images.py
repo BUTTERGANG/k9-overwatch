@@ -22,6 +22,7 @@ import hashlib
 import ipaddress
 import os
 import socket
+import time
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException, Request
@@ -34,6 +35,45 @@ _ALLOWED_SCHEMES = {"http", "https"}
 
 # Conservative per-image cap (bytes) to keep the cache bounded.
 MAX_BYTES = 8 * 1024 * 1024
+
+# Cache hygiene (roadmap C8): entries older than CACHE_TTL_SECONDS are
+# re-fetched; after each write, oldest entries are evicted until the total
+# cache size is at or under CACHE_MAX_BYTES.
+CACHE_TTL_SECONDS = 7 * 24 * 3600          # one week
+CACHE_MAX_BYTES = 512 * 1024 * 1024        # 512 MB on-disk budget
+
+
+def _evict_cache() -> None:
+    """Delete oldest cached files until total size fits within CACHE_MAX_BYTES."""
+    try:
+        entries = []
+        total = 0
+        for name in os.listdir(CACHE_DIR):
+            path = os.path.join(CACHE_DIR, name)
+            if not os.path.isfile(path):
+                continue
+            stat = os.stat(path)
+            entries.append((stat.st_mtime, stat.st_size, path))
+            total += stat.st_size
+        entries.sort()
+        for _, size, path in entries:
+            if total <= CACHE_MAX_BYTES:
+                break
+            try:
+                os.remove(path)
+                total -= size
+            except OSError:
+                pass
+    except OSError:
+        pass
+
+
+def _cache_is_fresh(cache_path: str) -> bool:
+    """True if a cache entry exists and is younger than the TTL."""
+    try:
+        return (time.time() - os.stat(cache_path).st_mtime) < CACHE_TTL_SECONDS
+    except OSError:
+        return False
 
 
 def _is_private_address(ip_str: str) -> bool:
@@ -87,7 +127,7 @@ async def proxy_image(request: Request, url: str):
     key = hashlib.sha256(url.encode()).hexdigest()
     cache_path = os.path.join(CACHE_DIR, key)
 
-    if os.path.exists(cache_path):
+    if _cache_is_fresh(cache_path):
         with open(cache_path, "rb") as f:
             data = f.read()
     else:
@@ -100,6 +140,7 @@ async def proxy_image(request: Request, url: str):
             raise HTTPException(502, "Image too large")
         with open(cache_path, "wb") as f:
             f.write(data)
+        _evict_cache()
 
     # Best-effort content type from magic bytes.
     ctype = "image/jpeg"
