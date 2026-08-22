@@ -134,6 +134,12 @@ def _render(results: list[dict], args) -> str:
             f"| {rates.get('geocode%', '—')} | {rates.get('photo%', '—')} "
             f"| {rates.get('date%', '—')} | {rates.get('desc%', '—')} | {mix} |"
         )
+    ok = sum(1 for r in results if r["status"].startswith("OK"))
+    lines.append("")
+    lines.append(
+        f"**Verdict:** {ok}/{len(results)} sources fetched successfully "
+        f"(BLOCKED = site unreachable/anti-bot/headless limitation; recorded honestly)."
+    )
     lines += ["", "## Samples (5 normalized records per OK source)", ""]
     for r in results:
         lines.append(f"### {r['source']} — {r['status']}")
@@ -141,13 +147,6 @@ def _render(results: list[dict], args) -> str:
             lines.append(f"\n> Error: {r['error']}\n")
         if r.get("sample"):
             lines.append(f"\n```json\n{r['sample']}\n```\n")
-    ok = sum(1 for r in results if r["status"].startswith("OK"))
-    lines.insert(6, "")
-    lines.insert(
-        7,
-        f"**Verdict:** {ok}/{len(results)} sources fetched successfully "
-        f"(BLOCKED = site unreachable/anti-bot/headless limitation; recorded honestly).",
-    )
     return "\n".join(lines)
 
 

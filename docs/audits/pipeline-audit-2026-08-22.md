@@ -4,8 +4,6 @@ Dry-run of every registered scraper against live sites. No DB writes.
 Per-source record cap: 60; timeout: 90s.
 
 | Source | Status | Records | breed% | color% | geocode% | photo% | date% | desc% | record_type mix |
-
-**Verdict:** 3/6 sources fetched successfully (BLOCKED = site unreachable/anti-bot/headless limitation; recorded honestly).
 |---|---|---|---|---|---|---|---|---|---|
 | indylostpetalert | OK | 60 | 0 | 100 | 0 | 87 | 100 | 85 | found:31, lost:22, sighting:7 |
 | 24petconnect | OK | 60 | 90 | 0 | 0 | 42 | 50 | 0 | found:27, lost:33 |
@@ -13,6 +11,8 @@ Per-source record cap: 60; timeout: 90s.
 | pawboost | BLOCKED (site structure changed: No '.pet-search-result' cards found ) | 0 | — | — | — | — | — | — | — |
 | petfbi | OK | 5 | 100 | 100 | 100 | 80 | 100 | 100 | found:4, lost:1 |
 | lostmydoggie | BLOCKED (site structure changed: No '.box_icon' cards found on page 1) | 0 | — | — | — | — | — | — | — |
+
+**Verdict:** 3/6 sources fetched successfully (BLOCKED = site unreachable/anti-bot/headless limitation; recorded honestly).
 
 ## Samples (5 normalized records per OK source)
 
