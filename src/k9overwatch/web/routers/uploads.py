@@ -16,14 +16,13 @@ from fastapi.responses import Response
 router = APIRouter()
 
 # uuid4().hex + a known image extension, nothing else is ever written.
-_UPLOAD_NAME_RE = re.compile(r"^[a-f0-9]{32}\.(jpg|jpeg|png|webp|gif)$")
+_UPLOAD_NAME_RE = re.compile(r"^[a-f0-9]{32}\.(jpg|jpeg|png|webp)$")
 
 _CONTENT_TYPES = {
     ".jpg": "image/jpeg",
     ".jpeg": "image/jpeg",
     ".png": "image/png",
     ".webp": "image/webp",
-    ".gif": "image/gif",
 }
 
 
