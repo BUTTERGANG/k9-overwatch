@@ -14,6 +14,7 @@ from ..geocoding.geocoder import GeocodingService
 from ..geocoding.providers.nominatim import NominatimProvider
 from ..matching.deduplicator import Deduplicator
 from ..matching.lost_found_matcher import LostFoundMatcher
+from ..matching.perceptual_hash import build_visual_provider
 from ..models.pet_record import PetRecord
 from ..scrapers.base import BaseScraper, ScraperConfig
 
@@ -205,7 +206,7 @@ async def run_matching_pass(
     dedup_found = 0
     matches_found = 0
     deduplicator = Deduplicator()
-    matcher = LostFoundMatcher()
+    matcher = LostFoundMatcher(visual_provider=build_visual_provider())
 
     async with get_session() as session:
         repo = PetRepository(session)

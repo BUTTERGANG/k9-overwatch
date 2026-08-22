@@ -340,7 +340,6 @@ class ContactBlock(Base):
 class ContentReport(Base):
     """User-flagged content (reports, contact requests) for admin review."""
     __tablename__ = "content_reports"
-
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     reporter_id = Column(String(36), nullable=False, index=True)
     target_type = Column(String(40), nullable=False, index=True)  # "report" | "contact_request"
@@ -350,3 +349,18 @@ class ContentReport(Base):
     created_at = Column(DateTime, default=_now, nullable=False)
     reviewed_at = Column(DateTime)
     reviewed_by = Column(String(36))
+
+
+class VisualEmbedding(Base):
+    """Cached perceptual-hash embeddings keyed by photo-URL hash (roadmap C11).
+
+    Only populated when VISUAL_SIMILARITY_ENABLED=1; the algorithm column lets
+    old vectors coexist with newer hash versions instead of being silently
+    misinterpreted.
+    """
+    __tablename__ = "visual_embeddings"
+
+    ref_hash = Column(String(64), primary_key=True)  # sha256 of the photo URL
+    algorithm = Column(String(40), primary_key=True)  # e.g. "dhash64-v1"
+    embedding = Column(Text, nullable=False)          # JSON list[float]
+    created_at = Column(DateTime, default=_now, nullable=False)

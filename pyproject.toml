@@ -47,6 +47,11 @@ postgres = [
     "asyncpg>=0.29",
     "alembic>=1.13",
 ]
+visual = [
+    # Optional perceptual-hash visual similarity (roadmap C11). Only needed
+    # when VISUAL_SIMILARITY_ENABLED=1; image decode via Pillow.
+    "Pillow>=10.0",
+]
 browser = [
     "playwright>=1.43",
     "playwright-stealth>=0.0.1",
