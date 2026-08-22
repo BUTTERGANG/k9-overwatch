@@ -18,7 +18,41 @@ from datetime import datetime
 
 from ...models.pet_record import PetRecord
 from ...normalizers.lostmydoggie import LostMyDoggieNormalizer
+from ..base import StructuralChangeError
 from .base_browser import BrowserBaseScraper
+
+# Page states for listing responses
+PAGE_OK = "ok"
+PAGE_EMPTY = "empty"          # 200, valid page, legitimately zero results
+PAGE_CHALLENGE = "challenge"  # Cloudflare interstitial — transient, skip search
+PAGE_STRUCTUREAL = "structural"  # 200/other, zero cards, no challenge → layout change
+
+_CHALLENGE_MARKERS = (
+    "performing security verification",
+    "checking your browser",
+    "just a moment",
+    "cf-browser-verification",
+    "attention required! | cloudflare",
+)
+
+
+def classify_listing_page(status: int | None, html: str, card_count: int) -> str:
+    """Classify a LostMyDoggie listing response.
+
+    Rapid sequential searches trip Cloudflare's challenge mid-scrape; the
+    challenge page has zero cards and must NOT be treated as a structural
+    site change (it killed whole runs before this classification existed).
+    """
+    if card_count > 0:
+        return PAGE_OK
+    body = (html or "").lower()
+    if status == 403 or any(m in body for m in _CHALLENGE_MARKERS):
+        return PAGE_CHALLENGE
+    # Legitimately-empty feed: the site renders its normal shell with a
+    # "Showing 0 - Found Pets Within ..." result-count header.
+    if re.search(r"\bshowing\s+0\b", body):
+        return PAGE_EMPTY
+    return PAGE_STRUCTUREAL
 
 
 class LostMyDoggieScraper(BrowserBaseScraper):
@@ -44,7 +78,11 @@ class LostMyDoggieScraper(BrowserBaseScraper):
         self.zip_code = config.extra.get("zip_code", "46201")
 
     async def _scrape_with_page(self, page, after: datetime | None) -> AsyncIterator[PetRecord]:
-        for petkindid, alerttypeid, animal_type, record_type in self.SEARCHES:
+        for i, (petkindid, alerttypeid, animal_type, record_type) in enumerate(self.SEARCHES):
+            if i > 0:
+                # Pace between searches — rapid consecutive requests trip
+                # Cloudflare's challenge mid-scrape.
+                await asyncio.sleep(max(self.config.rate_limit_seconds, 10))
             async for record in self._scrape_search(
                 page, petkindid, alerttypeid, animal_type, record_type, after
             ):
@@ -73,16 +111,32 @@ class LostMyDoggieScraper(BrowserBaseScraper):
             )
 
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                resp = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
                 await asyncio.sleep(3)
+                status = resp.status if resp else None
             except Exception as exc:
                 self._record_error(exc, f"LostMyDoggie page {page_num}")
                 break
 
             cards = await page.query_selector_all(".box_icon")
+            state = classify_listing_page(
+                status, await page.content(), len(cards)
+            )
+            if state == PAGE_CHALLENGE:
+                # Transient Cloudflare interstitial — skip this search rather
+                # than aborting the whole run; pacing between searches helps.
+                self._record_error(
+                    RuntimeError(
+                        f"Cloudflare challenge on page {page_num} "
+                        f"(petkindid={petkindid} alerttypeid={alerttypeid}); search skipped"
+                    ),
+                    "LostMyDoggie challenge",
+                )
+                return
             if not cards:
                 if page_num == 1:
-                    from ..base import StructuralChangeError
+                    if state == PAGE_EMPTY:
+                        break  # legitimately zero results for this search
                     raise StructuralChangeError(
                         "No '.box_icon' cards found on page 1. Site layout may have changed."
                     )
