@@ -382,6 +382,15 @@ class PetRepository:
         age_cutoff = datetime.now(UTC).replace(tzinfo=None) - timedelta(days=max_record_age_days)
         filters.append(PetRow.scraped_at >= age_cutoff)
 
+        # Bounding-box pre-filter (mirrors find_within_radius): shrink the pool in
+        # SQL before Python-side haversine scoring. Rows with missing coordinates
+        # are kept — they may still match via zip-based signals.
+        if record.lat is not None and record.lon is not None:
+            lat_delta = search_radius_miles / 69.0
+            lon_delta = search_radius_miles / (69.0 * math.cos(math.radians(record.lat)))
+            filters.append(or_(PetRow.lat.is_(None), PetRow.lat.between(record.lat - lat_delta, record.lat + lat_delta)))
+            filters.append(or_(PetRow.lon.is_(None), PetRow.lon.between(record.lon - lon_delta, record.lon + lon_delta)))
+
         # Exclude the record itself
         filters.append(
             or_(PetRow.source != record.source, PetRow.source_id != record.source_id)
