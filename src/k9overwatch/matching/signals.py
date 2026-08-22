@@ -7,7 +7,7 @@ ensuring consistent scoring and threshold behavior across both match types.
 from __future__ import annotations
 
 import math
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from typing import Literal
 
@@ -23,6 +23,8 @@ class MatchResult:
     score: float                # 0.0–1.0
     confidence: Confidence
     signals_fired: dict[str, float]  # signal_name → weight contributed
+    reasons: list[str] = field(default_factory=list)
+    labels: list[str] = field(default_factory=list)
 
     @classmethod
     def from_signals(
@@ -55,6 +57,224 @@ class MatchResult:
             confidence=confidence,
             signals_fired=signals_fired,
         )
+
+
+# ── v2: corroboration-based confidence ───────────────────────────────────────
+
+# Evidence families: signals grouped by what kind of evidence they provide.
+SIGNAL_FAMILIES: dict[str, str] = {
+    # circumstance: where + when
+    "geo_very_close": "circumstance", "geo_close": "circumstance",
+    "geo_nearby": "circumstance", "zip_match": "circumstance",
+    "date_same_day": "circumstance", "date_within_1_day": "circumstance",
+    "date_within_3_days": "circumstance", "date_within_week": "circumstance",
+    "found_days_0_3": "circumstance", "found_days_4_14": "circumstance",
+    "found_before_lost": "circumstance",
+    # description: what the animal looks like
+    "color_primary_match": "description", "color_partial_match": "description",
+    "color_overlap_v2": "description", "color_rare_token": "description",
+    "gender_match": "description", "size_match": "description",
+    "breed_exact": "description", "breed_fuzzy_high": "description",
+    "breed_fuzzy_med": "description",
+    # identity: who it belongs to
+    "microchip_match": "identity", "contact_phone_match": "identity",
+    "contact_phone_partial": "identity", "name_exact": "identity",
+    # narrative: what the reports say
+    "description_high_similarity": "narrative",
+    "description_med_similarity": "narrative",
+    "distinctive_feature_match": "narrative",
+    # visual: image similarity
+    "visual_similarity_match": "visual",
+    "visual_similarity_partial": "visual",
+}
+
+SIGNAL_REASON_MAP: dict[str, str] = {
+    "geo_very_close": "Found less than half a mile from where the pet went missing",
+    "geo_close": "Found within 2 miles of the reported location",
+    "geo_nearby": "Found within 5 miles of the reported location",
+    "zip_match": "Same ZIP code as the loss location",
+    "date_same_day": "Found the same day the pet was reported lost",
+    "date_within_1_day": "Found 1 day after the pet was reported lost",
+    "date_within_3_days": "Found within 3 days of the loss report",
+    "date_within_week": "Found within a week of the loss report",
+    "found_days_0_3": "Found within 3 days of the loss report",
+    "found_days_4_14": "Found within two weeks of the loss report",
+    "found_before_lost": "Found just before the pet was reported lost",
+    "breed_exact": "Same breed listed on both reports",
+    "breed_fuzzy_high": "Very similar breeds listed on both reports",
+    "breed_fuzzy_med": "Broadly similar breeds listed on both reports",
+    "color_primary_match": "Primary color matches on both reports",
+    "color_partial_match": "Primary colors partially overlap",
+    "color_overlap_v2": "Color descriptions overlap",
+    "color_rare_token": "A distinctive, uncommon color detail appears in both reports",
+    "gender_match": "Same sex recorded on both reports",
+    "size_match": "Same size recorded on both reports",
+    "name_exact": "Same name on both reports",
+    "microchip_match": "Microchip numbers are identical",
+    "contact_phone_match": "Same contact phone number on both reports",
+    "contact_phone_partial": "Contact phone numbers match on the last 7 digits",
+    "description_high_similarity": "Report descriptions are very similar",
+    "description_med_similarity": "Report descriptions are moderately similar",
+    "distinctive_feature_match": "A distinctive feature noted on one report appears in the other's description",
+    "visual_similarity_match": "Photos of the two animals are highly similar",
+    "visual_similarity_partial": "Photos of the two animals are moderately similar",
+}
+
+CIRCUMSTANCE_ONLY_REASON = (
+    "Match relies mainly on circumstances (where/when); descriptive details "
+    "are too generic on their own to confirm"
+)
+
+# Tunable thresholds for v2 confidence (lost_found semantics)
+V2_HIGH_SCORE = 0.65
+V2_MEDIUM_SCORE = 0.40
+VETO_PENALTY = 0.45
+COINCIDENCE_MAX_GENERIC_DESC_SIGNALS = 2
+
+
+@classmethod
+def from_signals_v2(
+    cls,
+    pet_a_id: str,
+    pet_b_id: str,
+    match_type: MatchType,
+    signals_fired: dict[str, float],
+    penalties: dict[str, float] | None = None,
+    extra_reasons: list[str] | None = None,
+    thresholds: tuple[float, float] = (V2_MEDIUM_SCORE, V2_HIGH_SCORE),
+) -> MatchResult:
+    """
+    Corroboration-based confidence ("filter first, rank second, explain always").
+
+    Rules (in precedence order):
+      * identity family hit → high
+      * high requires score ≥ 0.65 AND ≥ 2 evidence families AND not a
+        circumstance+generic-description coincidence stack
+      * medium requires score ≥ 0.40 AND ≥ 1 family; single-family matches
+        need ≥ 2 distinct signals in that family, else low
+      * lone weak evidence (score < 0.40) → low + "needs_review" label
+
+    ``penalties`` maps veto family → penalty subtracted from the raw score.
+    """
+    penalties = penalties or {}
+    raw = sum(signals_fired.values())
+    score = max(0.0, raw - sum(penalties.values()))
+
+    families: dict[str, list[str]] = {}
+    for sig in signals_fired:
+        families.setdefault(SIGNAL_FAMILIES.get(sig, "narrative"), []).append(sig)
+    families_present = set(families)
+
+    identity_hit = any(
+        fam == "identity" for fam in families_present
+    ) and not penalties
+
+    coincidence = (
+        families_present and families_present <= {"circumstance", "description"}
+        and "identity" not in families_present
+        and len(families.get("description", []))
+        <= COINCIDENCE_MAX_GENERIC_DESC_SIGNALS
+    )
+
+    if identity_hit:
+        confidence: Confidence = "high"
+    elif score >= thresholds[1] and len(families_present) >= 2 and not coincidence:
+        confidence = "high"
+    elif score >= thresholds[0] and families_present and (
+        len(families_present) > 1 or len(next(iter(families.values()))) >= 2
+    ):
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    reasons = [SIGNAL_REASON_MAP[s] for s in signals_fired if s in SIGNAL_REASON_MAP]
+    if penalties:
+        for fam, pen in penalties.items():
+            reasons.append(
+                f"Conflicting {fam} between records — score penalized by {pen:.2f}"
+            )
+    if confidence != "high" and coincidence:
+        reasons.append(CIRCUMSTANCE_ONLY_REASON)
+    reasons.extend(extra_reasons or [])
+
+    labels: list[str] = []
+    if confidence == "low" and score > 0:
+        labels.append("needs_review")
+
+    return cls(
+        pet_a_id=pet_a_id,
+        pet_b_id=pet_b_id,
+        match_type=match_type,
+        score=min(1.0, score),
+        confidence=confidence,
+        signals_fired=signals_fired,
+        reasons=reasons,
+        labels=labels,
+    )
+
+
+MatchResult.from_signals_v2 = from_signals_v2  # type: ignore[attr-defined]
+
+
+# ── v2: conflict (soft/strict veto) detection ────────────────────────────────
+
+SIZE_ORDER = {"S": 0, "M": 1, "L": 2, "XL": 3}
+
+
+def _known(value: str | None) -> str | None:
+    if not value:
+        return None
+    v = value.strip().lower()
+    return None if v in ("", "unknown", "unk", "n/a", "na", "none") else v
+
+
+def _near_tokens(a: set[str], b: set[str]) -> bool:
+    """
+    True when any token pair is near-identical. Uses rapidfuzz ratio ≥ 75 so
+    single-character variants ("gray" ~ "grey", ratio 75) count as near-tokens.
+    """
+    try:
+        from rapidfuzz import fuzz
+        return any(
+            fuzz.ratio(x, y) >= 75 for x in a for y in b
+        )
+    except ImportError:
+        return any(x == y for x in a for y in b)
+
+
+def colors_contradict(tokens_a: set[str], tokens_b: set[str]) -> bool:
+    """Contradiction = both non-empty, no shared token, no near-token pair."""
+    if not tokens_a or not tokens_b:
+        return False
+    if tokens_a & tokens_b:
+        return False
+    return not _near_tokens(tokens_a, tokens_b)
+
+
+def detect_conflicts(
+    gender_a: str | None, gender_b: str | None,
+    size_a: str | None, size_b: str | None,
+    color_tokens_a: set[str], color_tokens_b: set[str],
+) -> dict[str, str]:
+    """
+    Detect conflicting record attributes. Returns {family: human description}.
+    Never flags a conflict when either side's value is missing/"unknown".
+    """
+    conflicts: dict[str, str] = {}
+
+    ga, gb = _known(gender_a), _known(gender_b)
+    if ga and gb and ga != gb:
+        conflicts["gender"] = f"gender ({ga} vs {gb})"
+
+    sa, sb = size_a.strip().upper() if size_a else None, size_b.strip().upper() if size_b else None
+    if sa and sb and sa in SIZE_ORDER and sb in SIZE_ORDER:
+        if abs(SIZE_ORDER[sa] - SIZE_ORDER[sb]) > 1:
+            conflicts["size"] = f"size ({sa} vs {sb})"
+
+    if colors_contradict(color_tokens_a, color_tokens_b):
+        conflicts["color"] = "primary color descriptions"
+
+    return conflicts
 
 
 # ── Signal scoring functions ──────────────────────────────────────────────────

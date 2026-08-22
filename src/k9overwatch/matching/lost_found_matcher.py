@@ -10,8 +10,11 @@ from __future__ import annotations
 
 from ..db.models import PetRow
 from .breed_normalizer import normalize_breed
+from .color_stats import ColorStats, score_color_match_v2, tokenize_color
 from .signals import (
+    VETO_PENALTY,
     MatchResult,
+    detect_conflicts,
     geo_distance_miles,
     score_breed_match,
     score_color_match,
@@ -50,10 +53,20 @@ class LostFoundMatcher:
         *,
         visual_threshold: float = 0.85,
         visual_weight: float = 0.10,
+        color_stats: ColorStats | None = None,
+        color_max_weight: float = 0.20,
+        veto_mode: str = "soft",       # "soft" (penalize) or "strict" (reject)
+        veto_penalty: float = VETO_PENALTY,
     ) -> None:
         self.visual_provider = visual_provider
         self.visual_threshold = visual_threshold
         self.visual_weight = visual_weight
+        self.color_stats = color_stats
+        self.color_max_weight = color_max_weight
+        if veto_mode not in ("soft", "strict"):
+            raise ValueError("veto_mode must be 'soft' or 'strict'")
+        self.veto_mode = veto_mode
+        self.veto_penalty = veto_penalty
 
     def find_matches(
         self,
@@ -138,15 +151,36 @@ class LostFoundMatcher:
         breed_found = normalize_breed(found.breed) or normalize_breed(found.breed_normalized)
         signals.update(score_breed_match(breed_lost, breed_found))
 
-        # ── Color ────────────────────────────────────────────────────────────
-        signals.update(score_color_match(lost.color_primary, found.color_primary, weight=0.15))
-        if lost.color_secondary and found.color_secondary:
-            secondary_signals = score_color_match(
-                lost.color_secondary, found.color_secondary, weight=0.15
-            )
-            signals.update(
-                {k + "_secondary": v * 0.4 for k, v in secondary_signals.items()}
-            )
+        # ── Vetoes: conflicts between known values ───────────────────────────
+        color_tokens_lost = (
+            tokenize_color(lost.color_primary) | tokenize_color(lost.color_secondary)
+        )
+        color_tokens_found = (
+            tokenize_color(found.color_primary) | tokenize_color(found.color_secondary)
+        )
+        conflicts = detect_conflicts(
+            lost.gender, found.gender,
+            lost.size, found.size,
+            color_tokens_lost, color_tokens_found,
+        )
+        if conflicts and self.veto_mode == "strict":
+            return None
+
+        # ── Color (informativeness-weighted when stats are available) ────────
+        if self.color_stats is not None and self.color_stats.available:
+            signals.update(score_color_match_v2(
+                color_tokens_lost, color_tokens_found,
+                self.color_stats, max_weight=self.color_max_weight,
+            ))
+        else:
+            signals.update(score_color_match(lost.color_primary, found.color_primary, weight=0.15))
+            if lost.color_secondary and found.color_secondary:
+                secondary_signals = score_color_match(
+                    lost.color_secondary, found.color_secondary, weight=0.15
+                )
+                signals.update(
+                    {k + "_secondary": v * 0.4 for k, v in secondary_signals.items()}
+                )
 
         # ── Gender ───────────────────────────────────────────────────────────
         if (
@@ -198,9 +232,15 @@ class LostFoundMatcher:
         if not signals:
             return None
 
-        return MatchResult.from_signals(
+        penalties = (
+            {fam: self.veto_penalty for fam in conflicts}
+            if conflicts and self.veto_mode == "soft"
+            else None
+        )
+        return MatchResult.from_signals_v2(
             pet_a_id=lost.id,
             pet_b_id=found.id,
             match_type="lost_found",
             signals_fired=signals,
+            penalties=penalties,
         )
