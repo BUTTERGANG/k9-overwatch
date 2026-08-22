@@ -180,6 +180,7 @@ async def pet_detail(
             "current_user_id": current_user_id,
             "contact_sent": request.query_params.get("contact_sent") == "1",
             "tip_sent": request.query_params.get("tip_sent") == "1",
+            "located_from_photo": request.query_params.get("located_from_photo") == "1",
         },
     )
 

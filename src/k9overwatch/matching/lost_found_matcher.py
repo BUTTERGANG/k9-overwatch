@@ -134,6 +134,9 @@ class LostFoundMatcher:
         signals: dict[str, float] = {}
 
         # ── Geo ──────────────────────────────────────────────────────────────
+        # NOTE: uses TRUE coordinates — display-layer pin fuzzing
+        # (geocoding/display_fuzz.py) applies only to map rendering and must
+        # never leak into match scoring.
         dist = geo_distance_miles(lost.lat, lost.lon, found.lat, found.lon)
         signals.update(score_geo_distance(dist))
         signals.update(score_zip_match(lost.zip, found.zip))

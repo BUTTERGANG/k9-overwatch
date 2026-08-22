@@ -12,6 +12,8 @@ from k9overwatch.db.repository import (
     age_bucket,
     effective_age_days,
 )
+from k9overwatch.geocoding.display_fuzz import fuzz_lat_lon
+from k9overwatch.models.enums import GeocodeConfidence, GeocodeSource
 from k9overwatch.web.dependencies import get_db
 from k9overwatch.web.schemas.pet import GeoJSONCollection, GeoJSONFeature, PetSummary
 from k9overwatch.web.templates_config import templates
@@ -113,6 +115,20 @@ async def get_map_geojson(
         if pet.lat is None or pet.lon is None:
             continue
 
+        # Display-layer fuzzing: ZIP-centroid pins get a deterministic 0.5–1km
+        # annulus offset so they don't imply street-level precision. Matching
+        # and the DB keep the TRUE coordinates — only the rendered pin moves.
+        # The badge still says "ZIP code area" (geocode_confidence is passed
+        # through unchanged below).
+        display_lat, display_lon = float(pet.lat), float(pet.lon)
+        if (
+            str(pet.geocode_confidence or "") == GeocodeConfidence.LOW
+            and str(pet.geocode_source or "") == GeocodeSource.ZIP_CENTROID
+        ):
+            display_lat, display_lon = fuzz_lat_lon(
+                pet.lat, pet.lon, f"{pet.source}:{pet.source_id}"
+            )
+
         summary = PetSummary(
             id=str(pet.id),
             source=pet.source,
@@ -127,8 +143,8 @@ async def get_map_geojson(
             city=pet.city,
             state=pet.state,
             zip=pet.zip,
-            lat=pet.lat,
-            lon=pet.lon,
+            lat=display_lat,
+            lon=display_lon,
             thumbnail_url=pet.thumbnail_url,
             active=pet.active,
             match_count=match_counts.get(str(pet.id), 0),
@@ -140,7 +156,7 @@ async def get_map_geojson(
         )
 
         feature = GeoJSONFeature(
-            geometry={"type": "Point", "coordinates": [pet.lon, pet.lat]},
+            geometry={"type": "Point", "coordinates": [display_lon, display_lat]},
             properties=summary
         )
         features.append(feature)

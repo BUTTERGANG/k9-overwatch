@@ -83,6 +83,9 @@ class Deduplicator:
         # "lost" report) so we don't hard-filter on it.
         if a.record_type == b.record_type:
             signals["same_record_type"] = 0.04
+        # NOTE: uses TRUE coordinates — display-layer pin fuzzing
+        # (geocoding/display_fuzz.py) applies only to map rendering and must
+        # never leak into match scoring.
         dist = geo_distance_miles(a.lat, a.lon, b.lat, b.lon)
         signals.update(score_geo_distance(dist))
         signals.update(score_zip_match(a.zip, b.zip))

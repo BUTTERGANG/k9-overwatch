@@ -122,7 +122,7 @@ def test_save_upload_rejects_content_that_only_claims_to_be_jpeg(tmp_path, monke
         filename="not-an-image.jpg", file=io.BytesIO(b"not a jpeg"), headers={"content-type": "image/jpeg"}
     )
 
-    assert reports._save_uploads([upload]) == []
+    assert reports._collect_valid_images([upload]) == []
     assert list(tmp_path.iterdir()) == []
 
 
@@ -133,7 +133,7 @@ def test_save_upload_rejects_jpeg_markers_without_jpeg_structure(tmp_path, monke
         filename="fake.jpg", file=io.BytesIO(b"\xff\xd8\xff\xe0\x00\x02\xff\xd9")
     )
 
-    assert reports._save_uploads([upload]) == []
+    assert reports._collect_valid_images([upload]) == []
     assert list(tmp_path.iterdir()) == []
 
 
@@ -144,7 +144,7 @@ def test_save_upload_rejects_oversize_input_before_decode(tmp_path, monkeypatch)
         filename="too-large.jpg", file=io.BytesIO(b"x" * (reports.MAX_UPLOAD_BYTES + 1))
     )
 
-    assert reports._save_uploads([upload]) == []
+    assert reports._collect_valid_images([upload]) == []
     assert list(tmp_path.iterdir()) == []
 
 
@@ -155,7 +155,8 @@ def test_save_upload_normalizes_valid_jpeg_to_safe_generated_file(tmp_path, monk
         filename="../../unsafe-name.jpg", file=io.BytesIO(VALID_JPEG), headers={"content-type": "image/jpeg"}
     )
 
-    paths = reports._save_uploads([upload])
+    images = reports._collect_valid_images([upload])
+    paths = reports._store_stripped(images)
 
     assert len(paths) == 1
     saved_name = paths[0].removeprefix("/uploads/")

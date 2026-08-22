@@ -17,6 +17,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from k9overwatch.db.repository import PetRepository
+from k9overwatch.models.enums import GeocodeConfidence, GeocodeSource
 from k9overwatch.models.pet_record import PetRecord
 from k9overwatch.web.dependencies import get_current_user_id, get_db
 from k9overwatch.web.rate_limit import rate_limit
@@ -79,10 +80,13 @@ def _looks_like_jpeg(content: bytes) -> bool:
     return False
 
 
-def _save_uploads(files: list[UploadFile]) -> list[str]:
-    """Save at most ``MAX_PHOTOS`` bounded, signature-checked image uploads."""
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
-    paths: list[str] = []
+def _collect_valid_images(files: list[UploadFile]) -> list[tuple[str, bytes]]:
+    """Read at most ``MAX_PHOTOS`` bounded, signature-checked uploads.
+
+    Returns (ext, raw_bytes) pairs; GPS EXIF has NOT been stripped yet because
+    the caller may extract coordinates before sanitizing.
+    """
+    out: list[tuple[str, bytes]] = []
     for f in files:
         if not f or not f.filename:
             continue
@@ -93,13 +97,25 @@ def _save_uploads(files: list[UploadFile]) -> list[str]:
         content = f.file.read(MAX_UPLOAD_BYTES + 1)
         if len(content) > MAX_UPLOAD_BYTES or not _has_image_signature(content, ext):
             continue
+        out.append((ext, content))
+        if len(out) >= MAX_PHOTOS:
+            break
+    return out
+
+
+def _store_stripped(images: list[tuple[str, bytes]]) -> list[str]:
+    """Persist upload bytes with GPS EXIF removed; return /uploads/ URLs."""
+    from k9overwatch.geocoding.exif_gps import strip_gps
+
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    paths: list[str] = []
+    for ext, content in images:
+        clean = strip_gps(content)
         name = f"{uuid.uuid4().hex}{ext}"
         dest = os.path.join(UPLOAD_DIR, name)
         with open(dest, "wb") as out:
-            out.write(content)
+            out.write(clean)
         paths.append(f"/uploads/{name}")
-        if len(paths) >= MAX_PHOTOS:
-            break
     return paths
 
 
@@ -128,6 +144,7 @@ async def submit_report(
     contact_phone: str = Form(default=""),
     contact_method: str = Form(default=""),
     date_lost: str = Form(default=""),
+    use_photo_location: str = Form(default=""),
     files: list[UploadFile] = File(default=[]),
     db: AsyncSession = Depends(get_db),
 ):
@@ -140,8 +157,26 @@ async def submit_report(
             {"error": "Choose whether this is a lost, found, or sighted animal."}, status_code=400
         )
 
-    photos = _save_uploads(files)
+    # Collect validated uploads. GPS EXIF is stripped from ALL stored bytes
+    # regardless of consent (privacy requirement) — extraction happens on the
+    # in-memory copy before sanitization.
+    images = _collect_valid_images(files)
+    photos = _store_stripped(images)
     thumbnail = photos[0] if photos else None
+
+    # Consent-gated EXIF GPS: only when the owner explicitly opted in do we use
+    # photo GPS to place the pin at EXACT confidence, skipping address geocoding.
+    used_exif_gps = False
+    exif_coords: tuple[float, float] | None = None
+    if use_photo_location:
+        from k9overwatch.geocoding.exif_gps import extract_gps
+
+        for ext, content in images:
+            if ext not in {".jpg", ".jpeg"}:
+                continue
+            exif_coords = extract_gps(content)
+            if exif_coords is not None:
+                break
 
     # Build a normalized PetRecord then persist as a user-sourced row.
     record = PetRecord(
@@ -171,7 +206,14 @@ async def submit_report(
     # env-configured provider cascade as the scraper jobs (GEOCODE_PROVIDER).
     # If the provider fails here (rate limit, timeout), the source-agnostic
     # `regeocode_pending_records` job retries it later — see scheduler/jobs.py.
-    if location_text:
+    if exif_coords is not None:
+        # Consented EXIF GPS wins: exact coordinates, no cascade needed.
+        record.lat = exif_coords[0]
+        record.lon = exif_coords[1]
+        record.geocode_source = GeocodeSource.EXIF_GPS
+        record.geocode_confidence = GeocodeConfidence.EXACT
+        used_exif_gps = True
+    elif location_text:
         from k9overwatch.scheduler.jobs import _make_geocoder_from_env
 
         geocoder = _make_geocoder_from_env(db)
@@ -187,4 +229,8 @@ async def submit_report(
 
     await run_matching_pass(new_row_ids=[row.id])
 
-    return RedirectResponse(url=f"/pets/{row.id}", status_code=302)
+    # Surface the consent confirmation note on the resulting report page.
+    target = f"/pets/{row.id}"
+    if used_exif_gps:
+        target += "?located_from_photo=1"
+    return RedirectResponse(url=target, status_code=302)

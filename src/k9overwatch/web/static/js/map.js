@@ -368,8 +368,9 @@ document.addEventListener("DOMContentLoaded", () => {
         // Geocode confidence badge
         let geoBadgeHtml = '';
         if (safeGeoConf) {
-            const geoLabels = { high: 'Exact location', medium: 'Neighborhood', low: 'ZIP code area' };
+            const geoLabels = { exact: 'Exact location', high: 'Exact location', medium: 'Neighborhood', low: 'ZIP code area' };
             const geoColors = {
+                exact: { bg: dark ? 'rgba(22,163,74,0.2)' : '#f0fdf4', border: dark ? '#166534' : '#bbf7d0', text: dark ? '#4ade80' : '#166534' },
                 high: { bg: dark ? 'rgba(22,163,74,0.2)' : '#f0fdf4', border: dark ? '#166534' : '#bbf7d0', text: dark ? '#4ade80' : '#166534' },
                 medium: { bg: dark ? 'rgba(234,179,8,0.2)' : '#fefce8', border: dark ? '#854d0e' : '#fde68a', text: dark ? '#facc15' : '#854d0e' },
                 low: { bg: dark ? 'rgba(239,68,68,0.2)' : '#fef2f2', border: dark ? '#991b1b' : '#fecaca', text: dark ? '#f87171' : '#991b1b' },

@@ -156,6 +156,9 @@
                     Log in to view
                 </a>
                 {% else %}
+                {% if located_from_photo %}
+                <p class="mb-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2" role="status">📍 Using exact location from your photo</p>
+                {% endif %}
                 {% if contact_sent %}
                 <p class="mb-3 text-sm text-green-700 bg-green-50 border border-green-200 rounded-lg px-3 py-2" role="status">Your private contact request was sent.</p>
                 {% endif %}

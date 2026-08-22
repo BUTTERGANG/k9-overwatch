@@ -36,9 +36,11 @@ class GeocodeSource(StrEnum):
     NOMINATIM = "nominatim"
     ZIP_CENTROID = "zip_centroid"
     PETFBI_NATIVE = "petfbi_native"
+    EXIF_GPS = "exif_gps"
 
 
 class GeocodeConfidence(StrEnum):
+    EXACT = "exact"
     HIGH = "high"
     MEDIUM = "medium"
     LOW = "low"
