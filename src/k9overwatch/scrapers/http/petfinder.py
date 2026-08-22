@@ -175,7 +175,9 @@ class PetfinderScraper(BaseScraper):
 
     # ── Active check ────────────────────────────────────────────────────────
 
-    async def check_active(self, source_id: str) -> bool:
+    async def check_active(
+        self, source_id: str, source_url: str | None = None
+    ) -> bool:
         """Check if an animal still exists via the single-animal endpoint."""
         url = f"{_ANIMALS_URL}/{source_id}"
         try:

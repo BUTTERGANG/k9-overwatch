@@ -161,5 +161,9 @@ class LostMyDoggieScraper(BrowserBaseScraper):
             "detail_url": f"{self.SITE_URL}/details.cfm?petid={pet_id}",
         }
 
-    async def check_active(self, source_id: str) -> bool:
-        return True  # LostMyDoggie requires Playwright for any check
+    # Detail pages are server-rendered ColdFusion; a removed pet shows a
+    # not-found page. Cloudflare means only a real browser can load it.
+    def detail_url(self, source_id: str) -> str:
+        return f"{self.SITE_URL}/details.cfm?petid={source_id}"
+
+    NOT_FOUND_MARKERS = ("not found", "no longer listed", "has been removed")

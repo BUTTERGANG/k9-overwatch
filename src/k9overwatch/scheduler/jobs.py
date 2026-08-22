@@ -300,35 +300,62 @@ def _row_to_fingerprint(row) -> PetRecord:
     )
 
 
+def build_staleness_scrapers(config) -> dict:
+    """
+    One scraper instance per source that supports per-record liveness checks.
+
+    Every source now implements check_active(): the HTTP sources re-fetch
+    their record endpoints, the browser scrapers load the listing page in a
+    throwaway stealth browser (see BrowserBaseScraper.check_active).
+    """
+    from ..scrapers.browser.lostmydoggie import LostMyDoggieScraper
+    from ..scrapers.browser.pawboost import PawBoostScraper
+    from ..scrapers.browser.petfbi import PetFBIScraper
+    from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
+    from ..scrapers.http.petconnect24 import PetConnect24Scraper
+
+    return {
+        IndyLostPetAlertScraper.SOURCE_NAME: IndyLostPetAlertScraper(config),
+        PetConnect24Scraper.SOURCE_NAME: PetConnect24Scraper(config),
+        PawBoostScraper.SOURCE_NAME: PawBoostScraper(config),
+        PetFBIScraper.SOURCE_NAME: PetFBIScraper(config),
+        LostMyDoggieScraper.SOURCE_NAME: LostMyDoggieScraper(config),
+    }
+
+
 async def check_stale_records(stale_hours: int = 48) -> dict:
     """
-    For sources that support check_active(), verify records that haven't been
-    seen recently and mark them inactive if they're gone.
-    Only runs against IndyLostPetAlert (has direct WP REST endpoint).
+    For every source, verify records that haven't been seen recently via the
+    source's own check_active() and mark them inactive if they're gone.
+    Checks fail open — a scraper error never deactivates a record; the
+    source-agnostic expire_stale_listings job remains the backstop.
     """
     import os
 
     from ..scrapers.base import ScraperConfig
-    from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
 
     config = ScraperConfig(
         search_lat=float(os.getenv("SEARCH_LAT", "39.7684")),
         search_lon=float(os.getenv("SEARCH_LON", "-86.1581")),
     )
-    scraper = IndyLostPetAlertScraper(config)
-    deactivated = 0
+    scrapers = build_staleness_scrapers(config)
+    per_source: dict[str, int] = {}
+    total_deactivated = 0
 
     async with get_session() as session:
         repo = PetRepository(session)
-        stale = await repo.get_stale_records("indylostpetalert", older_than_hours=stale_hours)
-        for row in stale:
-            is_active = await scraper.check_active(row.source_id)
-            if not is_active:
-                await repo.mark_inactive("indylostpetalert", row.source_id)
-                deactivated += 1
+        for source, scraper in scrapers.items():
+            deactivated = 0
+            for row in await repo.get_stale_records(source, older_than_hours=stale_hours):
+                is_active = await scraper.check_active(row.source_id, source_url=row.source_url)
+                if not is_active:
+                    await repo.mark_inactive(source, row.source_id)
+                    deactivated += 1
+            per_source[source] = deactivated
+            total_deactivated += deactivated
 
-    logger.info(f"Staleness check: {deactivated} records deactivated")
-    return {"deactivated": deactivated}
+    logger.info(f"Staleness check: {total_deactivated} records deactivated {per_source}")
+    return {"deactivated": total_deactivated, "per_source": per_source}
 
 
 async def regeocode_pending_records(limit: int = 100) -> dict:

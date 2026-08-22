@@ -61,10 +61,18 @@ class BaseScraper(ABC):
         ...
 
     @abstractmethod
-    async def check_active(self, source_id: str) -> bool:
+    async def check_active(
+        self,
+        source_id: str,
+        source_url: str | None = None,
+    ) -> bool:
         """
         Verify a specific record is still active on the source.
         Returns False if the listing is gone, reunited, or removed.
+
+        `source_url` is the stored link back to the original listing, when the
+        caller has one; sources whose detail URL can't be reconstructed from
+        the source_id alone (e.g. slug-based URLs) rely on it.
         """
         ...
 

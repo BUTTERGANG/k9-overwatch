@@ -100,7 +100,9 @@ class IndyLostPetAlertScraper(BaseScraper):
                 if page <= total_pages:
                     await asyncio.sleep(self.config.rate_limit_seconds)
 
-    async def check_active(self, source_id: str) -> bool:
+    async def check_active(
+        self, source_id: str, source_url: str | None = None
+    ) -> bool:
         """Check if a WP post still exists and is published."""
         url = f"{self.BASE_URL}/{source_id}"
         try:

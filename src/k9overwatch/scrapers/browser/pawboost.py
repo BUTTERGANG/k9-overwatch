@@ -236,6 +236,8 @@ class PawBoostScraper(BrowserBaseScraper):
             pass
         return None, None
 
-    async def check_active(self, source_id: str) -> bool:
-        """PawBoost doesn't have a direct API for single record lookup."""
-        return True  # Rely on scrape runs to discover inactive records
+    # PawBoost detail URLs embed a slug that can't be reconstructed from the
+    # pet id alone, so liveness checks rely on the stored source_url. The
+    # shared browser-backed check in BrowserBaseScraper loads it and fails
+    # open when Cloudflare blocks the request.
+    NOT_FOUND_MARKERS = ("page not found", "no longer listed", "has been removed")
