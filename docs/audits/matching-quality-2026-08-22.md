@@ -87,3 +87,18 @@ don't share a bodypart with disjoint colors).
 - Float note: the penalized score lands at 0.39999… which falls just under
   V2_MEDIUM_SCORE (0.40), yielding "low"; intent was "medium", but either way
   the pair cannot reach high. A tolerance comparison would make it medium.
+
+## Addendum — reviewed follow-up gaps (2026-08-22)
+
+1. **Identity vs narrative vetoes.** `from_signals_v2` identity_hit no longer
+   dies on ANY penalty: a narrative-family conflict (misdescription) keeps
+   microchip/phone/name matches high; gender/size/color vetoes still suppress.
+2. **Unknown signal names.** Unrecognized signals now contribute to the score
+   only — they are excluded from families_present corroboration counting and
+   coincidence detection instead of silently counting as narrative evidence.
+3. **Petfinder credential gating.** Scheduler registration skips petfinder with
+   a single warning when PETFINDER_API_KEY/SECRET are absent (restart picks up
+   new keys); pipeline_audit reports DISABLED_NO_CREDS rather than ERROR.
+4. **Float threshold edge.** Penalized score is rounded to 6dp before threshold
+   comparison, so 0.45+0.40−0.45 = 0.39999…97 correctly lands medium at 0.40.
+   (Resolves the float note in Design decisions above.)
