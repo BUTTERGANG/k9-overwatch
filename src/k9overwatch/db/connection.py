@@ -125,6 +125,8 @@ async def _migrate_existing_db():
         )
         if "email_verified" not in user_cols:
             await conn.execute(text("ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT 0"))
+        if "is_group_admin" not in user_cols:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN is_group_admin BOOLEAN NOT NULL DEFAULT 0"))
         match_cols = await conn.run_sync(
             lambda c: [col["name"] for col in inspect(c).get_columns("pet_matches")]
         )

@@ -223,6 +223,8 @@ class User(Base):
     created_at = Column(DateTime, default=_now)
     is_active = Column(Boolean, default=True, nullable=False)
     email_verified = Column(Boolean, default=False, nullable=False)
+    # Opt-in: receives the daily group-admin digest of new local reports.
+    is_group_admin = Column(Boolean, default=False, nullable=False)
 
 
 class NotificationPrefs(Base):
