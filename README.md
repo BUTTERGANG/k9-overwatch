@@ -23,8 +23,11 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 | `docs/api-analysis-indylostpetalert.md` | IndyLostPetAlert — Open WordPress REST API |
 | `docs/api-analysis-petfbi.md` | Pet FBI — GraphQL API, AWS WAF protected, provides lat/lon directly |
 | `docs/api-analysis-lostmydoggie.md` | Lost My Doggie — Cloudflare-protected, phone alert service |
-|| `docs/unified-data-schema.md` | Canonical pet record schema across all sources |
-|| `docs/visual-similarity.md` | Optional provider-backed visual matching seam and configuration |
+| `docs/api-alternatives-research.md` | Deep-research comparison of pet-data APIs (RescueGroups, Adopt-a-Pet, PetHub, Nextdoor…) with integration verdicts |
+| `docs/prefill-links.md` | One-tap signed report-prefill links for group admins |
+| `docs/audits/` | Pipeline + matching-quality + location-precision audit reports |
+| `docs/unified-data-schema.md` | Canonical pet record schema across all sources |
+| `docs/visual-similarity.md` | Optional provider-backed visual matching seam and configuration |
 
 ---
 
@@ -388,7 +391,9 @@ docs/
 | `/how-it-works` | Onboarding guide |
 | `/map` | Interactive Leaflet map — pins colored by record type, amber badge dot on pins with matches, bounding-box "Search this area" button, filter sidebar |
 | `/pets` | Filterable pet card grid — species, type, days; HTMX partial updates; URL-reflected filter state |
-| `/pets/{id}` | Pet detail page — full info, photo gallery, mini-map, matched pets |
+| `/pets/{id}` | Pet detail page — full info, photo gallery, mini-map, matched pets, "📋 Copy share post" (paste-ready Facebook group text via `/pets/{id}/share-pack`) |
+| `/report` | Lost/found report form — accepts signed `?prefill=` tokens for one-tap prefill from shared links (see [Prefill Links](docs/prefill-links.md)) |
+| `/reunited` | Public gallery of user-submitted reports marked reunited (trust-building; scraped listings excluded) |
 | `/matches` | Lost ↔ Found / dedup match list — confidence-scored pairs, confirm/dismiss review buttons |
 | `/login`, `/register`, `/logout` | Signed-cookie account auth (rate-limited) |
 | `/forgot-password`, `/reset-password` | Single-use, expiring password-reset flow (rate-limited) |
@@ -419,6 +424,8 @@ docs/
 ---
 
 ## Matching Engine
+
+> **Matching v2 (2026-08-22):** confidence is now corroboration-based rather than a raw score percentage. Evidence is grouped into families (circumstance / description / identity / narrative / visual); HIGH requires an identity hit (microchip/phone/name) or ≥2 independent families agreeing. Conflicts (gender, size, color, markings) apply soft vetoes that heavily penalize the score — see `matching/signals.py` (`from_signals_v2`) and `docs/audits/matching-quality-2026-08-22.md`. Every match carries human-readable `reasons`.
 
 ### Deduplication (min score: 0.35)
 
@@ -517,9 +524,10 @@ Geocoding cost:
 | Lost My Doggie | every 45 min | Playwright required |
 | Matching pass | every 30 min | Dedup + lost→found, both directions, on newly ingested records |
 | Re-geocode backstop | every 20 min | Retries active records with address text but no coordinates (mainly user reports, geocoded once at submit time) — see [Geocoding Strategy](#geocoding-strategy) |
-| Staleness check | every 6 hours | Verifies IndyLostPetAlert records still active |
+| Staleness check | every 6 hours | Per-source liveness checks for all 5 scraped sources — listing pages are re-fetched (stealth browser where needed); 404/not-found marks the record inactive, challenge/timeout fails open |
 | Age-based expiry | every 24 hours | Source-agnostic fallback: deactivates any active listing older than 120 days, regardless of source |
 | Match digest | daily 19:00 UTC | Coalesced per-day email of new matches, respecting per-user notification preferences |
+| Group-admin digest | daily 17:30 UTC | Opt-in roundup of new reports for Facebook-group admins (`is_group_admin` users) within their radius. Disabled unless `GROUP_ADMIN_DIGEST_ENABLED=1` |
 | Saved-search notifications | every 5 min | Drains the durable notification queue with bounded retry |
 | Re-match pass | daily 04:00 | Idempotent re-scan of recent records (last 120d) so matches improve as more data arrives (e.g. geocoding fills coordinates) |
 
