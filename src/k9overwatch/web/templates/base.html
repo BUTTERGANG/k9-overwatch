@@ -199,6 +199,13 @@
                         Matches
                         {% if path.startswith('/matches') %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
                     </a>
+                    <a href="/reunited"
+                       class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
+                              {% if path == '/reunited' %}text-brand-600 dark:text-brand-400{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}"
+                       {% if path == '/reunited' %}aria-current="page"{% endif %}>
+                        Reunited
+                        {% if path == '/reunited' %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
+                    </a>
                     <a href="/how-it-works"
                        class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
                               {% if path.startswith('/how-it-works') %}text-brand-600 dark:text-brand-400{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}"

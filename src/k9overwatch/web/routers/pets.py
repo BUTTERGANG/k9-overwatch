@@ -68,6 +68,25 @@ async def search_pets(
     
     return pets, total
 
+@router.get("/reunited")
+async def reunited_gallery(request: Request, db: AsyncSession = Depends(get_db)):
+    """Public 'Recently Reunited' gallery: only owner-marked user-submitted reports."""
+    stmt = (
+        select(PetRow)
+        .where(
+            PetRow.source == "user",
+            PetRow.owner_report_status == "reunited",
+        )
+        .order_by(PetRow.date_event.desc().nullslast(), PetRow.scraped_at.desc())
+        .limit(100)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return templates.TemplateResponse(
+        request, "reunited.html",
+        {"pets": rows},
+    )
+
+
 @router.get("/pets")
 async def pets_page(
     request: Request,

@@ -230,8 +230,18 @@ async def api_stats():
         )
         per_source = {row[0]: row[1] for row in source_result.all()}
 
+        # Owner-confirmed reunifications (user-submitted reports only).
+        user_reunif_result = await session.execute(
+            sa_select(sa_func.count()).where(
+                PetRow.source == "user",
+                PetRow.owner_report_status == "reunited",
+            )
+        )
+        user_reunifications = user_reunif_result.scalar_one()
+
     return {
         "total_reunifications": total_reunifications,
+        "user_reunifications": user_reunifications,
         "total_active_pets": total_active_pets,
         "total_pets": total_pets,
         "per_source": per_source,
