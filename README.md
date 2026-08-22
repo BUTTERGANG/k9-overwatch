@@ -33,19 +33,41 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 | # | Source | Coverage | Access Method | Status |
 |---|---|---|---|---|
 | 1 | [24petconnect.com](https://24petconnect.com) | National (US + CA) | HTML scraping via POST | ✅ Built & tested |
-| 2 | [pawboost.com](https://www.pawboost.com) | National (US) | Playwright (Cloudflare) | ✅ Built (needs Playwright) |
+| 2 | [pawboost.com](https://www.pawboost.com) | National (US) | Playwright (Cloudflare) | ✅ Built & tested (2026-08: repaired after site redesigns) |
 | 3 | [indylostpetalert.com](https://www.indylostpetalert.com) | Indianapolis metro | WordPress REST API | ✅ Built & tested |
 | 4 | [petfbi.org](https://petfbi.org) | National (US) | GraphQL + Playwright (AWS WAF) | ✅ Built (needs Playwright) |
-| 5 | [lostmydoggie.com](https://www.lostmydoggie.com) | National (US) | Playwright (Cloudflare) | ✅ Built & tested |
+| 5 | [lostmydoggie.com](https://www.lostmydoggie.com) | National (US) | Playwright (Cloudflare) | ✅ Built & tested (2026-08: repaired after site redesigns) |
 
 ### Planned Sources
 
 | Source | Notes |
 |---|---|
-| [petfinder.com](https://www.petfinder.com/developers/) | Official public JSON API — adoptions primarily |
+| [petfinder.com](https://www.petfinder.com/developers/) | Official public JSON API — adoptions primarily. Credential-gated registration: requires `PETFINDER_API_KEY`/`PETFINDER_API_SECRET`; auto-disabled without them |
 | [findingrover.com](https://www.findingrover.com) | Facial recognition for dogs |
 | [petcolove.org/lost](https://petcolove.org/lost) | AI-powered facial recognition, Next.js frontend |
 | Local municipal shelters | Many run on PetHarbor (same backend as 24petconnect) |
+
+> **Investigated, not integrable:** [Helping Lost Pets](https://www.helpinglostpets.com)
+> and [FidoAlert](https://fidoalert.com) were analyzed and ruled out as integration
+> targets — see `docs/api-analysis-helpinglostpets.md` for the findings.
+
+---
+
+## Location accuracy
+
+Pin precision is deliberately tiered and, for owner uploads, consent-gated:
+
+- **EXIF GPS consent flow** — when an owner uploads photos, we ask before reading
+  GPS coordinates from EXIF metadata. Regardless of the answer, GPS data is
+  stripped from all stored photo bytes, so no location metadata ever persists
+  in `/uploads`.
+- **Geocode confidence tiers** — every record carries a geocode confidence:
+  exact address, neighborhood (street-level centroid), or ZIP-code centroid.
+  Map pin badges ("Exact location" / "Neighborhood" / "ZIP code area") reflect
+  the tier with color coding.
+- **Display fuzzing** — ZIP-centroid pins are fuzzed slightly on display so
+  multiple pets in the same ZIP don't stack into one indistinguishable marker,
+  and so a viewer can't infer a precise home location from a low-precision pin.
 
 ---
 
