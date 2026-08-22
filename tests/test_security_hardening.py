@@ -28,7 +28,7 @@ def test_production_rejects_missing_or_default_session_secret(monkeypatch, envir
 
 def test_production_session_cookies_are_secure(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
-    monkeypatch.setenv("SESSION_SECRET", "a-real-production-secret")
+    monkeypatch.setenv("SESSION_SECRET", "a-real-production-secret-0123456789abcdef")
 
     import k9overwatch.web.auth as auth
     import k9overwatch.web.routers.accounts as accounts
