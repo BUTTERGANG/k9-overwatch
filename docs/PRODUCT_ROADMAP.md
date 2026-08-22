@@ -163,10 +163,11 @@ dataset grows. Listed roughly by impact on "find animals faster."
 | Map/report synchronized discovery | Shipped initial slice | Match badges and mobile bottom sheet remain |
 | Image proxy + cache | Shipped (bug fixed) | Cache TTL/eviction still unbounded — hygiene, not correctness |
 | Re-geocode backstop for failed geocodes | Shipped | Periodic job; one-off `geocode_batch.py` run for pre-existing backlog |
-| Auth/report rate limiting | Shipped | In-process only; broader route coverage + shared store remain |
+| Auth/report rate limiting | Shipped | In-process only; broader route coverage + shared store remain. Flags/replies/status/block rate-limited 2026-08-22 (`7d2fc48`) |
 | Production Tailwind build + CSP | Complete (2026-08-19) | Local 53KB minified output.css, CSP tightened |
 | Accessibility pass | Initial pass complete (2026-08-19) | Skip-to-content, aria roles, live regions; full keyboard/screen-reader audit remains |
-| Visual similarity signal | Deferred | New dependency (imagehash/CLIP) |
+| Visual similarity signal | Groundwork shipped (2026-08-22) | Opt-in pure-Python dHash provider behind `VISUAL_SIMILARITY_ENABLED` (default off); `visual_embeddings` cache table; Pillow as optional `[visual]` extra (`a20cfbc`). CLIP remains the heavy future step |
+| Public Recently-Reunited gallery | Shipped (2026-08-22) | `GET /reunited` shows only owner-marked user-submitted reports + empty state; `user_reunifications` added to `/api/stats` (`635932c`) |
 | Additional sources (Petfinder etc.) | Listed | Scoping/API keys |
 | PostGIS spatial index for matching | Not started | Needs prod DB + query rewrite |
 | Match feedback → signal re-weighting | Not started | Needs labeled outcomes |

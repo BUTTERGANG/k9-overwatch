@@ -21,6 +21,9 @@
 | PLAN.md + KANBAN.md created | Development plan + sprint board |
 | Cross-source deduplication | In progress |
 | Petfinder.com API integration | In progress |
+| Rate-limited mutation endpoints (D13) | Flags 10/hr; contact reply/status/block 30/hr — `7d2fc48` |
+| Public "Recently Reunited" gallery (§3) | `GET /reunited`, user-submitted reunited reports only, empty state, `user_reunifications` in `/api/stats` — `635932c` |
+| Perceptual-hash visual similarity groundwork (C11) | dHash provider behind `VISUAL_SIMILARITY_ENABLED` (default off), `visual_embeddings` cache table, optional `[visual]` extra (Pillow) — `a20cfbc` |
 
 ## 📋 Backlog
 
