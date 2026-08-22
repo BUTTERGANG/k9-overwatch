@@ -126,12 +126,44 @@ dataset grows. Listed roughly by impact on "find animals faster."
     step; CLIP is the heavy step.
 12. **Date handling fragility.** Several sources parse dates inconsistently; temporal
     signals in matching can be noisy.
+13. **Matching redesign v2 — sparse-record-tolerant scoring DONE (2026-08-22).**
+    The lost/found matcher now follows "filter first, rank second, explain always":
+
+    - **Conflict vetoes** (`signals.detect_conflicts`): known-value conflicts
+      (gender M≠F, size >1 step apart on S<M<L<XL, primary-color token-set
+      contradiction with rapidfuzz near-token tolerance) are detected before
+      additive scoring. Default **soft** mode subtracts `VETO_PENALTY=0.45`
+      per conflict family from the final score (floored at 0); **strict** mode
+      rejects the pair. Missing/"unknown" values never veto.
+    - **Informativeness-weighted color** (`matching/color_stats.py`): color
+      tokens are IDF-weighted over the whole DB corpus, so "black" counts for
+      little while "merle"/"brown patch" count a lot
+      (`score_color_match_v2`, overlap normalized to `COLOR_MAX_WEIGHT=0.20`,
+      plus a `color_rare_token=0.08` bonus when a shared token appears in <5%
+      of records). Falls back to uniform scoring when stats are unavailable;
+      `ColorStats` serializes to JSON so a scheduler job can rebuild it.
+    - **Corroboration-based confidence** (`MatchResult.from_signals_v2`):
+      evidence is grouped into families {circumstance, description, identity,
+      narrative, visual}. Identity hits (microchip/phone/name) are high
+      outright; otherwise high needs score ≥ 0.65 across ≥ 2 families, medium
+      needs ≥ 0.40 in ≥ 1 family (single-family matches need ≥ 2 distinct
+      signals), and lone weak evidence lands low with a `needs_review` label.
+      Generic circumstance+common-description stacks ("black lab near where/when
+      expected") are capped below high as coincidences.
+    - Every MatchResult now carries human-readable `reasons`
+      (`SIGNAL_REASON_MAP`) and `labels`.
+    - The Deduplicator adopts the same soft vetoes and v2 confidence at its own
+      thresholds (`DEDUP_V2_THRESHOLDS = (0.55, 0.75)`).
+
+    Tunables: `VETO_PENALTY`, `veto_mode`, `veto_penalty`, `color_max_weight`,
+    `RARE_TOKEN_FRACTION`, `V2_HIGH_SCORE=0.65`, `V2_MEDIUM_SCORE=0.40`,
+    `COINCIDENCE_MAX_GENERIC_DESC_SIGNALS=2`.
 
 ### D. Low / hygiene
-13. **Rate limiting covers auth + report only.** Contact requests, flagging, and other
+14. **Rate limiting covers auth + report only.** Contact requests, flagging, and other
     mutation endpoints are unguarded, and the limiter is in-process only (needs a shared
     store for multi-worker).
-14. **Docs DONE (2026-08-22):** `docs/dev-scripts.md` documents both scripts; docstrings
+15. **Docs DONE (2026-08-22):** `docs/dev-scripts.md` documents both scripts; docstrings
     cover usage inline. Scripts remain dev-only by design.
 15. **Tailwind CDN → local build DONE (2026-08-19).** CSP tightened for production.
 16. **Accessibility initial pass DONE (2026-08-19).** Skip-to-content, aria roles, labels,
