@@ -190,7 +190,7 @@ async def action_report(
     db: AsyncSession = Depends(get_db),
 ):
     """Review a ContentReport; optionally deactivate the target."""
-    from k9overwatch.db.models import ContentReport, ContactRequest, PetRow
+    from k9overwatch.db.models import ContactRequest, ContentReport, PetRow
 
     report = await db.get(ContentReport, report_id)
     if report is None:
@@ -211,5 +211,65 @@ async def action_report(
     report.status = "reviewed"
     report.reviewed_at = datetime.now(UTC).replace(tzinfo=None)
     report.reviewed_by = "admin"
+    await db.commit()
+    return RedirectResponse(url="/admin/reports", status_code=303)
+
+
+# ── Admin: direct content actions on owner reports (roadmap A2) ──────
+
+
+def _deactivate_pet(pet: PetRow) -> None:
+    pet.active = False
+    if pet.source == "user":
+        pet.owner_report_status = "closed"
+
+
+@router.post("/admin/pets/{pet_id}/deactivate", dependencies=[Depends(verify_admin)])
+async def admin_deactivate_pet(
+    pet_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Directly deactivate a problematic owner report from the moderation panel."""
+    from k9overwatch.db.models import PetRow
+
+    pet = await db.get(PetRow, pet_id)
+    if pet is None:
+        raise HTTPException(status_code=404, detail="Pet not found")
+    _deactivate_pet(pet)
+    await db.commit()
+    return RedirectResponse(url="/admin/reports", status_code=303)
+
+
+@router.post("/admin/pets/{pet_id}/edit", dependencies=[Depends(verify_admin)])
+async def admin_edit_pet(
+    pet_id: str,
+    name: str = Form(default=""),
+    breed: str = Form(default=""),
+    color_primary: str = Form(default=""),
+    description: str = Form(default=""),
+    location_text: str = Form(default=""),
+    contact_email: str = Form(default=""),
+    contact_phone: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+):
+    """Directly edit fields on a flagged owner report. Empty fields are left unchanged."""
+    from k9overwatch.db.models import PetRow
+
+    pet = await db.get(PetRow, pet_id)
+    if pet is None:
+        raise HTTPException(status_code=404, detail="Pet not found")
+
+    updates = {
+        "name": name,
+        "breed": breed,
+        "color_primary": color_primary,
+        "description": description,
+        "location_text": location_text,
+        "contact_email": contact_email,
+        "contact_phone": contact_phone,
+    }
+    for field, value in updates.items():
+        if value.strip():
+            setattr(pet, field, value.strip())
     await db.commit()
     return RedirectResponse(url="/admin/reports", status_code=303)
