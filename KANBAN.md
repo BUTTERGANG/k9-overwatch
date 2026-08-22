@@ -19,11 +19,19 @@
 | PostGIS migration plan | `docs/postgis-migration.md` + migration script |
 | PR #4 merged | Scheduler cadence fix (interval triggers) |
 | PLAN.md + KANBAN.md created | Development plan + sprint board |
-| Cross-source deduplication | In progress |
-| Petfinder.com API integration | In progress |
+| Scraper repairs: PawBoost + Lost My Doggie | Both rebuilt against post-redesign page state; back to ✅ Built & tested (2026-08) |
+| Staleness checks across sources | Per-source `check_active()` + age-based expiry backstop (`expire_stale_listings`) |
 | Rate-limited mutation endpoints (D13) | Flags 10/hr; contact reply/status/block 30/hr — `7d2fc48` |
 | Public "Recently Reunited" gallery (§3) | `GET /reunited`, user-submitted reunited reports only, empty state, `user_reunifications` in `/api/stats` — `635932c` |
 | Perceptual-hash visual similarity groundwork (C11) | dHash provider behind `VISUAL_SIMILARITY_ENABLED` (default off), `visual_embeddings` cache table, optional `[visual]` extra (Pillow) — `a20cfbc` |
+| EXIF GPS consent flow + stripping | Owner-upload consent prompt; GPS stripped from all stored photo bytes regardless |
+| Geocode precision audit + display fuzzing | Confidence tiers audited end-to-end; ZIP-centroid pins fuzzed on display |
+| Cross-source deduplication | Matching v2 sparse-record-tolerant scoring + dedup threshold alignment landed |
+| Petfinder.com API integration | Landed; credential-gated registration (auto-disabled without `PETFINDER_API_KEY`/`SECRET`) |
+| Narrative veto + follow-ups | Identity evidence kept high under narrative-only vetoes; corroboration isolation + score rounding fixes |
+| Dedup internal date guard | `DEDUP_MAX_AGE_DAYS = 180` hard skip in `Deduplicator._compare` |
+| Hardened /uploads serving | Strict filename validation router replaces StaticFiles mount; traversal-proof |
+| Production secret guard hardening | SESSION_SECRET length/placeholder checks in production |
 
 ## 📋 Backlog
 
