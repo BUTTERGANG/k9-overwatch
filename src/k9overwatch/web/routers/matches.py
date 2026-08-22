@@ -88,6 +88,7 @@ async def review_match(
         "signals_fired": dict(match.signals_fired or {}),
         "decided_at": datetime.now(UTC).replace(tzinfo=None).isoformat(),
     }
+    await db.commit()
     return templates.TemplateResponse(
         request,
         "matches/_review_badge.html",

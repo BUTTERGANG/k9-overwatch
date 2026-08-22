@@ -143,6 +143,9 @@ class PetMatch(Base):
     created_at = Column(DateTime, default=_now)
     reviewed = Column(Boolean, default=False)       # human-reviewed?
     confirmed = Column(Boolean)                     # human confirmed/rejected?
+    # Decision-time snapshot (roadmap C10): score/signals as they were when a
+    # human confirmed/rejected, immune to later re-match score updates.
+    decision_snapshot = Column(JSON)
 
     __table_args__ = (
         UniqueConstraint("pet_a_id", "pet_b_id", "match_type", name="uq_match_pair"),
