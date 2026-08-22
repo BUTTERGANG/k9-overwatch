@@ -84,10 +84,9 @@ dataset grows. Listed roughly by impact on "find animals faster."
    can receive instant or daily-digest email alerts with confidence thresholds, opt-out,
    and unsubscribe support. Durable delivery state, retries, SMS, push, and multi-process
    digest storage remain before public launch.
-2. **Owner-submitted reports exist, but editing/abuse controls need hardening.** Users can
-   now edit their reports and flag content for moderation. Self-service resolution states
-   (resolved, reunited, closed) are available. Remaining: admin can directly edit or remove
-   problematic content, automated abuse detection, rate limiting on flags.
+2. **Owner-submitted reports: admin direct edit/deactivate DONE (2026-08-22).** Admins can
+   edit or deactivate flagged owner reports directly from `/admin/reports`. Remaining:
+   automated abuse detection, rate limiting on flags.
 3. **Contact / handoff is now a threaded conversation system** with reply, block, and flag
    controls. Both participants can advance the handoff state (open → in conversation →
    handoff arranged → reunited → closed). Notification delivery for replies remains via
@@ -100,7 +99,7 @@ dataset grows. Listed roughly by impact on "find animals faster."
    scale bounded, but with thousands of records this is the daily job that will
    eventually time out or hammer the DB. Needs spatial indexing (PostGIS `&&` /
    `ST_DWithin`) and/or candidate pre-bucketing before the dataset grows — not urgent yet.
-5. **Confirmed: `find_match_candidates` does geo filtering in Python, not SQL**
+5. **DONE (2026-08-22): `find_match_candidates` now pre-filters by lat/lon bounding box in SQL**
    (`db/repository.py`, Haversine comprehension over the date-window pool). Unlike
    `find_within_radius`, which does have a `lat`/`lon.between()` bounding-box pre-filter,
    the matching-candidate query has none. Same "not urgent at current scale" caveat as
@@ -115,13 +114,14 @@ dataset grows. Listed roughly by impact on "find animals faster."
    geocode. A one-off `geocode_batch.py` run is still worth doing for any pre-existing backlog.
 
 ### C. Medium — trust, correctness, polish
-8. **Image proxy cache has no TTL/eviction.** `/img` proxies and caches source images,
+8. **DONE (2026-08-22): image proxy cache now TTL'd (7 days) and size-capped (512MB, oldest-first eviction).** `/img` proxies and caches source images,
    content-hashed, capped at 8MB each. The on-disk cache grows unbounded with no TTL or cleanup.
 9. **Match counts are not yet fully surfaced in the report-list experience.** The map
    API and marker popups can expose potential-match counts, but the synchronized list
    still needs a dedicated match badge/link treatment.
-10. **No confidence calibration / feedback loop.** We store human `confirmed`/`rejected`
-    but never USE rejections to tune signal weights.
+10. **Feedback loop: labeled data groundwork DONE (2026-08-22).** Match review now stores a
+    decision-time snapshot (`decision_snapshot`: confirmed/score/signals/decided_at) that
+    survives re-match updates. Remaining: actually re-weight signals from the labels.
 11. **Matching is text-only; no visual signal.** Perceptual hash is the lightweight first
     step; CLIP is the heavy step.
 12. **Date handling fragility.** Several sources parse dates inconsistently; temporal
@@ -131,7 +131,8 @@ dataset grows. Listed roughly by impact on "find animals faster."
 13. **Rate limiting covers auth + report only.** Contact requests, flagging, and other
     mutation endpoints are unguarded, and the limiter is in-process only (needs a shared
     store for multi-worker).
-14. **`scripts/scrape_one.py` and `geocode_batch.py` are dev-only** and lack docs.
+14. **Docs DONE (2026-08-22):** `docs/dev-scripts.md` documents both scripts; docstrings
+    cover usage inline. Scripts remain dev-only by design.
 15. **Tailwind CDN → local build DONE (2026-08-19).** CSP tightened for production.
 16. **Accessibility initial pass DONE (2026-08-19).** Skip-to-content, aria roles, labels,
     and live regions added. Remaining: full keyboard navigation audit, screen-reader testing,
