@@ -318,3 +318,39 @@ Host the PawBoost widget on a simple webpage, then use Playwright to load that p
   "scraped_at": "2026-03-24T00:00:00Z"
 }
 ```
+
+---
+
+## Addendum — 2026-08-22: URL scheme change (verified live)
+
+The legacy path `/lost-found-pets/{zip}/{status-slug}/page-N` (zip-only segment)
+now returns **404**. Current working scheme, verified live (HTTP 200, 20
+`.pet-search-result` cards, Playwright headless):
+
+1. **Page 1** must use the query-param feed:
+   ```
+   GET /lost-found-pets?LfdbFeedStatusForm[zip]={zip}
+                       &LfdbFeedStatusForm[status]={100|101}
+                       &LfdbFeedStatusForm[radius]={miles}
+                       &LfdbFeedStatusForm[sortAttribute]=recency
+                       &LfdbFeedStatusForm[dateRange]=90
+   ```
+2. **Pages ≥ 2** use the canonical slug path the site's own pagination links
+   emit (city-state-zip slug):
+   ```
+   GET /lost-found-pets/{city-slug}-{state}-{zip}/{status-slug}/page-{N}
+   e.g. /lost-found-pets/indianapolis-in-46201/all-lost-pets/page-2
+   ```
+
+Card DOM classes are **unchanged** (`.pet-search-result`, `.pet-feed-id`,
+`.pet-feed-name`, `.pet-feed-details`, `.pet-feed-location`,
+`.pet-feed-description`). Only URL construction changed; the scraper now
+captures the canonical slug from page 1's pagination links.
+
+**Rate limiting:** rapid headless requests trigger Cloudflare 403
+challenges — pace requests ≥60s apart and keep attempts minimal. If a source
+is persistently challenged, mark it degraded in the staleness registry rather
+than retrying aggressively.
+
+Implemented in `PawBoostScraper.build_feed_url()` (unit tests:
+`tests/test_pawboost_urls.py`).

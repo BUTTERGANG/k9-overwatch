@@ -9,6 +9,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from ...models.pet_record import PetRecord
 from ...normalizers.pawboost import PawBoostNormalizer
+from ..base import StructuralChangeError
 from .base_browser import BrowserBaseScraper
 
 _DATE_PATTERN = (
@@ -16,13 +17,79 @@ _DATE_PATTERN = (
     r"|November|December)\s+\d+,?\s+\d{4}"
 )
 
+# status=100 lost, status=101 found/stray
+STATUS_LOST = 100
+STATUS_FOUND = 101
+
+_STATUS_SLUGS = {
+    STATUS_LOST: "all-lost-pets",
+    STATUS_FOUND: "all-found-stray-pets",
+}
+
+# Page states for listing responses
+PAGE_OK = "ok"
+PAGE_CHALLENGE = "challenge"  # Cloudflare interstitial — transient, skip status
+PAGE_STRUCTUREAL = "structural"
+
+_CHALLENGE_MARKERS = (
+    "just a moment",
+    "attention required! | cloudflare",
+    "performing security verification",
+    "checking your browser",
+    "cf-browser-verification",
+)
+
+
+def classify_listing_page(status: int | None, html: str, card_count: int) -> str:
+    """Classify a PawBoost listing response.
+
+    Rapid headless requests trigger Cloudflare 403 interstitials; those are
+    transient and must NOT be reported as structural site changes.
+    """
+    if card_count > 0:
+        return PAGE_OK
+    body = (html or "").lower()
+    if status == 403 or any(m in body for m in _CHALLENGE_MARKERS):
+        return PAGE_CHALLENGE
+    return PAGE_STRUCTUREAL
+
+
+def build_feed_url(
+    zip_code: str,
+    status_code: int,
+    radius_miles: int | float,
+    page_num: int,
+    canonical_slug: str | None = None,
+) -> str:
+    """Build a PawBoost listing URL for the current (2026-08 verified) scheme.
+
+    Page 1 must use the query-param feed — the legacy
+    ``/lost-found-pets/{zip}/{status-slug}/page-1`` path now 404s. Pages ≥2 use
+    the canonical ``/{city-slug}-{state}-{zip}/{status-slug}/page-N`` path that
+    the site's own pagination links point at (``canonical_slug`` captured from
+    page 1's DOM; falls back to query-param form when unknown).
+    """
+    if page_num > 1 and canonical_slug:
+        return (
+            f"https://www.pawboost.com/lost-found-pets/"
+            f"{canonical_slug}/{_STATUS_SLUGS[status_code]}/page-{page_num}"
+        )
+    return (
+        "https://www.pawboost.com/lost-found-pets?"
+        f"LfdbFeedStatusForm%5Bzip%5D={zip_code}"
+        f"&LfdbFeedStatusForm%5Bstatus%5D={status_code}"
+        f"&LfdbFeedStatusForm%5Bradius%5D={radius_miles}"
+        "&LfdbFeedStatusForm%5BsortAttribute%5D=recency"
+        "&LfdbFeedStatusForm%5BdateRange%5D=90"
+    )
+
 
 class PawBoostScraper(BrowserBaseScraper):
     SOURCE_NAME = "pawboost"
     STEALTH_REQUIRED = True
 
     # status=100 lost, status=101 found/stray
-    STATUSES = [(100, "lost"), (101, "found")]
+    STATUSES = [(STATUS_LOST, "lost"), (STATUS_FOUND, "found")]
 
     def __init__(self, config):
         super().__init__(config)
@@ -39,39 +106,59 @@ class PawBoostScraper(BrowserBaseScraper):
         self, page, status_code: int, record_type: str, after: datetime | None
     ) -> AsyncIterator[PetRecord]:
         page_num = 1
+        canonical_slug: str | None = None
 
         while True:
             if self.config.max_pages and page_num > self.config.max_pages:
                 break
 
-            status_slug = "all-lost-pets" if status_code == 100 else "all-found-stray-pets"
-            url = (
-                f"https://www.pawboost.com/lost-found-pets/"
-                f"{self.zip_code}/{status_slug}/page-{page_num}"
-                f"?LfdbFeedStatusForm%5Bstatus%5D={status_code}"
-                f"&LfdbFeedStatusForm%5Bzip%5D={self.zip_code}"
-                f"&LfdbFeedStatusForm%5Bradius%5D={self.config.search_radius_miles}"
-                f"&LfdbFeedStatusForm%5BsortAttribute%5D=recency"
-                f"&LfdbFeedStatusForm%5BdateRange%5D=90"
+            url = build_feed_url(
+                self.zip_code, status_code, self.config.search_radius_miles,
+                page_num, canonical_slug=canonical_slug,
             )
 
             try:
-                await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+                resp = await page.goto(url, wait_until="domcontentloaded", timeout=30000)
                 # Give JS-rendered content time to populate
                 await asyncio.sleep(3)
+                status = resp.status if resp else None
             except Exception as exc:
                 self._record_error(exc, f"PawBoost page {page_num}")
                 break
 
             cards = await page.query_selector_all(".pet-search-result")
             if not cards:
+                state = classify_listing_page(status, await page.content(), 0)
                 if page_num == 1:
-                    from ..base import StructuralChangeError
+                    if state == PAGE_CHALLENGE:
+                        # Transient Cloudflare interstitial — skip this status
+                        # rather than flagging a structural site change.
+                        self._record_error(
+                            RuntimeError(
+                                f"Cloudflare challenge (HTTP {status}) on "
+                                f"{record_type} feed page {page_num}; status skipped"
+                            ),
+                            "PawBoost challenge",
+                        )
+                        return
                     raise StructuralChangeError(
                         "No '.pet-search-result' cards found on page 1. "
                         "Site layout may have changed."
                     )
                 break
+
+            # Capture the canonical city-state-zip slug the site's own
+            # pagination uses so later pages hit the working /page-N path.
+            if canonical_slug is None:
+                next_btn = await page.query_selector("a[rel='next'], .pagination .next")
+                next_href = (
+                    await next_btn.get_attribute("href") if next_btn else None
+                )
+                m = re.search(
+                    r"/lost-found-pets/([a-z0-9-]+-\d{5})/", next_href or ""
+                )
+                if m:
+                    canonical_slug = m.group(1)
 
             page_has_new = False
             for card in cards:
