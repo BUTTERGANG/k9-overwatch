@@ -125,6 +125,11 @@ async def _migrate_existing_db():
         )
         if "email_verified" not in user_cols:
             await conn.execute(text("ALTER TABLE users ADD COLUMN email_verified BOOLEAN NOT NULL DEFAULT 0"))
+        match_cols = await conn.run_sync(
+            lambda c: [col["name"] for col in inspect(c).get_columns("pet_matches")]
+        )
+        if "decision_snapshot" not in match_cols:
+            await conn.execute(text("ALTER TABLE pet_matches ADD COLUMN decision_snapshot JSON"))
         # New tables (users, notification_prefs, saved_searches, account tokens, email queue). create_all is
         # idempotent and leaves existing production data untouched.
         await conn.run_sync(Base.metadata.create_all)
