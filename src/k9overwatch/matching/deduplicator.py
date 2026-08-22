@@ -30,6 +30,12 @@ DEDUP_MIN_SCORE = 0.35
 # v2 confidence thresholds for dedup (kept close to the legacy 0.60/0.80)
 DEDUP_V2_THRESHOLDS = (0.55, 0.75)
 
+# Internal date guard: when both records carry an event date, pairs whose dates
+# differ by more than this many days are never considered duplicates. This is
+# wider than the candidate query's 90-day window, so late re-posts of the same
+# pet still dedup, while ancient cross-month look-alikes do not pair.
+DEDUP_MAX_AGE_DAYS = 180
+
 
 class Deduplicator:
     """
@@ -70,6 +76,10 @@ class Deduplicator:
         # Hard filters
         if a.animal_type != b.animal_type:
             return None
+        # Internal date guard: skip pairs whose event dates are too far apart.
+        if a.date_event and b.date_event:
+            if abs((a.date_event - b.date_event).days) > DEDUP_MAX_AGE_DAYS:
+                return None
         # Different sources are more interesting for dedup, but same-source duplication
         # can happen if a scraper re-posts. Don't hard-filter on source.
 
