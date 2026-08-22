@@ -40,16 +40,44 @@ def _config() -> ScraperConfig:
     )
 
 
+def petfinder_credentials_present() -> bool:
+    return bool(os.getenv("PETFINDER_API_KEY")) and bool(os.getenv("PETFINDER_API_SECRET"))
+
+
+def build_scraper_jobs() -> list[tuple[str, type, int, int]]:
+    """
+    Return the scraper job specs to register. Petfinder is credential-gated:
+    without PETFINDER_API_KEY / PETFINDER_API_SECRET it is skipped with a
+    single warning (keys are only picked up on the next process restart).
+    """
+    from ..scrapers.browser.lostmydoggie import LostMyDoggieScraper
+    from ..scrapers.browser.pawboost import PawBoostScraper
+    from ..scrapers.browser.petfbi import PetFBIScraper
+    from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
+    from ..scrapers.http.petconnect24 import PetConnect24Scraper
+    from ..scrapers.http.petfinder import PetfinderScraper
+
+    jobs: list[tuple[str, type, int, int]] = [
+        ("indy_lost_pet_alert", IndyLostPetAlertScraper, 15, 0),
+        ("petconnect24", PetConnect24Scraper, 30, 1),
+        ("petfinder", PetfinderScraper, 60, 3),
+        ("pawboost", PawBoostScraper, 35, 4),
+        ("petfbi", PetFBIScraper, 40, 7),
+        ("lostmydoggie", LostMyDoggieScraper, 45, 10),
+    ]
+    if not petfinder_credentials_present():
+        logger.warning(
+            "petfinder registered but disabled — missing API credentials "
+            "(PETFINDER_API_KEY / PETFINDER_API_SECRET); set them and restart "
+            "the process to enable the source."
+        )
+        jobs = [j for j in jobs if j[0] != "petfinder"]
+    return jobs
+
+
 class ScraperScheduler:
 
     def build(self) -> AsyncIOScheduler:
-        from ..scrapers.browser.lostmydoggie import LostMyDoggieScraper
-        from ..scrapers.browser.pawboost import PawBoostScraper
-        from ..scrapers.browser.petfbi import PetFBIScraper
-        from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
-        from ..scrapers.http.petconnect24 import PetConnect24Scraper
-        from ..scrapers.http.petfinder import PetfinderScraper
-
         scheduler = AsyncIOScheduler(timezone="UTC")
         cfg = _config()
         now = datetime.now(UTC)
@@ -58,14 +86,7 @@ class ScraperScheduler:
         # Use interval triggers (rather than the old twice-daily cron) so a
         # missed web-process tick is coalesced without silently creating a
         # 12-hour freshness gap.  Initial runs remain staggered at startup.
-        scraper_jobs = [
-            ("indy_lost_pet_alert", IndyLostPetAlertScraper, 15, 0),
-            ("petconnect24", PetConnect24Scraper, 30, 1),
-            ("petfinder", PetfinderScraper, 60, 3),
-            ("pawboost", PawBoostScraper, 35, 4),
-            ("petfbi", PetFBIScraper, 40, 7),
-            ("lostmydoggie", LostMyDoggieScraper, 45, 10),
-        ]
+        scraper_jobs = build_scraper_jobs()
         for job_id, scraper_class, interval_minutes, startup_offset in scraper_jobs:
             scheduler.add_job(
                 run_scraper,

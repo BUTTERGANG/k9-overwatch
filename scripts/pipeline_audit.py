@@ -34,8 +34,12 @@ FILL_FIELDS = [
 ]
 
 
-def _build_scrapers(config: ScraperConfig) -> list:
-    """Instantiate every registered scraper (HTTP first, then browser)."""
+def _build_scrapers(config: ScraperConfig) -> tuple[list, list[dict]]:
+    """
+    Instantiate every registered scraper (HTTP first, then browser).
+    Returns (active scrapers, disabled placeholder results) — a source whose
+    credentials are absent is reported as DISABLED_NO_CREDS, not an ERROR.
+    """
     from k9overwatch.scrapers.browser.lostmydoggie import LostMyDoggieScraper
     from k9overwatch.scrapers.browser.pawboost import PawBoostScraper
     from k9overwatch.scrapers.browser.petfbi import PetFBIScraper
@@ -52,12 +56,24 @@ def _build_scrapers(config: ScraperConfig) -> list:
         LostMyDoggieScraper,
     ]
     out = []
+    disabled: list[dict] = []
     for cls in classes:
+        if cls is PetfinderScraper and not (
+            os.getenv("PETFINDER_API_KEY") and os.getenv("PETFINDER_API_SECRET")
+        ):
+            disabled.append({
+                "source": cls.SOURCE_NAME,
+                "status": "DISABLED_NO_CREDS",
+                "count": 0,
+                "rates": {},
+                "error": "PETFINDER_API_KEY / PETFINDER_API_SECRET not set",
+            })
+            continue
         try:
             out.append(cls(config))
         except Exception as exc:  # e.g. missing API key
             print(f"  [setup-fail] {cls.SOURCE_NAME}: {exc}", file=sys.stderr)
-    return out
+    return out, disabled
 
 
 def _fill_rates(records: list[PetRecord]) -> dict[str, float]:
@@ -161,12 +177,12 @@ async def main() -> int:
         search_lon=float(os.getenv("SEARCH_LON", "-86.1581")),
         max_pages=1,
     )
-    scrapers = _build_scrapers(config)
+    scrapers, disabled = _build_scrapers(config)
     print(f"Auditing {len(scrapers)} sources...", file=sys.stderr)
 
     # Run HTTP sources and browser sources concurrently is unsafe for Playwright
     # startup on small VPSes; run sequentially, browser sources last.
-    results = []
+    results = list(disabled)
     for scraper in sorted(scrapers, key=lambda s: s.__class__.__module__.endswith(("http",))):
         print(f"→ {scraper.SOURCE_NAME} ...", file=sys.stderr)
         res = await audit_source(scraper, args.max_records, args.timeout)
