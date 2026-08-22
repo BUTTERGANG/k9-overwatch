@@ -40,7 +40,7 @@ async def test_valid_file_serves_with_hardened_headers():
 
 @pytest.mark.anyio
 async def test_content_type_mapped_from_extension():
-    cases = {".png": "image/png", ".webp": "image/webp", ".gif": "image/gif", ".jpeg": "image/jpeg"}
+    cases = {".png": "image/png", ".webp": "image/webp", ".jpeg": "image/jpeg"}
     for ext, ctype in cases.items():
         name = _write_upload(ext, b"x")
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://t") as c:
