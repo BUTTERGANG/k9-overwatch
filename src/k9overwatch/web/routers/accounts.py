@@ -601,9 +601,8 @@ async def edit_report(
     report.contact_phone = contact_phone.strip() or None
 
     if location_changed and report.location_text:
-        from k9overwatch.scheduler.jobs import _make_geocoder_from_env
-
         from k9overwatch.models.pet_record import PetRecord
+        from k9overwatch.scheduler.jobs import _make_geocoder_from_env
 
         # Convert PetRow → PetRecord for the geocoder, then copy coords back
         pr = PetRecord(

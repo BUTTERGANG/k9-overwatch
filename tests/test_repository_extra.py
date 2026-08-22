@@ -15,7 +15,6 @@ from k9overwatch.db.models import GeocodeCache
 from k9overwatch.db.repository import PetRepository
 from k9overwatch.geocoding.geocoder import GeocodeResult, GeocodingService
 from k9overwatch.models.enums import AnimalType, GeocodeConfidence, GeocodeSource, RecordType
-from k9overwatch.models.pet_record import PetRecord
 
 from .conftest import make_indy_record, make_pawboost_record
 
