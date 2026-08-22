@@ -245,7 +245,7 @@ document.addEventListener("DOMContentLoaded", () => {
             card.setAttribute('role', 'listitem');
             card.dataset.petId = p.id || '';
             const matchCount = Number(p.match_count || 0);
-            const matchBadge = matchCount > 0 ? `<a href="/matches" aria-label="View ${escapeHtml(matchCount)} potential match${matchCount === 1 ? '' : 'es'}" class="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-700"><span aria-hidden="true">◆</span>${escapeHtml(matchCount)} potential match${matchCount === 1 ? '' : 'es'}</a>` : '';
+            const matchBadge = matchCount > 0 ? `<a href="/matches?pet=${encodeURIComponent(p.id)}" aria-label="View ${escapeHtml(matchCount)} potential match${matchCount === 1 ? '' : 'es'} for ${escapeHtml(p.name || 'this pet')}" class="mt-2 inline-flex w-fit items-center gap-1 rounded-full bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-800 ring-1 ring-inset ring-amber-200 dark:bg-amber-900/30 dark:text-amber-300 dark:ring-amber-700"><span aria-hidden="true">◆</span>${escapeHtml(matchCount)} potential match${matchCount === 1 ? '' : 'es'}</a>` : '';
             card.innerHTML = `<button type="button" class="map-report-card-main block w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 rounded-lg"><span class="block text-xs font-bold uppercase tracking-wide text-brand-600 dark:text-brand-400">${escapeHtml(p.record_type || 'report')}</span><span class="mt-1 block font-semibold text-sm text-slate-800 dark:text-slate-100">${escapeHtml(p.name || 'Unknown name')}</span><span class="mt-1 block text-xs text-slate-500 dark:text-slate-400">${escapeHtml(p.breed || 'Unknown breed')} · ${escapeHtml(p.date_event || 'Date unavailable')}</span></button>${matchBadge}`;
             const cardMain = card.querySelector('.map-report-card-main');
             cardMain.addEventListener('click', () => {
@@ -443,7 +443,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     ${geoBadgeHtml}
                     ${p.match_count > 0 ? `
                     <div style="margin-bottom:8px;">
-                        <a href="/matches" style="display:inline-flex;align-items:center;gap:4px;
+                        <a href="/matches?pet=${encodeURIComponent(p.id)}" style="display:inline-flex;align-items:center;gap:4px;
                                   background:${cssVar('--status-adoptable-bg') || '#fffbeb'};
                                   color:${cssVar('--status-adoptable-text') || '#92400e'};
                                   border:1px solid ${cssVar('--status-adoptable-border') || '#fde68a'};
