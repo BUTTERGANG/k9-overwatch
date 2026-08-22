@@ -42,7 +42,8 @@ A pet aggregation platform that consolidates lost, found, and adoptable animal l
 
 | Source | Notes |
 |---|---|
-| [petfinder.com](https://www.petfinder.com/developers/) | Official public JSON API — adoptions primarily. Credential-gated registration: requires `PETFINDER_API_KEY`/`PETFINDER_API_SECRET`; auto-disabled without them |
+| ~~[petfinder.com](https://www.petfinder.com/)~~ | **RETIRED 2026-08-22** — provider decommissioned the public API on 2025-12-02. Replacement candidates evaluated in [docs/api-alternatives-research.md](docs/api-alternatives-research.md) |
+| [rescuegroups.org](https://rescuegroups.org/services/adoptable-pet-data-api/) | **PLANNED** — free public JSON:API v5, adoptable animals nationwide; free API key requested. Strongest Petfinder replacement (see api-alternatives-research.md) |
 | [findingrover.com](https://www.findingrover.com) | Facial recognition for dogs |
 | [petcolove.org/lost](https://petcolove.org/lost) | AI-powered facial recognition, Next.js frontend |
 | Local municipal shelters | Many run on PetHarbor (same backend as 24petconnect) |
@@ -635,7 +636,7 @@ unverified here.
 - [ ] Audit logging
 - [ ] Database migrations and production deployment/operations validation
 - [ ] Adoption listings integration
-- [ ] Additional sources: Petfinder (official API), Petco Love Lost (facial recognition), Finding Rover
+- [ ] Additional sources: RescueGroups.org v5 (free key requested — replaces retired Petfinder), Petco Love Lost (facial recognition), Finding Rover
 
 ### New features (2026-08-19)
 
@@ -648,7 +649,7 @@ unverified here.
 ### Planned Sources (Phase 4)
 | Source | Notes |
 |---|---|
-| [petfinder.com](https://www.petfinder.com/developers/) | Official public JSON API — adoptions primarily |
+| [rescuegroups.org](https://rescuegroups.org/services/adoptable-pet-data-api/) | Free public JSON:API v5 — planned; replaces Petfinder (retired: API decommissioned by provider 2025-12-02) |
 | [petcolove.org/lost](https://petcolove.org/lost) | AI facial recognition, Next.js frontend |
 | [findingrover.com](https://www.findingrover.com) | Facial recognition for dogs |
 | Local municipal shelters | Many run PetHarbor backend (same as 24petconnect) |

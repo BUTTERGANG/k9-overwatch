@@ -176,7 +176,7 @@ dataset grows. Listed roughly by impact on "find animals faster."
 
 - **Email / SMS / push alerts for new matches** — the killer feature for the mission.
 - **Visual-similarity matching** (perceptual hash → CLIP) as a matching signal.
-- **Adoption listings integration** (Petfinder official API) — broaden "found" surface.
+- **Adoption listings integration** (RescueGroups.org v5 API — free key requested). Petfinder's official API was decommissioned by the provider on 2025-12-02 and our scraper was retired 2026-08-22; alternatives evaluated in `docs/api-alternatives-research.md`.
 - **More sources**: Petco Love Lost (facial recognition), Finding Rover, local municipal
   shelters (many run PetHarbor = same backend as 24petconnect).
 - **Mobile-friendly "report a lost pet" flow** (photo-first, 3 taps) for owners in panic.
@@ -200,7 +200,7 @@ dataset grows. Listed roughly by impact on "find animals faster."
 | Accessibility pass | Initial pass complete (2026-08-19) | Skip-to-content, aria roles, live regions; full keyboard/screen-reader audit remains |
 | Visual similarity signal | Groundwork shipped (2026-08-22) | Opt-in pure-Python dHash provider behind `VISUAL_SIMILARITY_ENABLED` (default off); `visual_embeddings` cache table; Pillow as optional `[visual]` extra (`a20cfbc`). CLIP remains the heavy future step |
 | Public Recently-Reunited gallery | Shipped (2026-08-22) | `GET /reunited` shows only owner-marked user-submitted reports + empty state; `user_reunifications` added to `/api/stats` (`635932c`) |
-| Additional sources (Petfinder etc.) | Listed | Scoping/API keys |
+| Additional sources (RescueGroups etc.) | Listed | Scoping/API keys — Petfinder retired (provider killed API 2025-12-02); see docs/api-alternatives-research.md |
 | PostGIS spatial index for matching | Not started | Needs prod DB + query rewrite |
 | Match feedback → signal re-weighting | Not started | Needs labeled outcomes |
 
