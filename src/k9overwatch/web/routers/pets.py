@@ -152,6 +152,29 @@ async def pets_results(
     )
 
 
+@router.get("/pets/{pet_id}/share-pack")
+async def pet_share_pack(
+    pet_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """JSON share pack ({text, html}) for pasting into Facebook groups.
+
+    Public (scraped) reports are already public on their detail pages.
+    User-submitted reports are owner-only.
+    """
+    from k9overwatch.web.share_pack import build_share_pack
+
+    pet = (await db.execute(select(PetRow).where(PetRow.id == pet_id))).scalar_one_or_none()
+    if pet is None:
+        raise HTTPException(status_code=404, detail="Pet not found")
+    if pet.source == "user":
+        user_id = await get_current_user_id(request)
+        if not user_id or user_id != pet.owner_id:
+            raise HTTPException(status_code=403, detail="Only the report owner can export a share pack.")
+    return build_share_pack(pet)
+
+
 @router.get("/pets/{pet_id}")
 async def pet_detail(
     pet_id: str,
