@@ -45,3 +45,45 @@ tokens) ran and skipped with "dev DB has no medium/high matches to audit".
 - shared `record_color_tokens()` helper (single tokenization path across matcher/deduplicator/corpus builder)
 - `check_stale_records`: per-source isolated sessions via `asyncio.gather`; one source timing out neither delays nor aborts the others, fail-open per source
 - dead code removed from `Deduplicator._compare`
+
+---
+
+## Addendum — 2026-08-22 (later): narrative-conflict veto shipped
+
+Follow-up to the honest finding above: contradicting marking descriptions now
+apply a soft veto ("narrative" family). `extract_markings()` pulls
+color+bodypart pairs ("white chest", "black mask", "white patch on chest")
+from `distinctive_features` AND `description`; when both records yield
+non-empty marking sets and any shared bodypart has disjoint color modifiers,
+`markings_contradict()` fires and the standard −0.45 soft penalty applies
+(strict mode rejects outright).
+
+### Adversarial fixture before/after
+
+Pair: identical black labs, same geo/day/breed/color/gender/size; lost says
+"white patch on chest", found description says "black chest".
+
+| Scenario | Before | After |
+|---|---|---|
+| Marking conflict (adversarial) | 0.85 **high** | 0.40 **low** (−0.45 penalty) |
+| Matching markings ("white patch on chest" both sides) | 0.98 high | 0.98 high (unchanged) |
+| One-sided markings (other record has none) | 0.85 high | 0.85 high (unchanged) |
+
+Reasons now include: "Conflicting markings between records — score penalized
+by 0.45" + "Markings conflict: white chest vs black chest". The original
+test_matching_quality adversarial pair (e) is unaffected (its narratives
+don't share a bodypart with disjoint colors).
+
+### Design decisions & limitations
+
+- Collar / scar / notch mentions deliberately NOT extracted: their absence on
+  the other report is not contradictory (collars are removable; scars/notches
+  are often unreported).
+- Extraction is adjacent-bigram based plus a small connector lookahead for
+  "white patch on left front paw"-style phrases; it does not parse arbitrary
+  syntax ("chest is white" is missed).
+- Fields are extracted separately before merging, so a color can never attach
+  across the distinctive_features/description boundary.
+- Float note: the penalized score lands at 0.39999… which falls just under
+  V2_MEDIUM_SCORE (0.40), yielding "low"; intent was "medium", but either way
+  the pair cannot reach high. A tolerance comparison would make it medium.

@@ -15,7 +15,9 @@ from .signals import (
     VETO_PENALTY,
     MatchResult,
     detect_conflicts,
+    extract_markings,
     geo_distance_miles,
+    markings_contradict,
     score_breed_match,
     score_color_match,
     score_contact_phone,
@@ -159,6 +161,20 @@ class LostFoundMatcher:
             lost.size, found.size,
             color_tokens_lost, color_tokens_found,
         )
+        # Narrative veto: contradicting marking descriptions ("white chest"
+        # vs "black chest") between two otherwise-similar records. Fields are
+        # extracted separately so colors never attach across field boundaries.
+        markings_a: dict[str, set[str]] = {}
+        for text in (lost.distinctive_features, lost.description):
+            for part, colors in extract_markings(text).items():
+                markings_a.setdefault(part, set()).update(colors)
+        markings_b: dict[str, set[str]] = {}
+        for text in (found.distinctive_features, found.description):
+            for part, colors in extract_markings(text).items():
+                markings_b.setdefault(part, set()).update(colors)
+        marking_conflicts = markings_contradict(markings_a, markings_b)
+        if marking_conflicts:
+            conflicts["markings"] = "; ".join(marking_conflicts)
         if conflicts and self.veto_mode == "strict":
             return None
 
@@ -233,10 +249,16 @@ class LostFoundMatcher:
             if conflicts and self.veto_mode == "soft"
             else None
         )
+        extra_reasons = (
+            [f"Markings conflict: {c}" for c in marking_conflicts]
+            if marking_conflicts
+            else None
+        )
         return MatchResult.from_signals_v2(
             pet_a_id=lost.id,
             pet_b_id=found.id,
             match_type="lost_found",
             signals_fired=signals,
             penalties=penalties,
+            extra_reasons=extra_reasons,
         )

@@ -7,6 +7,7 @@ ensuring consistent scoring and threshold behavior across both match types.
 from __future__ import annotations
 
 import math
+import re
 from dataclasses import dataclass, field
 from datetime import date
 from typing import Literal
@@ -274,6 +275,109 @@ def detect_conflicts(
     if colors_contradict(color_tokens_a, color_tokens_b):
         conflicts["color"] = "primary color descriptions"
 
+    return conflicts
+
+
+# ── narrative-conflict (markings) veto ───────────────────────────────────────
+
+_MARKING_COLORS = frozenset({
+    "white", "black", "brown", "tan", "gray", "grey", "red", "orange",
+    "yellow", "blonde", "blond", "golden", "cream", "blue", "brindle",
+    "merle", "fawn", "silver", "chocolate", "liver", "sable", "spotted",
+})
+
+# bodypart key → surface forms accepted in text
+_MARKING_BODYPARTS: dict[str, tuple[str, ...]] = {
+    "chest": ("chest", "breast"),
+    "belly": ("belly", "stomach", "tummy"),
+    "paw": ("paw", "paws", "foot", "feet"),
+    "leg": ("leg", "legs"),
+    "face": ("face",),
+    "mask": ("mask",),
+    "blaze": ("blaze",),
+    "stripe": ("stripe", "stripes", "striping"),
+    "patch": ("patch", "patches"),
+    "spot": ("spot", "spots", "spotting"),
+    "tail": ("tail",),
+    "ear": ("ear", "ears"),
+    "muzzle": ("muzzle", "snout"),
+    "nose": ("nose",),
+    "back": ("back",),
+    "neck": ("neck",),
+    "head": ("head",),
+}
+_SURFACE_TO_BODYPART = {
+    surface: key
+    for key, surfaces in _MARKING_BODYPARTS.items()
+    for surface in surfaces
+}
+
+# marking nouns whose color describes a nearby bodypart rather than themselves
+_MODIFIER_NOUNS = frozenset({"patch", "spot", "stripe", "blaze"})
+_CONNECTORS = frozenset({
+    "on", "the", "a", "an", "his", "her", "its", "their", "and",
+    "of", "over", "at", "in", "left", "right", "front", "rear", "back",
+})
+
+
+def extract_markings(text: str | None) -> dict[str, set[str]]:
+    """Extract color+bodypart markings ("white chest" → chest: {white}).
+
+    Scans adjacent word pairs for a color word next to a bodypart word in
+    either order ("white patch on chest", "chest is white"). Note: collar /
+    scar / notch mentions are deliberately NOT extracted — their absence on
+    the other report is not contradictory (collars are removable; scars and
+    ear-notches are frequently unreported rather than absent).
+    """
+    if not text:
+        return {}
+    words = re.findall(r"[a-z]+", text.lower())
+    marks: dict[str, set[str]] = {}
+    for i in range(len(words) - 1):
+        w1, w2 = words[i], words[i + 1]
+        color, part = None, None
+        if w1 in _MARKING_COLORS and w2 in _SURFACE_TO_BODYPART:
+            color, part = w1, _SURFACE_TO_BODYPART[w2]
+        elif w2 in _MARKING_COLORS and w1 in _SURFACE_TO_BODYPART:
+            color, part = w2, _SURFACE_TO_BODYPART[w1]
+        if not (color and part):
+            continue
+        marks.setdefault(part, set()).add(color)
+        # "white patch on left front paw" — propagate the color from a
+        # marking-noun (patch/spot/stripe/blaze) to the bodypart that follows
+        # within a few connector words.
+        if part in _MODIFIER_NOUNS:
+            j = i + 2
+            while j < len(words) and j <= i + 5:
+                w = words[j]
+                if w in _SURFACE_TO_BODYPART:
+                    marks.setdefault(_SURFACE_TO_BODYPART[w], set()).add(color)
+                    break
+                if w not in _CONNECTORS:
+                    break
+                j += 1
+    return marks
+
+
+def markings_contradict(
+    marks_a: dict[str, set[str]], marks_b: dict[str, set[str]]
+) -> list[str]:
+    """Human-readable conflicts where a shared bodypart has disjoint colors.
+
+    Both marking sets must be non-empty (sparse records are never penalized).
+    A bodypart appearing on both sides with zero shared color modifiers is a
+    contradiction ("white chest" vs "black chest").
+    """
+    if not marks_a or not marks_b:
+        return []
+    conflicts: list[str] = []
+    for part in sorted(set(marks_a) & set(marks_b)):
+        colors_a, colors_b = marks_a[part], marks_b[part]
+        if not (colors_a & colors_b):
+            conflicts.append(
+                f"{'/'.join(sorted(colors_a))} {part} vs "
+                f"{'/'.join(sorted(colors_b))} {part}"
+            )
     return conflicts
 
 
