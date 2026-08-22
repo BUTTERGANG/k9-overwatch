@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from ..db.models import PetRow
 from .breed_normalizer import normalize_breed
-from .color_stats import ColorStats, score_color_match_v2, tokenize_color
+from .color_stats import ColorStats, record_color_tokens, score_color_match_v2
 from .signals import (
     VETO_PENALTY,
     MatchResult,
@@ -152,12 +152,8 @@ class LostFoundMatcher:
         signals.update(score_breed_match(breed_lost, breed_found))
 
         # ── Vetoes: conflicts between known values ───────────────────────────
-        color_tokens_lost = (
-            tokenize_color(lost.color_primary) | tokenize_color(lost.color_secondary)
-        )
-        color_tokens_found = (
-            tokenize_color(found.color_primary) | tokenize_color(found.color_secondary)
-        )
+        color_tokens_lost = record_color_tokens(lost)
+        color_tokens_found = record_color_tokens(found)
         conflicts = detect_conflicts(
             lost.gender, found.gender,
             lost.size, found.size,

@@ -102,8 +102,8 @@ class TestColorStats:
             {"color_primary": "brindle", "color_secondary": None},
         ])
         assert stats.token_idf("black") < stats.token_idf("brindle")
-        # log(N/(1+df)): black df=2, N=4
-        assert stats.token_idf("black") == pytest.approx(math.log(4 / 3))
+        # smoothed log((N+1)/(1+df)): black df=2, N=4
+        assert stats.token_idf("black") == pytest.approx(math.log(5 / 3))
 
     def test_rare_token_detection(self):
         stats = build_color_stats([

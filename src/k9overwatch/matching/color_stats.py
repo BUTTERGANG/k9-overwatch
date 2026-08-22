@@ -19,7 +19,9 @@ from typing import Any
 # A token is "rare" when it appears in fewer than RARE_TOKEN_FRACTION of records.
 RARE_TOKEN_FRACTION = 0.05
 
-_SPLIT_RE = re.compile(r"[/,]|and|\s+")
+# \band\b (not bare "and") so words like "sandy" survive; "-" so "gray-white"
+# splits like "gray white".
+_SPLIT_RE = re.compile(r"[/,\-]|\band\b|\s+")
 _UNKNOWN_VALUES = {"", "unknown", "unk", "n/a", "none", "na"}
 
 
@@ -28,6 +30,19 @@ def tokenize_color(text: str | None) -> set[str]:
     if not text or text.strip().lower() in _UNKNOWN_VALUES:
         return set()
     return {t for t in _SPLIT_RE.split(text.strip().lower()) if t}
+
+
+def record_color_tokens(record: Any) -> set[str]:
+    """Tokenized color set for a record exposing ``color_primary`` /
+    ``color_secondary`` as attributes or dict keys. Shared by the matcher,
+    deduplicator and corpus builder so tokenization lives in exactly one place.
+    """
+    cp = getattr(record, "color_primary", None)
+    cs = getattr(record, "color_secondary", None)
+    if cp is None and isinstance(record, dict):
+        cp = record.get("color_primary")
+        cs = record.get("color_secondary")
+    return tokenize_color(cp) | tokenize_color(cs)
 
 
 class ColorStats:
@@ -42,9 +57,14 @@ class ColorStats:
         return self.total_docs > 0
 
     def token_idf(self, token: str) -> float:
-        """log(N / (1 + df)) — always > 0; higher = rarer."""
+        """Smoothed IDF log((N+1) / (1 + df)) — always >= 0; higher = rarer.
+
+        The +1 in the numerator keeps the value non-negative even when a token
+        appears in every document (df == N), which the plain log(N/(1+df))
+        formula would drive below zero on small corpora.
+        """
         df = self.doc_freq.get(token, 0)
-        return math.log(self.total_docs / (1 + df))
+        return math.log((self.total_docs + 1) / (1 + df))
 
     def is_rare(self, token: str) -> bool:
         """True when the token appears in < RARE_TOKEN_FRACTION of records."""
@@ -77,14 +97,7 @@ def build_color_stats(rows: Iterable[Any]) -> ColorStats:
     doc_freq: dict[str, int] = {}
     total = 0
     for row in rows:
-        cp = getattr(row, "color_primary", None)
-        cs = getattr(row, "color_secondary", None)
-        if cp is None and isinstance(row, dict):
-            cp = row.get("color_primary")
-            cs = row.get("color_secondary")
-        tokens: set[str] = set()
-        tokens |= tokenize_color(cp)
-        tokens |= tokenize_color(cs)
+        tokens = record_color_tokens(row)
         if not tokens:
             continue
         total += 1

@@ -324,13 +324,39 @@ def build_staleness_scrapers(config) -> dict:
     }
 
 
+async def _check_source_staleness(source: str, scraper, stale_hours: int) -> int:
+    """Check one source's stale records in its own session.
+
+    Fully fail-open and fail-isolated: any error (scraper timeout, DB hiccup)
+    is logged and costs that source only — never the other sources, and it
+    never deactivates a record.
+    """
+    try:
+        deactivated = 0
+        async with get_session() as session:
+            repo = PetRepository(session)
+            for row in await repo.get_stale_records(source, older_than_hours=stale_hours):
+                is_active = await scraper.check_active(row.source_id, source_url=row.source_url)
+                if not is_active:
+                    await repo.mark_inactive(source, row.source_id)
+                    deactivated += 1
+        logger.info(f"[{source}] staleness check: {deactivated} deactivated")
+        return deactivated
+    except Exception as exc:
+        logger.warning(f"[{source}] staleness check failed (fail-open, skipped): {exc}")
+        return 0
+
+
 async def check_stale_records(stale_hours: int = 48) -> dict:
     """
     For every source, verify records that haven't been seen recently via the
     source's own check_active() and mark them inactive if they're gone.
-    Checks fail open — a scraper error never deactivates a record; the
-    source-agnostic expire_stale_listings job remains the backstop.
+    Sources are checked concurrently in isolated sessions, so one source
+    hanging or raising cannot delay or abort the others. Checks fail open —
+    a scraper error never deactivates a record; the source-agnostic
+    expire_stale_listings job remains the backstop.
     """
+    import asyncio
     import os
 
     from ..scrapers.base import ScraperConfig
@@ -340,20 +366,13 @@ async def check_stale_records(stale_hours: int = 48) -> dict:
         search_lon=float(os.getenv("SEARCH_LON", "-86.1581")),
     )
     scrapers = build_staleness_scrapers(config)
-    per_source: dict[str, int] = {}
-    total_deactivated = 0
 
-    async with get_session() as session:
-        repo = PetRepository(session)
-        for source, scraper in scrapers.items():
-            deactivated = 0
-            for row in await repo.get_stale_records(source, older_than_hours=stale_hours):
-                is_active = await scraper.check_active(row.source_id, source_url=row.source_url)
-                if not is_active:
-                    await repo.mark_inactive(source, row.source_id)
-                    deactivated += 1
-            per_source[source] = deactivated
-            total_deactivated += deactivated
+    counts = await asyncio.gather(*(
+        _check_source_staleness(source, scraper, stale_hours)
+        for source, scraper in scrapers.items()
+    ))
+    per_source = dict(zip(scrapers, (int(c) for c in counts), strict=True))
+    total_deactivated = sum(per_source.values())
 
     logger.info(f"Staleness check: {total_deactivated} records deactivated {per_source}")
     return {"deactivated": total_deactivated, "per_source": per_source}

@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from ..db.models import PetRow
 from .breed_normalizer import normalize_breed
-from .color_stats import ColorStats, score_color_match_v2, tokenize_color
+from .color_stats import ColorStats, record_color_tokens, score_color_match_v2
 from .signals import (
     VETO_PENALTY,
     MatchResult,
@@ -70,9 +70,6 @@ class Deduplicator:
         # Hard filters
         if a.animal_type != b.animal_type:
             return None
-        if a.record_type == b.record_type:
-            # Dedup: same type (both lost or both found) — plausible duplicate
-            pass
         # Different sources are more interesting for dedup, but same-source duplication
         # can happen if a scraper re-posts. Don't hard-filter on source.
 
@@ -99,8 +96,8 @@ class Deduplicator:
         signals.update(score_breed_match(breed_a, breed_b))
 
         # ── Vetoes: conflicts between known values (data errors for dedup) ───
-        color_tokens_a = tokenize_color(a.color_primary) | tokenize_color(a.color_secondary)
-        color_tokens_b = tokenize_color(b.color_primary) | tokenize_color(b.color_secondary)
+        color_tokens_a = record_color_tokens(a)
+        color_tokens_b = record_color_tokens(b)
         conflicts = detect_conflicts(
             a.gender, b.gender, a.size, b.size, color_tokens_a, color_tokens_b,
         )
