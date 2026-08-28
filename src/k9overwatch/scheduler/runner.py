@@ -48,6 +48,7 @@ def build_scraper_jobs() -> list[tuple[str, type, int, int]]:
     from ..scrapers.browser.petfbi import PetFBIScraper
     from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
     from ..scrapers.http.petconnect24 import PetConnect24Scraper
+    from ..scrapers.http.indyhumane import IndyHumaneScraper
 
     jobs: list[tuple[str, type, int, int]] = [
         ("indy_lost_pet_alert", IndyLostPetAlertScraper, 15, 0),
@@ -55,6 +56,7 @@ def build_scraper_jobs() -> list[tuple[str, type, int, int]]:
         ("pawboost", PawBoostScraper, 35, 4),
         ("petfbi", PetFBIScraper, 40, 7),
         ("lostmydoggie", LostMyDoggieScraper, 45, 10),
+        ("indyhumane", IndyHumaneScraper, 60, 12),
     ]
     return jobs
 
