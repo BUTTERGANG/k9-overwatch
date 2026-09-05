@@ -12,6 +12,12 @@ Rules (per user NotificationPrefs):
 Email sending is config-gated: if SMTP_HOST is not set, notifications are
 logged and skipped (so local/dev runs never fail). This keeps the feature
 real but safe to deploy incrementally.
+
+Delivery is durable: match and contact alerts are enqueued (see
+PetRepository.enqueue_notification) and delivered by a worker with bounded
+exponential backoff, so a transient provider outage never silently drops an
+alert. Only the coalesced digest buffer below is in-memory; the scheduler
+persists it into the same durable queue on flush.
 """
 from __future__ import annotations
 
@@ -21,12 +27,14 @@ from dataclasses import dataclass
 from email.message import EmailMessage
 
 from k9overwatch.db.models import ContactRequest, PetMatch, PetRow
-from k9overwatch.db.repository import UserRepository
+from k9overwatch.db.repository import PetRepository, UserRepository
 
 CONF_RANK = {"low": 0, "medium": 1, "high": 2}
 
-# In-memory digest buffer (per process). The daily digest job flushes it.
-_digest: dict[str, list] = {}
+# In-memory digest buffer (per process), keyed by email. The daily digest job
+# drains and persists it into the durable NotificationQueue so it is not lost
+# across restarts. Each item is (subject, body, unsubscribe_token, user_id).
+_digest: dict[str, list[tuple[str, str, str, str]]] = {}
 
 
 @dataclass
@@ -103,34 +111,34 @@ async def notify_new_match(session, event: MatchEvent) -> bool:
     )
 
     if prefs.frequency == "instant":
-        if _smtp_configured():
-            return _send_email(user.email, subject, body, prefs.unsubscribe_token)
-        import logging
-        logging.getLogger(__name__).info(f"[notify:instant] would email {user.email}: {subject}")
-        return True
+        # Durable: enqueue for the delivery worker rather than sending inline,
+        # so a transient provider failure never drops the reunion alert.
+        enqueued = await PetRepository(session).enqueue_notification(
+            user_id=user.id,
+            subject=subject,
+            body=body,
+            kind="match",
+            dedupe_key=f"match:{user.id}:{event.lost_pet.id}:{event.other_pet.id}",
+            confidence=event.match.confidence,
+        )
+        return enqueued is not None
     # digest
-    _digest.setdefault(user.email, []).append((subject, body, prefs.unsubscribe_token))
+    _digest.setdefault(user.email, []).append(
+        (subject, body, prefs.unsubscribe_token, user.id)
+    )
     return True
 
 
-async def flush_digest() -> int:
-    """Send at most one email per address summarizing the day's matches."""
-    if not _digest:
-        return 0
-    sent = 0
-    for email, items in _digest.items():
-        token = items[-1][2]
-        body = "\n---\n".join(b for _, b, _ in items)
-        subject = f"{len(items)} possible match(es) for your lost pet"
-        if _smtp_configured():
-            if _send_email(email, subject, body, token):
-                sent += 1
-        else:
-            import logging
-            logging.getLogger(__name__).info(f"[notify:digest] would email {email}: {subject}")
-            sent += 1
+def drain_digest() -> dict[str, list[tuple[str, str, str, str]]]:
+    """Return a copy of the pending digest buffer and clear it.
+
+    The scheduler job enqueues each buffered digest into the durable
+    NotificationQueue and then flushes the queue. Returning the buffer (rather
+    than sending inline) makes digest delivery durable and multi-worker safe.
+    """
+    pending = dict(_digest)
     _digest.clear()
-    return sent
+    return pending
 
 
 async def flush_notification_queue(session, limit: int = 50) -> int:
@@ -174,6 +182,7 @@ async def notify_contact_request(session, contact: ContactRequest, pet: PetRow) 
     requester = await repo.get_by_id(contact.requester_id)
     if not requester:
         return False
+
     subject = "Someone wants to contact you about your K9-Overwatch report"
     body = (
         f"Hi {recipient.display_name or 'there'},\n\n"
@@ -181,8 +190,13 @@ async def notify_contact_request(session, contact: ContactRequest, pet: PetRow) 
         f"{pet.name or 'your pet'}:\n\n{contact.message}\n\n"
         f"Reply securely here: {os.getenv('APP_BASE_URL', '')}/account\n"
     )
-    if _smtp_configured():
-        return _send_email(recipient.email, subject, body, prefs.unsubscribe_token)
-    import logging
-    logging.getLogger(__name__).info("[notify:contact] would email %s: %s", recipient.email, subject)
-    return True
+    # Durable: enqueue rather than send inline so a transient provider
+    # failure doesn't drop the contact handoff alert.
+    enqueued = await PetRepository(session).enqueue_notification(
+        user_id=recipient.id,
+        subject=subject,
+        body=body,
+        kind="contact",
+        dedupe_key=f"contact:{contact.id}",
+    )
+    return enqueued is not None

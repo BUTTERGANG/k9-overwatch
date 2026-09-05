@@ -120,6 +120,12 @@ async def _migrate_existing_db():
         )
         if "next_attempt_at" not in queue_cols:
             await conn.execute(text("ALTER TABLE notification_queue ADD COLUMN next_attempt_at TIMESTAMP"))
+        if "kind" not in queue_cols:
+            await conn.execute(
+                text("ALTER TABLE notification_queue ADD COLUMN kind TEXT NOT NULL DEFAULT 'saved_search'")
+            )
+        if "dedupe_key" not in queue_cols:
+            await conn.execute(text("ALTER TABLE notification_queue ADD COLUMN dedupe_key TEXT"))
         user_cols = await conn.run_sync(
             lambda c: [col["name"] for col in inspect(c).get_columns("users")]
         )
