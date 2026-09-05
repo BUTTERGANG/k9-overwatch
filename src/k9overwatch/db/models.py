@@ -143,6 +143,9 @@ class PetMatch(Base):
     created_at = Column(DateTime, default=_now)
     reviewed = Column(Boolean, default=False)       # human-reviewed?
     confirmed = Column(Boolean)                     # human confirmed/rejected?
+    # Decision-time snapshot (roadmap C10): score/signals as they were when a
+    # human confirmed/rejected, immune to later re-match score updates.
+    decision_snapshot = Column(JSON)
 
     __table_args__ = (
         UniqueConstraint("pet_a_id", "pet_b_id", "match_type", name="uq_match_pair"),
@@ -220,6 +223,8 @@ class User(Base):
     created_at = Column(DateTime, default=_now)
     is_active = Column(Boolean, default=True, nullable=False)
     email_verified = Column(Boolean, default=False, nullable=False)
+    # Opt-in: receives the daily group-admin digest of new local reports.
+    is_group_admin = Column(Boolean, default=False, nullable=False)
 
 
 class NotificationPrefs(Base):
@@ -354,7 +359,6 @@ class ContactBlock(Base):
 class ContentReport(Base):
     """User-flagged content (reports, contact requests) for admin review."""
     __tablename__ = "content_reports"
-
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     reporter_id = Column(String(36), nullable=False, index=True)
     target_type = Column(String(40), nullable=False, index=True)  # "report" | "contact_request"
@@ -364,3 +368,18 @@ class ContentReport(Base):
     created_at = Column(DateTime, default=_now, nullable=False)
     reviewed_at = Column(DateTime)
     reviewed_by = Column(String(36))
+
+
+class VisualEmbedding(Base):
+    """Cached perceptual-hash embeddings keyed by photo-URL hash (roadmap C11).
+
+    Only populated when VISUAL_SIMILARITY_ENABLED=1; the algorithm column lets
+    old vectors coexist with newer hash versions instead of being silently
+    misinterpreted.
+    """
+    __tablename__ = "visual_embeddings"
+
+    ref_hash = Column(String(64), primary_key=True)  # sha256 of the photo URL
+    algorithm = Column(String(40), primary_key=True)  # e.g. "dhash64-v1"
+    embedding = Column(Text, nullable=False)          # JSON list[float]
+    created_at = Column(DateTime, default=_now, nullable=False)

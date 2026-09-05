@@ -28,6 +28,7 @@ from k9overwatch.web.routers import matches as matches_router
 from k9overwatch.web.routers import onboarding as onboarding_router
 from k9overwatch.web.routers import pets as pets_router
 from k9overwatch.web.routers import reports as reports_router
+from k9overwatch.web.routers import uploads as uploads_router
 from k9overwatch.web.templates_config import templates
 
 logger = logging.getLogger(__name__)
@@ -161,10 +162,9 @@ templates.context_processors.append(_inject_user_state)
 
 # Static files
 app.mount("/static", StaticFiles(directory=str(_WEB_DIR / "static")), name="static")
-# Uploaded owner photos (served as-is; gated by being unguessable UUID filenames)
-_uploads_dir = _WEB_DIR.parent.parent.parent / "data" / "uploads"
-os.makedirs(_uploads_dir, exist_ok=True)
-app.mount("/uploads", StaticFiles(directory=str(_uploads_dir)), name="uploads")
+# Uploaded owner photos: hardened router with strict filename validation
+# (no directory traversal surface). URLs stay identical to the old mount.
+app.include_router(uploads_router.router)
 
 # Routers
 app.include_router(onboarding_router.router)
@@ -230,8 +230,18 @@ async def api_stats():
         )
         per_source = {row[0]: row[1] for row in source_result.all()}
 
+        # Owner-confirmed reunifications (user-submitted reports only).
+        user_reunif_result = await session.execute(
+            sa_select(sa_func.count()).where(
+                PetRow.source == "user",
+                PetRow.owner_report_status == "reunited",
+            )
+        )
+        user_reunifications = user_reunif_result.scalar_one()
+
     return {
         "total_reunifications": total_reunifications,
+        "user_reunifications": user_reunifications,
         "total_active_pets": total_active_pets,
         "total_pets": total_pets,
         "per_source": per_source,

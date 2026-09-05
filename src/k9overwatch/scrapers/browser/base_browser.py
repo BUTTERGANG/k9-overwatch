@@ -93,6 +93,78 @@ class BrowserBaseScraper(BaseScraper):
         """Source-specific scraping logic given an active Playwright Page."""
         ...
 
+    # ── Liveness check (per-source staleness) ────────────────────────────
+    # Subclasses set markers that appear on "listing gone" pages and, when the
+    # detail URL can be built from the source_id alone, override detail_url().
+
+    NOT_FOUND_MARKERS: tuple[str, ...] = ()
+    CHECK_TIMEOUT_MS: int = 20_000
+
+    def detail_url(self, source_id: str) -> str | None:
+        """Detail-page URL for a record, or None if not reconstructable."""
+        return None
+
+    async def check_active(
+        self,
+        source_id: str,
+        source_url: str | None = None,
+    ) -> bool:
+        """
+        Shared browser-backed liveness check for Playwright sources.
+
+        Loads the listing page and treats it as inactive when the server
+        returns 404 or the body contains a not-found marker. Fails OPEN
+        (returns True) when the check can't be performed — a bot-protection
+        challenge or timeout must never deactivate a possibly-live listing.
+        """
+        url = source_url or self.detail_url(source_id)
+        if not url:
+            return True
+        try:
+            status, text = await self._fetch_page_status_and_text(url)
+        except Exception:
+            return True
+        if status == 404:
+            return False
+        lowered = (text or "").lower()
+        return not any(marker in lowered for marker in self.NOT_FOUND_MARKERS)
+
+    async def _fetch_page_status_and_text(self, url: str) -> tuple[int, str]:
+        """Load one page in a throwaway stealth browser; return (status, body text)."""
+        from playwright.async_api import async_playwright
+
+        headless = os.getenv("PLAYWRIGHT_HEADLESS", "true").lower() != "false"
+        chromium_path = (
+            os.getenv("PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH")
+            or shutil.which("chromium")
+            or shutil.which("chromium-browser")
+            or None
+        )
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=headless, args=self.BROWSER_ARGS,
+                executable_path=chromium_path,
+            )
+            context = await browser.new_context(
+                user_agent=self.USER_AGENT,
+                viewport={"width": 1280, "height": 800}, locale="en-US",
+            )
+            try:
+                if self.STEALTH_REQUIRED:
+                    await self._apply_stealth(context)
+                page = await context.new_page()
+                response = await page.goto(
+                    url, wait_until="domcontentloaded", timeout=self.CHECK_TIMEOUT_MS,
+                )
+                status = response.status if response else 200
+                try:
+                    text = await page.inner_text("body")
+                except Exception:
+                    text = await page.content()
+                return status, text
+            finally:
+                await browser.close()
+
     async def _setup_context(self, context) -> None:
         """Hook for subclasses to configure the browser context (init scripts, permissions)."""
         pass

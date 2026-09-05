@@ -15,11 +15,24 @@ import secrets
 
 COOKIE_NAME = "k9_session"
 _DEFAULT_SESSION_SECRET = "dev-insecure-secret-change-me"
+# Placeholder strings from .env.example that must never ship to production.
+_PLACEHOLDER_SECRETS = {"change-me-to-a-random-64-char-string", _DEFAULT_SESSION_SECRET}
+_MIN_SECRET_LENGTH = 32
 _ENVIRONMENT = os.getenv("ENVIRONMENT", os.getenv("APP_ENV", "development")).lower()
 _IS_PRODUCTION = _ENVIRONMENT in {"production", "prod"}
 _SESSION_SECRET = os.getenv("SESSION_SECRET", "")
-if _IS_PRODUCTION and (not _SESSION_SECRET or _SESSION_SECRET == _DEFAULT_SESSION_SECRET):
-    raise RuntimeError("SESSION_SECRET must be explicitly configured in production")
+if (
+    _IS_PRODUCTION
+    and (
+        not _SESSION_SECRET
+        or len(_SESSION_SECRET) < _MIN_SECRET_LENGTH
+        or _SESSION_SECRET in _PLACEHOLDER_SECRETS
+    )
+):
+    raise RuntimeError(
+        "SESSION_SECRET must be explicitly configured in production "
+        f"(at least {_MIN_SECRET_LENGTH} characters, not a placeholder)"
+    )
 if not _SESSION_SECRET:
     _SESSION_SECRET = _DEFAULT_SESSION_SECRET
 

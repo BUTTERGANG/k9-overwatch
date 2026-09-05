@@ -35,6 +35,7 @@ SCRAPER_MAP = {
     "pawboost": ("k9overwatch.scrapers.browser.pawboost", "PawBoostScraper"),
     "petfbi": ("k9overwatch.scrapers.browser.petfbi", "PetFBIScraper"),
     "lostmydoggie": ("k9overwatch.scrapers.browser.lostmydoggie", "LostMyDoggieScraper"),
+    "indyhumane": ("k9overwatch.scrapers.http.indyhumane", "IndyHumaneScraper"),
 }
 
 

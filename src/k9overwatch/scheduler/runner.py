@@ -24,6 +24,7 @@ from .jobs import (
     regeocode_pending_records,
     run_matching_pass,
     run_scraper,
+    send_group_admin_digests,
 )
 from .lock import SchedulerSingletonLock
 
@@ -40,16 +41,29 @@ def _config() -> ScraperConfig:
     )
 
 
+def build_scraper_jobs() -> list[tuple[str, type, int, int]]:
+    """Return the scraper job specs to register."""
+    from ..scrapers.browser.lostmydoggie import LostMyDoggieScraper
+    from ..scrapers.browser.pawboost import PawBoostScraper
+    from ..scrapers.browser.petfbi import PetFBIScraper
+    from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
+    from ..scrapers.http.petconnect24 import PetConnect24Scraper
+    from ..scrapers.http.indyhumane import IndyHumaneScraper
+
+    jobs: list[tuple[str, type, int, int]] = [
+        ("indy_lost_pet_alert", IndyLostPetAlertScraper, 15, 0),
+        ("petconnect24", PetConnect24Scraper, 30, 1),
+        ("pawboost", PawBoostScraper, 35, 4),
+        ("petfbi", PetFBIScraper, 40, 7),
+        ("lostmydoggie", LostMyDoggieScraper, 45, 10),
+        ("indyhumane", IndyHumaneScraper, 60, 12),
+    ]
+    return jobs
+
+
 class ScraperScheduler:
 
     def build(self) -> AsyncIOScheduler:
-        from ..scrapers.browser.lostmydoggie import LostMyDoggieScraper
-        from ..scrapers.browser.pawboost import PawBoostScraper
-        from ..scrapers.browser.petfbi import PetFBIScraper
-        from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
-        from ..scrapers.http.petconnect24 import PetConnect24Scraper
-        from ..scrapers.http.petfinder import PetfinderScraper
-
         scheduler = AsyncIOScheduler(timezone="UTC")
         cfg = _config()
         now = datetime.now(UTC)
@@ -58,14 +72,7 @@ class ScraperScheduler:
         # Use interval triggers (rather than the old twice-daily cron) so a
         # missed web-process tick is coalesced without silently creating a
         # 12-hour freshness gap.  Initial runs remain staggered at startup.
-        scraper_jobs = [
-            ("indy_lost_pet_alert", IndyLostPetAlertScraper, 15, 0),
-            ("petconnect24", PetConnect24Scraper, 30, 1),
-            ("petfinder", PetfinderScraper, 60, 3),
-            ("pawboost", PawBoostScraper, 35, 4),
-            ("petfbi", PetFBIScraper, 40, 7),
-            ("lostmydoggie", LostMyDoggieScraper, 45, 10),
-        ]
+        scraper_jobs = build_scraper_jobs()
         for job_id, scraper_class, interval_minutes, startup_offset in scraper_jobs:
             scheduler.add_job(
                 run_scraper,
@@ -140,6 +147,15 @@ class ScraperScheduler:
             flush_digest_notifications,
             "cron", hour=19, minute=0,
             id="match_digest",
+            max_instances=1,
+            coalesce=True,
+        )
+
+        # ── Group-admin daily digest — env-gated (GROUP_ADMIN_DIGEST_ENABLED) ─
+        scheduler.add_job(
+            send_group_admin_digests,
+            "cron", hour=17, minute=30,
+            id="group_admin_digest",
             max_instances=1,
             coalesce=True,
         )

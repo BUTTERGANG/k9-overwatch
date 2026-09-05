@@ -8,8 +8,11 @@ from __future__ import annotations
 
 from ..db.models import PetRow
 from .breed_normalizer import normalize_breed
+from .color_stats import ColorStats, record_color_tokens, score_color_match_v2
 from .signals import (
+    VETO_PENALTY,
     MatchResult,
+    detect_conflicts,
     geo_distance_miles,
     score_breed_match,
     score_color_match,
@@ -24,12 +27,33 @@ from .signals import (
 # Minimum score to record as a dedup match
 DEDUP_MIN_SCORE = 0.35
 
+# v2 confidence thresholds for dedup (kept close to the legacy 0.60/0.80)
+DEDUP_V2_THRESHOLDS = (0.55, 0.75)
+
+# Internal date guard: when both records carry an event date, pairs whose dates
+# differ by more than this many days are never considered duplicates. This is
+# wider than the candidate query's 90-day window, so late re-posts of the same
+# pet still dedup, while ancient cross-month look-alikes do not pair.
+DEDUP_MAX_AGE_DAYS = 180
+
 
 class Deduplicator:
     """
     Identifies duplicate records — the same physical pet listed on multiple sources.
     Operates on DB row objects (PetRow), not PetRecord instances.
+
+    Conflicting known values (gender/size/color) are treated as data errors for a
+    duplicate posting, so they apply a soft penalty rather than a hard reject.
     """
+
+    def __init__(
+        self,
+        *,
+        color_stats: ColorStats | None = None,
+        veto_penalty: float = VETO_PENALTY,
+    ) -> None:
+        self.color_stats = color_stats
+        self.veto_penalty = veto_penalty
 
     def find_duplicates(
         self,
@@ -52,9 +76,10 @@ class Deduplicator:
         # Hard filters
         if a.animal_type != b.animal_type:
             return None
-        if a.record_type == b.record_type:
-            # Dedup: same type (both lost or both found) — plausible duplicate
-            pass
+        # Internal date guard: skip pairs whose event dates are too far apart.
+        if a.date_event and b.date_event:
+            if abs((a.date_event - b.date_event).days) > DEDUP_MAX_AGE_DAYS:
+                return None
         # Different sources are more interesting for dedup, but same-source duplication
         # can happen if a scraper re-posts. Don't hard-filter on source.
 
@@ -68,6 +93,9 @@ class Deduplicator:
         # "lost" report) so we don't hard-filter on it.
         if a.record_type == b.record_type:
             signals["same_record_type"] = 0.04
+        # NOTE: uses TRUE coordinates — display-layer pin fuzzing
+        # (geocoding/display_fuzz.py) applies only to map rendering and must
+        # never leak into match scoring.
         dist = geo_distance_miles(a.lat, a.lon, b.lat, b.lon)
         signals.update(score_geo_distance(dist))
         signals.update(score_zip_match(a.zip, b.zip))
@@ -79,8 +107,19 @@ class Deduplicator:
         breed_a = normalize_breed(a.breed)
         breed_b = normalize_breed(b.breed)
         signals.update(score_breed_match(breed_a, breed_b))
-        signals.update(score_color_match(a.color_primary, b.color_primary, weight=0.10))
-        signals.update(score_color_match(a.color_secondary, b.color_secondary, weight=0.06))
+
+        # ── Vetoes: conflicts between known values (data errors for dedup) ───
+        color_tokens_a = record_color_tokens(a)
+        color_tokens_b = record_color_tokens(b)
+        conflicts = detect_conflicts(
+            a.gender, b.gender, a.size, b.size, color_tokens_a, color_tokens_b,
+        )
+
+        if self.color_stats is not None and self.color_stats.available:
+            signals.update(score_color_match_v2(color_tokens_a, color_tokens_b, self.color_stats))
+        else:
+            signals.update(score_color_match(a.color_primary, b.color_primary, weight=0.10))
+            signals.update(score_color_match(a.color_secondary, b.color_secondary, weight=0.06))
         signals.update(score_name_match(a.name, b.name))
 
         # ── Gender ───────────────────────────────────────────────────────────
@@ -104,9 +143,14 @@ class Deduplicator:
         if not signals:
             return None
 
-        return MatchResult.from_signals(
+        penalties = (
+            {fam: self.veto_penalty for fam in conflicts} if conflicts else None
+        )
+        return MatchResult.from_signals_v2(
             pet_a_id=a.id,
             pet_b_id=b.id,
             match_type="dedup",
             signals_fired=signals,
+            penalties=penalties,
+            thresholds=DEDUP_V2_THRESHOLDS,
         )

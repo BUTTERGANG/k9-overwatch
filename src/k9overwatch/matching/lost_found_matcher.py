@@ -10,9 +10,14 @@ from __future__ import annotations
 
 from ..db.models import PetRow
 from .breed_normalizer import normalize_breed
+from .color_stats import ColorStats, record_color_tokens, score_color_match_v2
 from .signals import (
+    VETO_PENALTY,
     MatchResult,
+    detect_conflicts,
+    extract_markings,
     geo_distance_miles,
+    markings_contradict,
     score_breed_match,
     score_color_match,
     score_contact_phone,
@@ -50,10 +55,20 @@ class LostFoundMatcher:
         *,
         visual_threshold: float = 0.85,
         visual_weight: float = 0.10,
+        color_stats: ColorStats | None = None,
+        color_max_weight: float = 0.20,
+        veto_mode: str = "soft",       # "soft" (penalize) or "strict" (reject)
+        veto_penalty: float = VETO_PENALTY,
     ) -> None:
         self.visual_provider = visual_provider
         self.visual_threshold = visual_threshold
         self.visual_weight = visual_weight
+        self.color_stats = color_stats
+        self.color_max_weight = color_max_weight
+        if veto_mode not in ("soft", "strict"):
+            raise ValueError("veto_mode must be 'soft' or 'strict'")
+        self.veto_mode = veto_mode
+        self.veto_penalty = veto_penalty
 
     def find_matches(
         self,
@@ -119,6 +134,9 @@ class LostFoundMatcher:
         signals: dict[str, float] = {}
 
         # ── Geo ──────────────────────────────────────────────────────────────
+        # NOTE: uses TRUE coordinates — display-layer pin fuzzing
+        # (geocoding/display_fuzz.py) applies only to map rendering and must
+        # never leak into match scoring.
         dist = geo_distance_miles(lost.lat, lost.lon, found.lat, found.lon)
         signals.update(score_geo_distance(dist))
         signals.update(score_zip_match(lost.zip, found.zip))
@@ -138,15 +156,46 @@ class LostFoundMatcher:
         breed_found = normalize_breed(found.breed) or normalize_breed(found.breed_normalized)
         signals.update(score_breed_match(breed_lost, breed_found))
 
-        # ── Color ────────────────────────────────────────────────────────────
-        signals.update(score_color_match(lost.color_primary, found.color_primary, weight=0.15))
-        if lost.color_secondary and found.color_secondary:
-            secondary_signals = score_color_match(
-                lost.color_secondary, found.color_secondary, weight=0.15
-            )
-            signals.update(
-                {k + "_secondary": v * 0.4 for k, v in secondary_signals.items()}
-            )
+        # ── Vetoes: conflicts between known values ───────────────────────────
+        color_tokens_lost = record_color_tokens(lost)
+        color_tokens_found = record_color_tokens(found)
+        conflicts = detect_conflicts(
+            lost.gender, found.gender,
+            lost.size, found.size,
+            color_tokens_lost, color_tokens_found,
+        )
+        # Narrative veto: contradicting marking descriptions ("white chest"
+        # vs "black chest") between two otherwise-similar records. Fields are
+        # extracted separately so colors never attach across field boundaries.
+        markings_a: dict[str, set[str]] = {}
+        for text in (lost.distinctive_features, lost.description):
+            for part, colors in extract_markings(text).items():
+                markings_a.setdefault(part, set()).update(colors)
+        markings_b: dict[str, set[str]] = {}
+        for text in (found.distinctive_features, found.description):
+            for part, colors in extract_markings(text).items():
+                markings_b.setdefault(part, set()).update(colors)
+        marking_conflicts = markings_contradict(markings_a, markings_b)
+        if marking_conflicts:
+            conflicts["markings"] = "; ".join(marking_conflicts)
+        if conflicts and self.veto_mode == "strict":
+            return None
+
+        # ── Color (informativeness-weighted when stats are available) ────────
+        if self.color_stats is not None and self.color_stats.available:
+            signals.update(score_color_match_v2(
+                color_tokens_lost, color_tokens_found,
+                self.color_stats, max_weight=self.color_max_weight,
+            ))
+        else:
+            signals.update(score_color_match(lost.color_primary, found.color_primary, weight=0.15))
+            if lost.color_secondary and found.color_secondary:
+                secondary_signals = score_color_match(
+                    lost.color_secondary, found.color_secondary, weight=0.15
+                )
+                signals.update(
+                    {k + "_secondary": v * 0.4 for k, v in secondary_signals.items()}
+                )
 
         # ── Gender ───────────────────────────────────────────────────────────
         if (
@@ -198,9 +247,21 @@ class LostFoundMatcher:
         if not signals:
             return None
 
-        return MatchResult.from_signals(
+        penalties = (
+            {fam: self.veto_penalty for fam in conflicts}
+            if conflicts and self.veto_mode == "soft"
+            else None
+        )
+        extra_reasons = (
+            [f"Markings conflict: {c}" for c in marking_conflicts]
+            if marking_conflicts
+            else None
+        )
+        return MatchResult.from_signals_v2(
             pet_a_id=lost.id,
             pet_b_id=found.id,
             match_type="lost_found",
             signals_fired=signals,
+            penalties=penalties,
+            extra_reasons=extra_reasons,
         )

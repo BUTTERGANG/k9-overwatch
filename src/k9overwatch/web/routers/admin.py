@@ -213,3 +213,86 @@ async def action_report(
     report.reviewed_by = "admin"
     await db.commit()
     return RedirectResponse(url="/admin/reports", status_code=303)
+
+
+# ── Admin: direct content actions on owner reports (roadmap A2) ──────
+
+
+def _deactivate_pet(pet: PetRow) -> None:
+    pet.active = False
+    if pet.source == "user":
+        pet.owner_report_status = "closed"
+
+
+@router.post("/admin/pets/{pet_id}/deactivate", dependencies=[Depends(verify_admin)])
+async def admin_deactivate_pet(
+    pet_id: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Directly deactivate a problematic owner report from the moderation panel."""
+    from k9overwatch.db.models import PetRow
+
+    pet = await db.get(PetRow, pet_id)
+    if pet is None:
+        raise HTTPException(status_code=404, detail="Pet not found")
+    _deactivate_pet(pet)
+    await db.commit()
+    return RedirectResponse(url="/admin/reports", status_code=303)
+
+
+@router.post("/admin/pets/{pet_id}/edit", dependencies=[Depends(verify_admin)])
+async def admin_edit_pet(
+    pet_id: str,
+    name: str = Form(default=""),
+    breed: str = Form(default=""),
+    color_primary: str = Form(default=""),
+    description: str = Form(default=""),
+    location_text: str = Form(default=""),
+    contact_email: str = Form(default=""),
+    contact_phone: str = Form(default=""),
+    db: AsyncSession = Depends(get_db),
+):
+    """Directly edit fields on a flagged owner report. Empty fields are left unchanged."""
+    from k9overwatch.db.models import PetRow
+
+    pet = await db.get(PetRow, pet_id)
+    if pet is None:
+        raise HTTPException(status_code=404, detail="Pet not found")
+
+    updates = {
+        "name": name,
+        "breed": breed,
+        "color_primary": color_primary,
+        "description": description,
+        "location_text": location_text,
+        "contact_email": contact_email,
+        "contact_phone": contact_phone,
+    }
+    for field, value in updates.items():
+        if value.strip():
+            setattr(pet, field, value.strip())
+    await db.commit()
+    return RedirectResponse(url="/admin/reports", status_code=303)
+
+
+# ── User management: group-admin digest opt-in toggle ────────────────────────
+
+@router.get("/admin/users", dependencies=[Depends(verify_admin)])
+async def admin_users_page(request: Request, db: AsyncSession = Depends(get_db)):
+    from k9overwatch.db.models import User
+
+    users = (await db.execute(select(User).order_by(User.email))).scalars().all()
+    return templates.TemplateResponse(request, "admin/users.html", {"users": users})
+
+
+@router.post("/admin/users/{user_id}/group-admin", dependencies=[Depends(verify_admin)])
+async def admin_toggle_group_admin(user_id: str, db: AsyncSession = Depends(get_db)):
+    """Flip a user's group-admin digest opt-in flag."""
+    from k9overwatch.db.models import User
+
+    user = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.is_group_admin = not user.is_group_admin
+    await db.commit()
+    return RedirectResponse(url="/admin/users", status_code=303)

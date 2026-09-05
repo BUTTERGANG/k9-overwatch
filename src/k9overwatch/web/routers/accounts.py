@@ -354,7 +354,7 @@ async def toggle_saved_search(
     return RedirectResponse(url="/account?saved_search=1", status_code=303)
 
 
-@router.post("/contact-requests/{contact_id}/status")
+@router.post("/contact-requests/{contact_id}/status", dependencies=[Depends(rate_limit("contact-status", limit=30, window_seconds=3600))])
 async def update_contact_status(
     contact_id: str,
     request: Request,
@@ -437,7 +437,7 @@ async def flush_digest_endpoint():
 # ── Contact request reply ───────────────────────────────────────────────
 
 
-@router.post("/contact-requests/{contact_id}/reply")
+@router.post("/contact-requests/{contact_id}/reply", dependencies=[Depends(rate_limit("contact-reply", limit=30, window_seconds=3600))])
 async def reply_to_contact_request(
     contact_id: str,
     request: Request,
@@ -475,7 +475,7 @@ async def reply_to_contact_request(
 # ── Block user on contact ──────────────────────────────────────────────
 
 
-@router.post("/contact-requests/{contact_id}/block")
+@router.post("/contact-requests/{contact_id}/block", dependencies=[Depends(rate_limit("contact-block", limit=30, window_seconds=3600))])
 async def block_user_on_contact(
     contact_id: str,
     request: Request,
@@ -628,7 +628,7 @@ async def edit_report(
 # ── Flag report (as ContentReport) ─────────────────────────────────────
 
 
-@router.post("/reports/{report_id}/flag")
+@router.post("/reports/{report_id}/flag", dependencies=[Depends(rate_limit("report-flag", limit=10, window_seconds=3600))])
 async def flag_report(
     report_id: str,
     request: Request,
@@ -657,7 +657,7 @@ async def flag_report(
 # ── Flag contact request ───────────────────────────────────────────────
 
 
-@router.post("/contact-requests/{contact_id}/flag")
+@router.post("/contact-requests/{contact_id}/flag", dependencies=[Depends(rate_limit("contact-request-flag", limit=10, window_seconds=3600))])
 async def flag_contact_request(
     contact_id: str,
     request: Request,

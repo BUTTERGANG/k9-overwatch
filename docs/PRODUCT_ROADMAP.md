@@ -84,10 +84,9 @@ dataset grows. Listed roughly by impact on "find animals faster."
    can receive instant or daily-digest email alerts with confidence thresholds, opt-out,
    and unsubscribe support. Durable delivery state, retries, SMS, push, and multi-process
    digest storage remain before public launch.
-2. **Owner-submitted reports exist, but editing/abuse controls need hardening.** Users can
-   now edit their reports and flag content for moderation. Self-service resolution states
-   (resolved, reunited, closed) are available. Remaining: admin can directly edit or remove
-   problematic content, automated abuse detection, rate limiting on flags.
+2. **Owner-submitted reports: admin direct edit/deactivate DONE (2026-08-22).** Admins can
+   edit or deactivate flagged owner reports directly from `/admin/reports`. Remaining:
+   automated abuse detection, rate limiting on flags.
 3. **Contact / handoff is now a threaded conversation system** with reply, block, and flag
    controls. Both participants can advance the handoff state (open → in conversation →
    handoff arranged → reunited → closed). Notification delivery for replies remains via
@@ -100,7 +99,7 @@ dataset grows. Listed roughly by impact on "find animals faster."
    scale bounded, but with thousands of records this is the daily job that will
    eventually time out or hammer the DB. Needs spatial indexing (PostGIS `&&` /
    `ST_DWithin`) and/or candidate pre-bucketing before the dataset grows — not urgent yet.
-5. **Confirmed: `find_match_candidates` does geo filtering in Python, not SQL**
+5. **DONE (2026-08-22): `find_match_candidates` now pre-filters by lat/lon bounding box in SQL**
    (`db/repository.py`, Haversine comprehension over the date-window pool). Unlike
    `find_within_radius`, which does have a `lat`/`lon.between()` bounding-box pre-filter,
    the matching-candidate query has none. Same "not urgent at current scale" caveat as
@@ -115,23 +114,57 @@ dataset grows. Listed roughly by impact on "find animals faster."
    geocode. A one-off `geocode_batch.py` run is still worth doing for any pre-existing backlog.
 
 ### C. Medium — trust, correctness, polish
-8. **Image proxy cache has no TTL/eviction.** `/img` proxies and caches source images,
+8. **DONE (2026-08-22): image proxy cache now TTL'd (7 days) and size-capped (512MB, oldest-first eviction).** `/img` proxies and caches source images,
    content-hashed, capped at 8MB each. The on-disk cache grows unbounded with no TTL or cleanup.
 9. **Match counts are not yet fully surfaced in the report-list experience.** The map
    API and marker popups can expose potential-match counts, but the synchronized list
    still needs a dedicated match badge/link treatment.
-10. **No confidence calibration / feedback loop.** We store human `confirmed`/`rejected`
-    but never USE rejections to tune signal weights.
+10. **Feedback loop: labeled data groundwork DONE (2026-08-22).** Match review now stores a
+    decision-time snapshot (`decision_snapshot`: confirmed/score/signals/decided_at) that
+    survives re-match updates. Remaining: actually re-weight signals from the labels.
 11. **Matching is text-only; no visual signal.** Perceptual hash is the lightweight first
     step; CLIP is the heavy step.
 12. **Date handling fragility.** Several sources parse dates inconsistently; temporal
     signals in matching can be noisy.
+13. **Matching redesign v2 — sparse-record-tolerant scoring DONE (2026-08-22).**
+    The lost/found matcher now follows "filter first, rank second, explain always":
+
+    - **Conflict vetoes** (`signals.detect_conflicts`): known-value conflicts
+      (gender M≠F, size >1 step apart on S<M<L<XL, primary-color token-set
+      contradiction with rapidfuzz near-token tolerance) are detected before
+      additive scoring. Default **soft** mode subtracts `VETO_PENALTY=0.45`
+      per conflict family from the final score (floored at 0); **strict** mode
+      rejects the pair. Missing/"unknown" values never veto.
+    - **Informativeness-weighted color** (`matching/color_stats.py`): color
+      tokens are IDF-weighted over the whole DB corpus, so "black" counts for
+      little while "merle"/"brown patch" count a lot
+      (`score_color_match_v2`, overlap normalized to `COLOR_MAX_WEIGHT=0.20`,
+      plus a `color_rare_token=0.08` bonus when a shared token appears in <5%
+      of records). Falls back to uniform scoring when stats are unavailable;
+      `ColorStats` serializes to JSON so a scheduler job can rebuild it.
+    - **Corroboration-based confidence** (`MatchResult.from_signals_v2`):
+      evidence is grouped into families {circumstance, description, identity,
+      narrative, visual}. Identity hits (microchip/phone/name) are high
+      outright; otherwise high needs score ≥ 0.65 across ≥ 2 families, medium
+      needs ≥ 0.40 in ≥ 1 family (single-family matches need ≥ 2 distinct
+      signals), and lone weak evidence lands low with a `needs_review` label.
+      Generic circumstance+common-description stacks ("black lab near where/when
+      expected") are capped below high as coincidences.
+    - Every MatchResult now carries human-readable `reasons`
+      (`SIGNAL_REASON_MAP`) and `labels`.
+    - The Deduplicator adopts the same soft vetoes and v2 confidence at its own
+      thresholds (`DEDUP_V2_THRESHOLDS = (0.55, 0.75)`).
+
+    Tunables: `VETO_PENALTY`, `veto_mode`, `veto_penalty`, `color_max_weight`,
+    `RARE_TOKEN_FRACTION`, `V2_HIGH_SCORE=0.65`, `V2_MEDIUM_SCORE=0.40`,
+    `COINCIDENCE_MAX_GENERIC_DESC_SIGNALS=2`.
 
 ### D. Low / hygiene
-13. **Rate limiting covers auth + report only.** Contact requests, flagging, and other
+14. **Rate limiting covers auth + report only.** Contact requests, flagging, and other
     mutation endpoints are unguarded, and the limiter is in-process only (needs a shared
     store for multi-worker).
-14. **`scripts/scrape_one.py` and `geocode_batch.py` are dev-only** and lack docs.
+15. **Docs DONE (2026-08-22):** `docs/dev-scripts.md` documents both scripts; docstrings
+    cover usage inline. Scripts remain dev-only by design.
 15. **Tailwind CDN → local build DONE (2026-08-19).** CSP tightened for production.
 16. **Accessibility initial pass DONE (2026-08-19).** Skip-to-content, aria roles, labels,
     and live regions added. Remaining: full keyboard navigation audit, screen-reader testing,
@@ -143,7 +176,7 @@ dataset grows. Listed roughly by impact on "find animals faster."
 
 - **Email / SMS / push alerts for new matches** — the killer feature for the mission.
 - **Visual-similarity matching** (perceptual hash → CLIP) as a matching signal.
-- **Adoption listings integration** (Petfinder official API) — broaden "found" surface.
+- **Adoption listings integration** (RescueGroups.org v5 API — free key requested). Petfinder's official API was decommissioned by the provider on 2025-12-02 and our scraper was retired 2026-08-22; alternatives evaluated in `docs/api-alternatives-research.md`.
 - **More sources**: Petco Love Lost (facial recognition), Finding Rover, local municipal
   shelters (many run PetHarbor = same backend as 24petconnect).
 - **Mobile-friendly "report a lost pet" flow** (photo-first, 3 taps) for owners in panic.
@@ -162,11 +195,12 @@ dataset grows. Listed roughly by impact on "find animals faster."
 | Map/report synchronized discovery | Shipped initial slice | Match badges and mobile bottom sheet remain |
 | Image proxy + cache | Shipped (bug fixed) | Cache TTL/eviction still unbounded — hygiene, not correctness |
 | Re-geocode backstop for failed geocodes | Shipped | Periodic job; one-off `geocode_batch.py` run for pre-existing backlog |
-| Auth/report rate limiting | Shipped | In-process only; broader route coverage + shared store remain |
+| Auth/report rate limiting | Shipped | In-process only; broader route coverage + shared store remain. Flags/replies/status/block rate-limited 2026-08-22 (`7d2fc48`) |
 | Production Tailwind build + CSP | Complete (2026-08-19) | Local 53KB minified output.css, CSP tightened |
 | Accessibility pass | Initial pass complete (2026-08-19) | Skip-to-content, aria roles, live regions; full keyboard/screen-reader audit remains |
-| Visual similarity signal | Deferred | New dependency (imagehash/CLIP) |
-| Additional sources (Petfinder etc.) | Listed | Scoping/API keys |
+| Visual similarity signal | Groundwork shipped (2026-08-22) | Opt-in pure-Python dHash provider behind `VISUAL_SIMILARITY_ENABLED` (default off); `visual_embeddings` cache table; Pillow as optional `[visual]` extra (`a20cfbc`). CLIP remains the heavy future step |
+| Public Recently-Reunited gallery | Shipped (2026-08-22) | `GET /reunited` shows only owner-marked user-submitted reports + empty state; `user_reunifications` added to `/api/stats` (`635932c`) |
+| Additional sources (RescueGroups etc.) | Listed | Scoping/API keys — Petfinder retired (provider killed API 2025-12-02); see docs/api-alternatives-research.md |
 | PostGIS spatial index for matching | Not started | Needs prod DB + query rewrite |
 | Match feedback → signal re-weighting | Not started | Needs labeled outcomes |
 

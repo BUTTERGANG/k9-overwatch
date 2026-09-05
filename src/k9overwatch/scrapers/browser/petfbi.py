@@ -243,5 +243,9 @@ class PetFBIScraper(BrowserBaseScraper):
             page_count += 1
             await asyncio.sleep(self.config.rate_limit_seconds)
 
-    async def check_active(self, source_id: str) -> bool:
-        return True  # PetFBI doesn't expose a single-record endpoint publicly
+    # Public report pages are server-rendered; a deleted report shows a
+    # not-found page. The AWS WAF challenge is handled by a real browser.
+    def detail_url(self, source_id: str) -> str:
+        return f"https://petfbi.org/report/{source_id}"
+
+    NOT_FOUND_MARKERS = ("page not found", "report not found", "no longer available")

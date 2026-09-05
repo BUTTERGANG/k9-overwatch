@@ -8,12 +8,16 @@ import logging
 import os
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import desc, or_
+
 from ..db.connection import get_session
-from ..db.repository import PetRepository
+from ..db.models import PetRow, SavedSearch, User
+from ..db.repository import PetRepository, UserRepository
 from ..geocoding.geocoder import GeocodingService
 from ..geocoding.providers.nominatim import NominatimProvider
 from ..matching.deduplicator import Deduplicator
 from ..matching.lost_found_matcher import LostFoundMatcher
+from ..matching.perceptual_hash import build_visual_provider
 from ..models.pet_record import PetRecord
 from ..scrapers.base import BaseScraper, ScraperConfig
 
@@ -205,7 +209,7 @@ async def run_matching_pass(
     dedup_found = 0
     matches_found = 0
     deduplicator = Deduplicator()
-    matcher = LostFoundMatcher()
+    matcher = LostFoundMatcher(visual_provider=build_visual_provider())
 
     async with get_session() as session:
         repo = PetRepository(session)
@@ -300,35 +304,81 @@ def _row_to_fingerprint(row) -> PetRecord:
     )
 
 
+def build_staleness_scrapers(config) -> dict:
+    """
+    One scraper instance per source that supports per-record liveness checks.
+
+    Every source now implements check_active(): the HTTP sources re-fetch
+    their record endpoints, the browser scrapers load the listing page in a
+    throwaway stealth browser (see BrowserBaseScraper.check_active).
+    """
+    from ..scrapers.browser.lostmydoggie import LostMyDoggieScraper
+    from ..scrapers.browser.pawboost import PawBoostScraper
+    from ..scrapers.browser.petfbi import PetFBIScraper
+    from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
+    from ..scrapers.http.petconnect24 import PetConnect24Scraper
+
+    return {
+        IndyLostPetAlertScraper.SOURCE_NAME: IndyLostPetAlertScraper(config),
+        PetConnect24Scraper.SOURCE_NAME: PetConnect24Scraper(config),
+        PawBoostScraper.SOURCE_NAME: PawBoostScraper(config),
+        PetFBIScraper.SOURCE_NAME: PetFBIScraper(config),
+        LostMyDoggieScraper.SOURCE_NAME: LostMyDoggieScraper(config),
+    }
+
+
+async def _check_source_staleness(source: str, scraper, stale_hours: int) -> int:
+    """Check one source's stale records in its own session.
+
+    Fully fail-open and fail-isolated: any error (scraper timeout, DB hiccup)
+    is logged and costs that source only — never the other sources, and it
+    never deactivates a record.
+    """
+    try:
+        deactivated = 0
+        async with get_session() as session:
+            repo = PetRepository(session)
+            for row in await repo.get_stale_records(source, older_than_hours=stale_hours):
+                is_active = await scraper.check_active(row.source_id, source_url=row.source_url)
+                if not is_active:
+                    await repo.mark_inactive(source, row.source_id)
+                    deactivated += 1
+        logger.info(f"[{source}] staleness check: {deactivated} deactivated")
+        return deactivated
+    except Exception as exc:
+        logger.warning(f"[{source}] staleness check failed (fail-open, skipped): {exc}")
+        return 0
+
+
 async def check_stale_records(stale_hours: int = 48) -> dict:
     """
-    For sources that support check_active(), verify records that haven't been
-    seen recently and mark them inactive if they're gone.
-    Only runs against IndyLostPetAlert (has direct WP REST endpoint).
+    For every source, verify records that haven't been seen recently via the
+    source's own check_active() and mark them inactive if they're gone.
+    Sources are checked concurrently in isolated sessions, so one source
+    hanging or raising cannot delay or abort the others. Checks fail open —
+    a scraper error never deactivates a record; the source-agnostic
+    expire_stale_listings job remains the backstop.
     """
+    import asyncio
     import os
 
     from ..scrapers.base import ScraperConfig
-    from ..scrapers.http.indy_lost_pet_alert import IndyLostPetAlertScraper
 
     config = ScraperConfig(
         search_lat=float(os.getenv("SEARCH_LAT", "39.7684")),
         search_lon=float(os.getenv("SEARCH_LON", "-86.1581")),
     )
-    scraper = IndyLostPetAlertScraper(config)
-    deactivated = 0
+    scrapers = build_staleness_scrapers(config)
 
-    async with get_session() as session:
-        repo = PetRepository(session)
-        stale = await repo.get_stale_records("indylostpetalert", older_than_hours=stale_hours)
-        for row in stale:
-            is_active = await scraper.check_active(row.source_id)
-            if not is_active:
-                await repo.mark_inactive("indylostpetalert", row.source_id)
-                deactivated += 1
+    counts = await asyncio.gather(*(
+        _check_source_staleness(source, scraper, stale_hours)
+        for source, scraper in scrapers.items()
+    ))
+    per_source = dict(zip(scrapers, (int(c) for c in counts), strict=True))
+    total_deactivated = sum(per_source.values())
 
-    logger.info(f"Staleness check: {deactivated} records deactivated")
-    return {"deactivated": deactivated}
+    logger.info(f"Staleness check: {total_deactivated} records deactivated {per_source}")
+    return {"deactivated": total_deactivated, "per_source": per_source}
 
 
 async def regeocode_pending_records(limit: int = 100) -> dict:
@@ -536,6 +586,114 @@ async def flush_notifications() -> dict:
     async with get_session() as session:
         sent = await flush_notification_queue(session)
     logger.info(f"Notification queue: {sent} email(s) sent")
+    return {"sent": sent}
+
+
+# ── Group-admin daily digest ─────────────────────────────────────────────────
+#
+# Opt-in emails to users flagged is_group_admin: a once-daily roundup of new
+# active lost/found/sighting reports from the last 24h so they can cross-post
+# to their local Facebook groups. Env-gated OFF by default
+# (GROUP_ADMIN_DIGEST_ENABLED=1 to enable).
+
+def _group_admin_radius_miles() -> int:
+    try:
+        return int(os.getenv("GROUP_ADMIN_DIGEST_RADIUS_MILES", "25"))
+    except ValueError:
+        return 25
+
+
+async def compile_group_admin_digest(session) -> int:
+    """Send the group-admin digest; returns number of emails sent."""
+    from datetime import timedelta as _td
+
+    from sqlalchemy import select as _select
+
+    from ..matching.signals import geo_distance_miles
+    from ..notifications import _send_email, _smtp_configured
+
+    if os.getenv("GROUP_ADMIN_DIGEST_ENABLED", "0") != "1":
+        return 0
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+    cutoff = now - _td(hours=24)
+
+    admins = (await session.execute(
+        _select(User).where(User.is_group_admin == True, User.is_active == True)  # noqa: E712
+    )).scalars().all()
+    if not admins:
+        return 0
+
+    new_pets = (await session.execute(
+        _select(PetRow)
+        .where(
+            PetRow.active == True,  # noqa: E712
+            PetRow.record_type.in_(["lost", "found", "sighting"]),
+            or_(PetRow.date_posted >= cutoff, PetRow.scraped_at >= cutoff),
+        )
+        .order_by(desc(PetRow.date_posted))
+    )).scalars().all()
+
+    prefs_repo = UserRepository(session)
+    default_radius = _group_admin_radius_miles()
+    sent = 0
+    for admin in admins:
+        prefs = await prefs_repo.get_prefs(admin.id)
+        if prefs is None or not prefs.email_enabled or prefs.frequency == "off":
+            continue
+        searches = (await session.execute(
+            _select(SavedSearch).where(
+                SavedSearch.user_id == admin.id,
+                SavedSearch.enabled == True,  # noqa: E712
+            )
+        )).scalars().all()
+
+        selected = list(new_pets)
+        # Radius filter only when the admin has a saved search with a center;
+        # otherwise metro-wide (default radius applies to nothing we can measure).
+        centered = [s for s in searches if s.latitude is not None and s.longitude is not None]
+        if centered:
+            radius = max((s.radius_miles or default_radius) for s in centered)
+            center = centered[0]
+            selected = [
+                p for p in new_pets
+                if p.lat is not None and p.lon is not None
+                and geo_distance_miles(center.latitude, center.longitude, p.lat, p.lon) <= radius
+            ]
+
+        if not selected:
+            continue
+
+        lines = []
+        for pet in selected:
+            emoji = {"lost": "🐾", "found": "🏠", "sighting": "👀"}.get(pet.record_type, "•")
+            where = pet.location_text or pet.city or "area unknown"
+            lines.append(f"{emoji} {pet.record_type.upper()} — {pet.name or 'Unnamed'} "
+                         f"({pet.breed or 'unknown breed'}) near {where}")
+
+        base = os.getenv("APP_BASE_URL", "").rstrip("/")
+        body = (
+            f"Hi {admin.display_name or 'there'},\n\n"
+            f"{len(selected)} new report(s) in the last 24 hours:\n\n"
+            + "\n".join(lines)
+            + f"\n\nView details and share-ready posts: {base}/pets\n"
+        )
+        subject = f"{len(selected)} new lost/found report(s) near you"
+        if _smtp_configured():
+            if _send_email(admin.email, subject, body, prefs.unsubscribe_token):
+                sent += 1
+        else:
+            import logging
+            logging.getLogger(__name__).info("[notify:group-admin-digest] would email %s: %s", admin.email, subject)
+            sent += 1
+    return sent
+
+
+async def send_group_admin_digests() -> dict:
+    """Scheduler entry point: daily group-admin digest (env-gated)."""
+    async with get_session() as session:
+        sent = await compile_group_admin_digest(session)
+    logger.info(f"Group-admin digest: {sent} email(s) sent")
     return {"sent": sent}
 
 

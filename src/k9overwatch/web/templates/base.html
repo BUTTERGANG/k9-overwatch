@@ -192,12 +192,28 @@
                         Pets
                         {% if path.startswith('/pets') %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
                     </a>
+                    <a href="/adopt"
+                       class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
+                              {% if path.startswith('/adopt') %}text-amber-500 dark:text-amber-400{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}"
+                       {% if path.startswith('/adopt') %}aria-current="page"{% endif %}>
+                        <span class="inline-flex items-center gap-1">
+                            <span aria-hidden="true" class="text-xs">🏠</span> Adopt
+                        </span>
+                        {% if path.startswith('/adopt') %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
+                    </a>
                     <a href="/matches"
                        class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
                               {% if path.startswith('/matches') %}text-brand-600 dark:text-brand-400{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}"
                        {% if path.startswith('/matches') %}aria-current="page"{% endif %}>
                         Matches
                         {% if path.startswith('/matches') %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
+                    </a>
+                    <a href="/reunited"
+                       class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
+                              {% if path == '/reunited' %}text-brand-600 dark:text-brand-400{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}"
+                       {% if path == '/reunited' %}aria-current="page"{% endif %}>
+                        Reunited
+                        {% if path == '/reunited' %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
                     </a>
                     <a href="/how-it-works"
                        class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
@@ -327,6 +343,13 @@
                             <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.007v.008H3.75V6.75zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zM3.75 12h.007v.008H3.75V12zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm-.375 5.25h.007v.008H3.75v-.008zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z"/>
                         </svg>
                         Pets
+                    </a>
+                    <a href="/adopt"
+                       class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                              {% if path.startswith('/adopt') %}bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400{% else %}text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-white{% endif %}"
+                       {% if path.startswith('/adopt') %}aria-current="page"{% endif %}>
+                        <span aria-hidden="true" class="text-base">🏠</span>
+                        Adopt
                     </a>
                     <a href="/matches"
                        class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors

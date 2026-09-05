@@ -68,10 +68,85 @@ async def search_pets(
     
     return pets, total
 
+@router.get("/adopt")
+async def adoptable_page(
+    request: Request,
+    animal_type: list[str] = Query(default=[]),
+    page: int = Query(default=1, ge=1),
+    q: str | None = Query(default=None, max_length=200),
+    db: AsyncSession = Depends(get_db),
+):
+    """Dedicated adoptable pets page — shelter animals looking for homes."""
+    stmt = select(PetRow).where(
+        PetRow.active == True,
+        PetRow.record_type == "adoptable",
+    )
+
+    if animal_type:
+        stmt = stmt.where(PetRow.animal_type.in_(animal_type))
+
+    if q:
+        search_cols = (
+            PetRow.name, PetRow.breed, PetRow.color_primary,
+            PetRow.color_secondary, PetRow.description,
+            PetRow.shelter_name,
+        )
+        for term in q.split():
+            pattern = f"%{term}%"
+            stmt = stmt.where(or_(*(c.ilike(pattern) for c in search_cols)))
+
+    # Total count
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    total = (await db.execute(count_stmt)).scalar_one()
+
+    # Paginated results
+    stmt = stmt.order_by(desc(PetRow.scraped_at)).offset((page - 1) * PAGE_SIZE).limit(PAGE_SIZE)
+    pets = (await db.execute(stmt)).scalars().all()
+    total_pages = math.ceil(total / PAGE_SIZE) if total > 0 else 1
+
+    # Distinct shelters for filter
+    shelter_stmt = select(PetRow.shelter_name).where(
+        PetRow.record_type == "adoptable",
+        PetRow.shelter_name.isnot(None),
+    ).distinct().order_by(PetRow.shelter_name)
+    shelters = [r[0] for r in (await db.execute(shelter_stmt)).all()]
+
+    return templates.TemplateResponse(
+        request, "adoptable.html",
+        {
+            "pets": pets,
+            "total": total,
+            "page": page,
+            "total_pages": total_pages,
+            "filters": {"animal_type": animal_type, "q": q or ""},
+            "shelters": shelters,
+        },
+    )
+
+
+@router.get("/reunited")
+async def reunited_gallery(request: Request, db: AsyncSession = Depends(get_db)):
+    """Public 'Recently Reunited' gallery: only owner-marked user-submitted reports."""
+    stmt = (
+        select(PetRow)
+        .where(
+            PetRow.source == "user",
+            PetRow.owner_report_status == "reunited",
+        )
+        .order_by(PetRow.date_event.desc().nullslast(), PetRow.scraped_at.desc())
+        .limit(100)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return templates.TemplateResponse(
+        request, "reunited.html",
+        {"pets": rows},
+    )
+
+
 @router.get("/pets")
 async def pets_page(
     request: Request,
-    record_type: list[str] = Query(default=["lost", "found", "sighting", "adoptable"]),
+    record_type: list[str] = Query(default=["lost", "found", "sighting"]),
     animal_type: list[str] = Query(default=[]),
     days: int = Query(default=30, ge=1, le=365),
     page: int = Query(default=1, ge=1),
@@ -103,7 +178,7 @@ async def pets_page(
 @router.get("/pets/results")
 async def pets_results(
     request: Request,
-    record_type: list[str] = Query(default=["lost", "found", "sighting", "adoptable"]),
+    record_type: list[str] = Query(default=["lost", "found", "sighting"]),
     animal_type: list[str] = Query(default=[]),
     days: int = Query(default=30, ge=1, le=365),
     page: int = Query(default=1, ge=1),
@@ -131,6 +206,29 @@ async def pets_results(
             }
         }
     )
+
+
+@router.get("/pets/{pet_id}/share-pack")
+async def pet_share_pack(
+    pet_id: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """JSON share pack ({text, html}) for pasting into Facebook groups.
+
+    Public (scraped) reports are already public on their detail pages.
+    User-submitted reports are owner-only.
+    """
+    from k9overwatch.web.share_pack import build_share_pack
+
+    pet = (await db.execute(select(PetRow).where(PetRow.id == pet_id))).scalar_one_or_none()
+    if pet is None:
+        raise HTTPException(status_code=404, detail="Pet not found")
+    if pet.source == "user":
+        user_id = await get_current_user_id(request)
+        if not user_id or user_id != pet.owner_id:
+            raise HTTPException(status_code=403, detail="Only the report owner can export a share pack.")
+    return build_share_pack(pet)
 
 
 @router.get("/pets/{pet_id}")
@@ -161,6 +259,7 @@ async def pet_detail(
             "current_user_id": current_user_id,
             "contact_sent": request.query_params.get("contact_sent") == "1",
             "tip_sent": request.query_params.get("tip_sent") == "1",
+            "located_from_photo": request.query_params.get("located_from_photo") == "1",
         },
     )
 

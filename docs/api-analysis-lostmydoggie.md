@@ -297,3 +297,27 @@ async def scrape_all_pages(zip_code, pet_kind=1, alert_type=1, radius=50):
   "scraped_at": "2026-03-24T00:00:00Z"
 }
 ```
+
+---
+
+## Addendum — 2026-08-22: live re-verification + Cloudflare-mid-scrape repair
+
+Re-verified against the live site (Playwright headless, 2026-08-22):
+
+- **Card DOM unchanged.** `.box_icon` containers, `a[href*='petid=']`, `h4`
+  name, two `h6` lines (status/gender/type; city/state + ZIP), `ul.custom li`
+  (breed, colors, `Lost: YYYY-MM-DD`), `img.img-responsive` thumbnail — all
+  confirmed intact, 20 cards/page, HTTP 200.
+- **Root cause of prior failures was NOT selectors.** Rapid sequential
+  searches (`missing-pets.cfm` for dogs-lost → dogs-found → cats-lost →
+  cats-found) trip Cloudflare's challenge mid-scrape; the challenge page
+  (HTTP 403, "Performing security verification") has zero cards and was being
+  misread as a structural layout change, aborting the entire run via
+  `StructuralChangeError`.
+- **Fix:** `classify_listing_page()` distinguishes ok / empty ("Showing 0 …"
+  header = legitimately no results) / Cloudflare challenge (skip that search,
+  keep going) / true structural change. Searches are now paced ≥10s apart.
+- **Remaining constraint:** Cloudflare can still challenge any given search
+  after several requests in a session; affected searches are skipped and
+  logged rather than fought. Expect partial coverage (e.g. dogs only) when
+  challenges hit late searches.

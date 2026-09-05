@@ -115,7 +115,9 @@ class PetConnect24Scraper(BaseScraper):
 
             await asyncio.sleep(self.config.rate_limit_seconds)
 
-    async def check_active(self, source_id: str) -> bool:
+    async def check_active(
+        self, source_id: str, source_url: str | None = None
+    ) -> bool:
         """Check if a detail page exists for this animal."""
         # Try public shelter code first; fall back to others
         url = f"{self.DETAIL_BASE}/Public/{source_id}"

@@ -58,6 +58,25 @@ matcher = LostFoundMatcher(visual_provider=MyEmbeddingProvider())
 The example is intentionally illustrative: application wiring and provider
 configuration are deployment-specific and are not enabled by this repository.
 
+## Built-in perceptual-hash provider (opt-in)
+
+`k9overwatch.matching.perceptual_hash` ships a concrete lightweight provider:
+
+- `dhash_bits` / `ahash_bits`: pure-Python dHash/aHash over a 9×8 grayscale grid;
+- `PerceptualHashProvider`: implements `EmbeddingProvider` by fetching image
+  bytes, decoding via **Pillow** (optional extra: `pip install -e ".[visual]"`),
+  downscaling, and emitting the 64 hash bits as ±1 floats so
+  `cosine_similarity` works unchanged (identical hashes → 1.0);
+- `get_cached_embedding` / `store_embedding`: cache on the `visual_embeddings`
+  side table keyed by sha256 of the photo URL and algorithm version
+  (`dhash64-v1`);
+- `build_visual_provider()`: env-gated factory wired into the scheduler's
+  matcher. It returns `None` — i.e. no visual signal at all — unless
+  `VISUAL_SIMILARITY_ENABLED=1` **and** Pillow is importable.
+
+The default remains disabled. Perceptual hashes are coarse fingerprints; treat
+the resulting signal as weak supporting evidence only.
+
 ## Verification
 
 The provider-independent contract is covered by `tests/test_visual_similarity.py`.
