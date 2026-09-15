@@ -29,7 +29,9 @@ async def search_pets(
     if record_type:
         stmt = stmt.where(PetRow.record_type.in_(record_type))
     if animal_type:
-        stmt = stmt.where(PetRow.animal_type.in_(animal_type))
+        # Case-insensitive: a stored "Dog"/"CAT" must match the "dog"/"cat"
+        # filter (canonical lowercase enum values), not silently vanish.
+        stmt = stmt.where(func.lower(PetRow.animal_type).in_([t.lower() for t in animal_type]))
 
     if query:
         # Search each word independently so "blue collar" finds listings that
@@ -83,7 +85,7 @@ async def adoptable_page(
     )
 
     if animal_type:
-        stmt = stmt.where(PetRow.animal_type.in_(animal_type))
+        stmt = stmt.where(func.lower(PetRow.animal_type).in_([t.lower() for t in animal_type]))
 
     if q:
         search_cols = (

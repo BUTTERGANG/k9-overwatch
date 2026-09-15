@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import UTC, date, datetime
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from .enums import (
     AnimalType,
@@ -97,6 +97,20 @@ class PetRecord(BaseModel):
     raw: dict | None = None
 
     model_config = {"use_enum_values": True}
+
+    @field_validator("animal_type", "record_type", mode="before")
+    @classmethod
+    def _canonical_lower(cls, v):
+        """Canonicalize enum-ish fields to lowercase regardless of source casing.
+
+        Sources sometimes emit "Dog"/"CAT"/"Lost" instead of canonical lowercase
+        enum values. Normalize here so the DB always stores lowercase and the
+        map/pets filters (which match against lowercase enum values) can never
+        silently drop a record due to a casing mismatch.
+        """
+        if isinstance(v, str):
+            return v.strip().lower() if v.strip() else None
+        return v
 
     @property
     def unique_key(self) -> tuple[str, str]:

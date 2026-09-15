@@ -78,17 +78,21 @@ async def get_map_geojson(
         # "other" is a catch-all for every animal that isn't explicitly dog or cat.
         # Expand it to include bird, rabbit, and records with no animal_type set so
         # that sources storing those values still appear when "Other" is checked.
-        if "other" in animal_type:
-            exact = [t for t in animal_type if t not in _OTHER_ANIMAL_TYPES]
+        # Comparisons are case-insensitive (func.lower on both sides) so a record
+        # stored with e.g. "Dog"/"CAT" can never silently vanish from the map's
+        # "dog/cat/other" filter — matching the canonical lowercase enum values.
+        animal_lower = [t.lower() for t in animal_type]
+        if "other" in animal_lower:
+            exact = [t for t in animal_lower if t not in _OTHER_ANIMAL_TYPES]
             other_types = list(_OTHER_ANIMAL_TYPES)
             stmt = stmt.where(
                 or_(
-                    PetRow.animal_type.in_(exact + other_types),
+                    func.lower(PetRow.animal_type).in_(exact + other_types),
                     PetRow.animal_type == None,  # noqa: E711 — SQLAlchemy IS NULL
                 )
             )
         else:
-            stmt = stmt.where(PetRow.animal_type.in_(animal_type))
+            stmt = stmt.where(func.lower(PetRow.animal_type).in_(animal_lower))
 
     if days:
         # Include records whose effective age is within `days`. Records with no

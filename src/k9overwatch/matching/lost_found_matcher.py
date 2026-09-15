@@ -122,7 +122,7 @@ class LostFoundMatcher:
 
     def _compare(self, lost: PetRow, found: PetRow) -> MatchResult | None:
         # Hard filters
-        if lost.animal_type != found.animal_type:
+        if (lost.animal_type or "").lower() != (found.animal_type or "").lower():
             return None
 
         # Temporal constraint: found date must be within valid window of lost date
