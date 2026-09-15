@@ -216,9 +216,8 @@
         }
 
         document.addEventListener('click', function (event) {
-            if (event.target.closest && event.target.closest('#clear-pet-filters-btn')) {
-                resetPetFilters();
-            }
+            var target = event.target.closest ? event.target.closest('#clear-pet-filters-btn, .js-clear-filters') : null;
+            if (target) resetPetFilters();
         });
 
         var openBtn  = document.getElementById('open-filter-btn');

@@ -9,6 +9,28 @@
     </span>
 </div>
 
+<!-- Active-filter status chips (stay visible on mobile where Status/Type checkboxes live in the drawer) -->
+<div class="mb-4 flex flex-wrap items-center gap-2" aria-live="polite">
+    <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 dark:text-slate-400">Filtering:</span>
+    {% for rt in filters.record_type %}
+    <span class="inline-flex items-center gap-1 rounded-full text-xs font-semibold px-2.5 py-0.5
+        {% if rt == 'lost' %}bg-red-50 text-red-700 dark:bg-red-900/40 dark:text-red-300
+        {% elif rt == 'found' %}bg-green-50 text-green-700 dark:bg-green-900/40 dark:text-green-300
+        {% elif rt == 'sighting' %}bg-blue-50 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300
+        {% else %}bg-amber-50 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300{% endif %}">
+        {{ {'lost':'Lost','found':'Found','sighting':'Sighting','adoptable':'Adoptable'}.get(rt, rt) }}
+    </span>
+    {% endfor %}
+    {% for at in filters.animal_type %}
+    <span class="inline-flex items-center gap-1 rounded-full bg-brand-50 text-brand-700 dark:bg-brand-900/40 dark:text-brand-200 text-xs font-semibold px-2.5 py-0.5">
+        {{ '🐕 Dog' if at == 'dog' else ('🐈 Cat' if at == 'cat' else ('🐾 Other' if at == 'other' else at)) }}
+    </span>
+    {% endfor %}
+    <button type="button" class="js-clear-filters inline-flex items-center gap-1 rounded-full border border-slate-300 dark:border-slate-600 px-2.5 py-0.5 text-xs font-semibold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 transition" aria-label="Clear all filters">
+        ✕ Clear filters
+    </button>
+</div>
+
 <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
     {% for pet in pets %}
         {% include 'pets/card.html' %}
@@ -28,7 +50,7 @@
                 </svg>
             </div>
             <div>
-                <p class="text-base font-semibold text-slate-700 dark:text-slate-200">No pets found</p>
+                <p class="text-base font-semibold text-slate-700 dark:text-slate-200">No pets match these filters</p>
                 <p class="text-sm text-slate-400 dark:text-slate-500 mt-1">Try adjusting your filters or expanding the timeframe.</p>
                 <div class="flex flex-wrap items-center justify-center gap-2 mt-1">
                     <button id="clear-pet-filters-btn" type="button" class="inline-flex items-center rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 px-3 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-sm hover:bg-slate-50 dark:hover:bg-slate-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500">Clear filters</button>
