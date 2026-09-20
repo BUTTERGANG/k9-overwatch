@@ -215,13 +215,37 @@
                         Reunited
                         {% if path == '/reunited' %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
                     </a>
-                    <a href="/how-it-works"
-                       class="relative px-4 py-2 text-sm font-medium rounded-md transition-colors
-                              {% if path.startswith('/how-it-works') %}text-brand-600 dark:text-brand-400{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}"
-                       {% if path.startswith('/how-it-works') %}aria-current="page"{% endif %}>
-                        How it works
-                        {% if path.startswith('/how-it-works') %}<span class="nav-active-indicator" aria-hidden="true"></span>{% endif %}
-                    </a>
+                    <!-- More dropdown (groups less-used links: How it works, Admin) -->
+                    <div class="relative" id="nav-more">
+                        <button id="nav-more-btn"
+                                type="button"
+                                aria-haspopup="true"
+                                aria-expanded="false"
+                                aria-controls="nav-more-menu"
+                                class="relative inline-flex items-center gap-1 px-3 py-2 text-sm font-medium rounded-md transition-colors
+                                       {% if path.startswith('/how-it-works') or path.startswith('/admin') %}text-brand-600 dark:text-brand-400{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800{% endif %}">
+                            More
+                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" class="w-4 h-4" aria-hidden="true">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"/>
+                            </svg>
+                        </button>
+                        <div id="nav-more-menu"
+                             role="menu"
+                             aria-label="More links"
+                             class="absolute right-0 mt-2 w-48 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700
+                                    bg-white dark:bg-slate-800 shadow-lg hidden z-50">
+                            <a href="/how-it-works" role="menuitem"
+                               class="block px-3.5 py-2 text-sm font-medium rounded-lg
+                                      {% if path.startswith('/how-it-works') %}text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700{% endif %}">
+                                How it works
+                            </a>
+                            <a href="/admin" role="menuitem"
+                               class="block px-3.5 py-2 text-sm font-medium rounded-lg
+                                      {% if path.startswith('/admin') %}text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-900/30{% else %}text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-700{% endif %}">
+                                Admin
+                            </a>
+                        </div>
+                    </div>
                     <a href="/report"
                        class="relative ml-1 inline-flex items-center gap-1.5 px-3.5 py-2 text-sm font-semibold rounded-lg transition-colors shadow-sm
                               {% if path.startswith('/report') %}bg-brand-700 text-white{% else %}bg-brand-600 text-white hover:bg-brand-700{% endif %}"
@@ -289,13 +313,7 @@
                     </a>
                     {% endif %}
 
-                    <a href="/admin"
-                       class="ml-2 px-4 py-2 text-sm font-medium rounded-md border transition-colors
-                              {% if path.startswith('/admin') %}border-brand-200 text-brand-700 bg-brand-50 dark:border-brand-700 dark:text-brand-400 dark:bg-brand-900/30{% else %}border-slate-200 dark:border-slate-700 bg-white dark:bg-transparent text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600{% endif %}"
-                       {% if path.startswith('/admin') %}aria-current="page"{% endif %}>
-                        Admin
-                    </a>
-                </div>
+                    </div>
 
                 <!-- Mobile hamburger -->
                 <div class="flex items-center sm:hidden">
@@ -532,6 +550,29 @@
 
             var toggleBtnMobile = document.getElementById('dark-mode-toggle-mobile');
             if (toggleBtnMobile) toggleBtnMobile.addEventListener('click', applyToggle);
+
+            // ── "More" dropdown (desktop) ────────────────────────────────
+            var moreBtn  = document.getElementById('nav-more-btn');
+            var moreMenu = document.getElementById('nav-more-menu');
+            if (moreBtn && moreMenu) {
+                moreBtn.addEventListener('click', function (e) {
+                    e.stopPropagation();
+                    var closingNow = moreMenu.classList.toggle('hidden');
+                    moreBtn.setAttribute('aria-expanded', String(!closingNow));
+                });
+                document.addEventListener('click', function (e) {
+                    if (moreMenu.classList.contains('hidden')) return;
+                    if (moreBtn.contains(e.target) || moreMenu.contains(e.target)) return;
+                    moreMenu.classList.add('hidden');
+                    moreBtn.setAttribute('aria-expanded', 'false');
+                });
+                document.addEventListener('keydown', function (e) {
+                    if (e.key === 'Escape' && !moreMenu.classList.contains('hidden')) {
+                        moreMenu.classList.add('hidden');
+                        moreBtn.setAttribute('aria-expanded', 'false');
+                    }
+                });
+            }
         })();
     </script>
 
